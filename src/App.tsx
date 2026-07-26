@@ -1,27 +1,27 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Route, Routes, useLocation } from 'react-router-dom'
 
 import { AppShell } from '@/app/app-shell'
+import { ActionCentrePage } from '@/pages/action-centre'
+import { BusinessReviewPage } from '@/pages/business-review'
 import { OverviewPage } from '@/pages/overview'
-import {
-  ActionCentrePage,
-  BusinessReviewPage,
-  ProductsPage,
-  SettingsPage,
-  TransactionsPage,
-  TrendsPage,
-} from '@/pages/placeholders'
+import { ProductsPage } from '@/pages/products'
+import { SettingsPage } from '@/pages/settings'
+import { TransactionsPage } from '@/pages/transactions'
+import { TrendsPage } from '@/pages/trends'
 
 /**
  * Page transitions are a short cross-fade with a few pixels of lift. Anything
- * longer makes navigation feel slower than it is.
+ * longer makes navigation feel slower than it is. Keyed on pathname so the
+ * animation re-runs per navigation.
  */
 function PageTransition({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
   return (
     <motion.div
+      key={location.pathname}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
     >
       {children}
@@ -30,19 +30,15 @@ function PageTransition({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const location = useLocation()
-
   return (
-    <Routes location={location}>
+    <Routes>
       <Route element={<AppShell />}>
         <Route
           index
           element={
-            <AnimatePresence mode="wait">
-              <PageTransition key="overview">
-                <OverviewPage />
-              </PageTransition>
-            </AnimatePresence>
+            <PageTransition>
+              <OverviewPage />
+            </PageTransition>
           }
         />
         <Route

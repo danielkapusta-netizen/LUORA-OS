@@ -25,7 +25,10 @@ const QUANTITY_SUFFIX = /\s*[-–]?\s*\b(\d+\s*)?(sztuk[ai]?|szt\.?|opak\.?|opak
 
 /** Strip the marketplace offer id and collapse whitespace for display. */
 export function cleanSkuLabel(raw: string): string {
-  return raw.replace(OFFER_ID, '').replace(/\s+/g, ' ').trim()
+  const base = raw.replace(OFFER_ID, '').replace(/\s+/g, ' ').trim()
+  // Pack descriptors are join noise in keys and reading noise in labels alike.
+  const stripped = base.replace(QUANTITY_SUFFIX, '').trim()
+  return stripped || base
 }
 
 /** A stable, comparable key for joining orders to cost records. */
