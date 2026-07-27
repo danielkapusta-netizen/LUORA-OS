@@ -25,15 +25,31 @@ function toChannel(value: unknown): Channel {
 export function mapTransaction(raw: RawTransaction, index: number): LineItem {
   const rawSku = toText(raw.sku)
   const label = cleanSkuLabel(primarySku(rawSku))
-  const revenuePLN = toNumber(raw.pricePLN)
-  const marginPLN = toNumber(raw.margin)
-  const priceOriginal = toNumberOr(raw.price, 0)
+  const qty = toNumberOr(raw.qty, 1)
+
+  // `price`, `pricePLN`, `netPrice`, `commission` and `margin` are computed
+  // per unit in the source sheet regardless of the qty column — a 4-unit
+  // order shows the same price as a 1-unit order of the same product. Left
+  // unscaled, this undercounts all-time revenue by ~6% and profit further
+  // still, concentrated in the 6% of rows where qty > 1. Multiplying by qty
+  // here is the one place that correction needs to happen.
+  const unitRevenuePLN = toNumber(raw.pricePLN)
+  const unitMarginPLN = toNumber(raw.margin)
+  const unitPriceOriginal = toNumberOr(raw.price, 0)
+  const unitCommissionOriginal = toNumberOr(raw.commission, 0)
+
+  const revenuePLN = unitRevenuePLN !== null ? unitRevenuePLN * qty : null
+  const marginPLN = unitMarginPLN !== null ? unitMarginPLN * qty : null
+  const priceOriginal = unitPriceOriginal * qty
+  const commissionOriginal = unitCommissionOriginal * qty
+
+  // Shipping is charged once per parcel, not per unit inside it — a 4-unit
+  // line does not pay 4x the shipping of a 1-unit line — so it is read as-is.
+  const shipmentOriginal = toNumberOr(raw.shipment, 0)
 
   // The sheet converts only price. Everything else reaches PLN through the
-  // rate implied by that one conversion.
-  const fxRate = priceOriginal !== 0 && revenuePLN !== null ? revenuePLN / priceOriginal : 1
-  const commissionOriginal = toNumberOr(raw.commission, 0)
-  const shipmentOriginal = toNumberOr(raw.shipment, 0)
+  // rate implied by that one conversion (qty cancels out of the ratio).
+  const fxRate = unitPriceOriginal !== 0 && unitRevenuePLN !== null ? unitRevenuePLN / unitPriceOriginal : 1
 
   const customerName = toText(raw.customerName)
   const date = toDate(raw.date)
@@ -43,10 +59,10 @@ export function mapTransaction(raw: RawTransaction, index: number): LineItem {
     rawSku,
     productKey: skuKey(primarySku(rawSku)),
     productLabel: label || 'Unnamed product',
-    qty: toNumberOr(raw.qty, 1),
+    qty,
     currency: toCurrency(raw.currency),
     priceOriginal,
-    netPriceOriginal: toNumberOr(raw.netPrice, 0),
+    netPriceOriginal: toNumberOr(raw.netPrice, 0) * qty,
     commissionOriginal,
     shipmentOriginal,
     fxRate,
