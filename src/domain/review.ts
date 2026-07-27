@@ -1,125 +1,225 @@
 /**
  * Business Review composition — the executive report, written from the data.
  *
- * Like the morning brief, this lives in the domain layer because it is a
- * reading of the business, not a rendering concern. Every sentence traces to a
- * figure in the context.
+ * Deliberately narrative-first. The product scorecard table lives on the
+ * Products page; duplicating it here would make this a second catalogue view
+ * rather than a report. What belongs here is the reading a founder would want
+ * to hand to an investor: what happened, why, and what is changing underneath.
  */
 
 import { formatDateRange, formatPercent, formatPLN } from '@/lib/format'
 import { channelName } from './insights'
-import { ratio, sum } from './parse'
+import { ratio } from './parse'
 import { shortLabel } from './sku'
-import type { BusinessContext } from './context'
-import type { ProductPerformance } from './types'
+import type { Snapshot } from './snapshot'
+import type { DataCoverage } from './types'
 
-export interface ProductScorecard {
-  product: ProductPerformance
-  /** Revenue in the current comparison window. */
-  currentRevenuePLN: number
-  /** Revenue in the previous comparison window. */
-  previousRevenuePLN: number
-  /** Percentage change between windows, null without a baseline. */
-  revenueChangePct: number | null
-  /** Cumulative revenue share when products are ranked by revenue, 0–1. */
-  cumulativeShare: number
+export interface ReviewInsight {
+  /** Short label, e.g. "Margin" or "Basket". */
+  topic: string
+  /** The observation, stated as a finding rather than a metric. */
+  statement: string
+  tone: 'positive' | 'negative' | 'neutral'
 }
 
 export interface BusinessReview {
   periodLabel: string
-  /** The report itself: ordered paragraphs of plain language. */
+  /** Headline figures for the executive summary block. */
+  summary: Array<{ label: string; value: string; caption: string }>
+  /** The report body. */
   narrative: string[]
-  scorecards: ProductScorecard[]
-  /** How many products it takes to reach 80% of revenue. */
-  productsFor80pct: number
+  /** Automatically generated observations. */
+  insights: ReviewInsight[]
 }
 
-export function buildBusinessReview(context: BusinessContext): BusinessReview {
-  const { products, channels, comparison, coverage, summary } = context
-  const { current, previous, windowDays, isReliable } = comparison
-
-  const periodLabel = isReliable
-    ? `${formatDateRange(current.from, current.to)} vs ${formatDateRange(previous.from, previous.to)}`
-    : `All trading · ${formatDateRange(coverage.firstOrder, coverage.lastOrder)}`
-
-  // Per-product revenue inside each comparison window, for the scorecards.
-  const currentSet = new Set<string>()
-  const windowRevenue = new Map<string, { current: number; previous: number }>()
-  if (isReliable) {
-    const fromCurrent = new Date(`${current.from}T00:00:00Z`).getTime()
-    const fromPrevious = new Date(`${previous.from}T00:00:00Z`).getTime()
-    for (const line of context.lineItems) {
-      if (!line.date) continue
-      const time = line.date.getTime()
-      const entry = windowRevenue.get(line.productKey) ?? { current: 0, previous: 0 }
-      if (time >= fromCurrent) {
-        entry.current += line.revenuePLN
-        currentSet.add(line.productKey)
-      } else if (time >= fromPrevious) {
-        entry.previous += line.revenuePLN
-      }
-      windowRevenue.set(line.productKey, entry)
-    }
+/** Consecutive rising buckets at the end of a series — used for streak claims. */
+function trailingStreak(values: readonly number[]): { direction: 'up' | 'down'; length: number } {
+  if (values.length < 2) return { direction: 'up', length: 0 }
+  const last = values.length - 1
+  const direction = (values[last] ?? 0) >= (values[last - 1] ?? 0) ? 'up' : 'down'
+  let length = 0
+  for (let index = last; index > 0; index -= 1) {
+    const current = values[index] ?? 0
+    const previous = values[index - 1] ?? 0
+    const rising = current >= previous
+    if ((direction === 'up') !== rising) break
+    length += 1
   }
+  return { direction, length }
+}
 
-  let cumulative = 0
-  let productsFor80pct = 0
-  const scorecards: ProductScorecard[] = products.map((product, index) => {
-    cumulative += product.revenueShare
-    if (cumulative <= 0.8 || productsFor80pct === 0) productsFor80pct = index + 1
-    const window = windowRevenue.get(product.productKey)
-    return {
-      product,
-      currentRevenuePLN: window?.current ?? 0,
-      previousRevenuePLN: window?.previous ?? 0,
-      revenueChangePct:
-        window && window.previous > 0
-          ? ((window.current - window.previous) / window.previous) * 100
-          : null,
-      cumulativeShare: cumulative,
-    }
-  })
+export function buildBusinessReview(
+  snapshot: Snapshot,
+  coverage: DataCoverage,
+): BusinessReview {
+  const { period, totals, previousTotals, products, channels, series } = snapshot
+
+  const periodLabel =
+    period.key === 'all'
+      ? `All trading · ${formatDateRange(coverage.firstOrder, coverage.lastOrder)}`
+      : `${formatDateRange(period.from, period.to)}`
+
+  const summary = [
+    {
+      label: 'Revenue',
+      value: formatPLN(totals.revenuePLN),
+      caption: previousTotals ? `from ${formatPLN(previousTotals.revenuePLN)}` : 'no prior window',
+    },
+    {
+      label: 'Profit',
+      value: formatPLN(totals.marginPLN),
+      caption: previousTotals ? `from ${formatPLN(previousTotals.marginPLN)}` : 'no prior window',
+    },
+    {
+      label: 'Margin',
+      value: formatPercent(totals.marginPct),
+      caption: previousTotals
+        ? `from ${formatPercent(previousTotals.marginPct)}`
+        : 'no prior window',
+    },
+    {
+      label: 'Orders',
+      value: totals.orders.toLocaleString('en-GB'),
+      caption: `${totals.customers.toLocaleString('en-GB')} customers`,
+    },
+    {
+      label: 'Average basket',
+      value: formatPLN(totals.avgOrderValuePLN),
+      caption: previousTotals
+        ? `from ${formatPLN(previousTotals.avgOrderValuePLN)}`
+        : 'no prior window',
+    },
+    {
+      label: 'Business health',
+      value: `${snapshot.health.score}/100`,
+      caption: snapshot.health.band.replace('-', ' '),
+    },
+  ]
 
   const narrative: string[] = []
 
-  const totalRevenue = summary.totalRevenuePLN
-  const totalMargin = summary.totalMarginPLN
-
   narrative.push(
-    `Luora has taken ${formatPLN(totalRevenue)} of revenue across ${summary.totalOrders} orders and kept ${formatPLN(totalMargin)} as profit — a ${formatPercent(summary.avgMarginPct)} portfolio margin after marketplace commission and landed cost.`,
+    `Luora took ${formatPLN(totals.revenuePLN)} of revenue across ${totals.orders.toLocaleString('en-GB')} orders in this period and kept ${formatPLN(totals.marginPLN)} of it — a ${formatPercent(totals.marginPct)} margin after marketplace commission and landed product cost.`,
   )
 
-  if (isReliable && comparison.revenueChangePct !== null) {
-    const change = comparison.revenueChangePct
+  if (previousTotals && previousTotals.revenuePLN > 0) {
+    const revenueChange =
+      ((totals.revenuePLN - previousTotals.revenuePLN) / previousTotals.revenuePLN) * 100
+    const marginShift = totals.marginPct - previousTotals.marginPct
     narrative.push(
-      `The most recent ${windowDays}-day window ${change >= 0 ? 'grew' : 'contracted'} ${Math.abs(change).toFixed(1)}% against the window before it: ${formatPLN(current.revenuePLN)} from ${current.orders} orders, versus ${formatPLN(previous.revenuePLN)} from ${previous.orders}. Margin rate moved from ${formatPercent(previous.marginPct)} to ${formatPercent(current.marginPct)}.`,
+      `Against the preceding ${period.days} days, revenue ${revenueChange >= 0 ? 'rose' : 'fell'} ${Math.abs(revenueChange).toFixed(1)}% and margin moved ${marginShift >= 0 ? 'up' : 'down'} ${Math.abs(marginShift).toFixed(1)} points to ${formatPercent(totals.marginPct)}. ${
+        revenueChange >= 0 && marginShift < 0
+          ? 'Growth came at the cost of profitability, which is the pattern worth watching.'
+          : revenueChange < 0 && marginShift > 0
+            ? 'Volume softened but the business kept more of what it sold.'
+            : revenueChange >= 0 && marginShift >= 0
+              ? 'Both volume and profitability moved in the same, right direction.'
+              : 'Both volume and profitability moved down together.'
+      }`,
     )
   }
 
-  narrative.push(
-    `Revenue is concentrated: ${productsFor80pct} of ${products.length} products produce 80% of it. ${products[0] ? `${shortLabel(products[0].label, 44)} alone accounts for ${formatPercent(products[0].revenueShare * 100, 0)} of revenue and ${formatPercent(products[0].marginShare * 100, 0)} of profit.` : ''}`,
-  )
+  const leader = products[0]
+  if (leader) {
+    const topFive = products.slice(0, 5)
+    const topFiveShare = topFive.reduce((total, product) => total + product.revenueShare, 0)
+    narrative.push(
+      `${shortLabel(leader.label, 44)} led the period with ${formatPLN(leader.revenuePLN)} of revenue and ${formatPercent(leader.marginShare * 100, 0)} of all profit. The top five products account for ${formatPercent(topFiveShare * 100, 0)} of revenue, so performance remains concentrated in a small part of the catalogue.`,
+    )
+  }
 
   const [first, second] = channels
   if (first && second) {
+    const gap = Math.abs(first.marginPct - second.marginPct)
+    const worse = first.marginPct >= second.marginPct ? second : first
     narrative.push(
-      `${channelName(first.source)} carries ${formatPercent(first.revenueShare * 100, 0)} of revenue at ${formatPercent(first.marginPct)} margin; ${channelName(second.source)} carries ${formatPercent(second.revenueShare * 100, 0)} at ${formatPercent(second.marginPct)}. The gap of ${Math.abs(first.marginPct - second.marginPct).toFixed(1)} points is worth ${formatPLN((Math.min(first.marginPct, second.marginPct) < first.marginPct ? first : second).revenuePLN * Math.abs(first.marginPct - second.marginPct) / 100)} per period at current volume.`,
+      `${channelName(first.source)} carried ${formatPercent(first.revenueShare * 100, 0)} of revenue at ${formatPercent(first.marginPct)} margin, against ${formatPercent(second.revenueShare * 100, 0)} at ${formatPercent(second.marginPct)} on ${channelName(second.source)}. Closing the ${gap.toFixed(1)}-point gap on ${channelName(worse.source)} would be worth roughly ${formatPLN((worse.revenuePLN * gap) / 100)} at current volume.`,
     )
   }
 
-  const thin = products.filter((product) => product.marginPct < 15 && product.revenueShare >= 0.02)
-  if (thin.length > 0) {
-    const thinRevenue = sum(thin, (product) => product.revenuePLN)
+  const lossMakers = products.filter((product) => product.marginPLN < 0)
+  if (lossMakers.length > 0) {
+    const bleed = lossMakers.reduce((total, product) => total + product.marginPLN, 0)
     narrative.push(
-      `${thin.length} material product${thin.length === 1 ? '' : 's'} trade${thin.length === 1 ? 's' : ''} below 15% margin, representing ${formatPLN(thinRevenue)} of revenue (${formatPercent(ratio(thinRevenue, totalRevenue) * 100, 0)} of the book) at well below portfolio profitability. Repricing these is the fastest available margin lever.`,
+      `${lossMakers.length} product${lossMakers.length === 1 ? '' : 's'} sold at a loss this period, costing ${formatPLN(Math.abs(bleed))}. These are listed in the Action Centre with the pricing decision each one needs.`,
     )
   }
 
   if (coverage.linesMissingCost > 0) {
     narrative.push(
-      `Caveat: ${formatPLN(coverage.revenueMissingCostPLN)} of revenue (${coverage.linesMissingCost} product lines) has no landed cost on file, so its reported profit excludes COGS. Figures above should be read as slightly optimistic until those costs are recorded.`,
+      `One caveat on the figures above: ${formatPLN(coverage.revenueMissingCostPLN)} of revenue has no landed cost on file, so its profit excludes COGS and reads better than it is.`,
     )
   }
 
-  return { periodLabel, narrative, scorecards, productsFor80pct }
+  // ── Automatically generated observations ────────────────────────────────
+  const insights: ReviewInsight[] = []
+
+  const revenueSeries = series.filter((point) => point.orders > 0).map((point) => point.revenuePLN)
+  const streak = trailingStreak(revenueSeries)
+  if (streak.length >= 3) {
+    insights.push({
+      topic: 'Momentum',
+      statement: `Revenue has moved ${streak.direction === 'up' ? 'up' : 'down'} for ${streak.length} consecutive ${period.granularity}s.`,
+      tone: streak.direction === 'up' ? 'positive' : 'negative',
+    })
+  }
+
+  if (previousTotals && previousTotals.avgOrderValuePLN > 0) {
+    const basketChange =
+      ((totals.avgOrderValuePLN - previousTotals.avgOrderValuePLN) /
+        previousTotals.avgOrderValuePLN) *
+      100
+    if (Math.abs(basketChange) >= 4) {
+      insights.push({
+        topic: 'Basket',
+        statement: `Average basket ${basketChange > 0 ? 'grew' : 'shrank'} ${Math.abs(basketChange).toFixed(1)}% to ${formatPLN(totals.avgOrderValuePLN)}${basketChange < 0 ? ' — customers are buying less per visit.' : '.'}`,
+        tone: basketChange > 0 ? 'positive' : 'negative',
+      })
+    }
+  }
+
+  if (previousTotals && previousTotals.revenuePLN > 0 && previousTotals.marginPLN !== 0) {
+    const revenueGrowth =
+      ((totals.revenuePLN - previousTotals.revenuePLN) / previousTotals.revenuePLN) * 100
+    const profitGrowth =
+      ((totals.marginPLN - previousTotals.marginPLN) / Math.abs(previousTotals.marginPLN)) * 100
+    if (revenueGrowth > 2 && profitGrowth < revenueGrowth) {
+      insights.push({
+        topic: 'Profit quality',
+        statement: `Revenue grew ${revenueGrowth.toFixed(1)}% but profit only ${profitGrowth.toFixed(1)}% — the business is getting larger faster than it is getting better.`,
+        tone: 'negative',
+      })
+    } else if (profitGrowth > revenueGrowth && profitGrowth > 2) {
+      insights.push({
+        topic: 'Profit quality',
+        statement: `Profit grew ${profitGrowth.toFixed(1)}% against ${revenueGrowth.toFixed(1)}% revenue growth — each złoty of sales is worth more than it was.`,
+        tone: 'positive',
+      })
+    }
+  }
+
+  const thin = products.filter(
+    (product) => product.marginPct < 15 && product.revenueShare >= 0.02,
+  )
+  if (thin.length > 0) {
+    const thinRevenue = thin.reduce((total, product) => total + product.revenuePLN, 0)
+    insights.push({
+      topic: 'Margin',
+      statement: `${thin.length} material product${thin.length === 1 ? '' : 's'} trade below 15% margin, covering ${formatPercent(ratio(thinRevenue, totals.revenuePLN) * 100, 0)} of revenue. Repricing these is the fastest available margin lever.`,
+      tone: 'negative',
+    })
+  }
+
+  if (products.length > 0) {
+    const topShare = products[0]!.marginShare
+    if (topShare > 0.3) {
+      insights.push({
+        topic: 'Concentration',
+        statement: `${formatPercent(topShare * 100, 0)} of profit comes from a single product, so a stockout or price war on that listing would be felt immediately.`,
+        tone: 'negative',
+      })
+    }
+  }
+
+  return { periodLabel, summary, narrative, insights }
 }
