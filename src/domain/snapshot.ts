@@ -196,7 +196,10 @@ export function buildSnapshot(input: SnapshotInput): Snapshot {
     : []
 
   const totals = computeTotals(orders)
-  const previousTotals = period.previous ? computeTotals(previousOrders) : null
+  // Only offer a baseline when the business traded across the whole of the
+  // comparison window; a partial one produces true-but-meaningless deltas.
+  const previousTotals =
+    period.previous && period.previousCoverage === 'full' ? computeTotals(previousOrders) : null
 
   const series = buildSeries(orders, period.granularity, { from: period.from, to: period.to })
   const products = buildProductPerformance(orders, costs)

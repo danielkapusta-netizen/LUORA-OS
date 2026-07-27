@@ -43,6 +43,16 @@ export interface ResolvedPeriod {
   granularity: Granularity
   /** True when the period was anchored to the newest order, not wall clock. */
   isAnchoredToData: boolean
+  /**
+   * How much of the comparison window the business was actually trading for.
+   *
+   * "This year" compares against the equal-length window before it, which for a
+   * young business reaches back past the first ever order. Dividing by a window
+   * that is mostly pre-history produces figures like +1518% that are
+   * arithmetically true and completely meaningless. Anything other than `full`
+   * means the delta should be withheld rather than shown.
+   */
+  previousCoverage: 'full' | 'partial' | 'none'
 }
 
 export const PERIOD_OPTIONS: Array<{ value: PeriodKey; label: string }> = [
@@ -192,6 +202,17 @@ export function resolvePeriod(
           ? 'vs the day before'
           : `vs previous ${days} day${days === 1 ? '' : 's'}`
 
+  // A comparison is only like-for-like if the business was trading across the
+  // whole of the window being compared against.
+  let previousCoverage: 'full' | 'partial' | 'none' = 'full'
+  if (!previous) {
+    previousCoverage = 'none'
+  } else if (firstOrder) {
+    const firstDay = startOfDay(firstOrder)
+    if (previous.to < firstDay) previousCoverage = 'none'
+    else if (previous.from < firstDay) previousCoverage = 'partial'
+  }
+
   return {
     key,
     label,
@@ -202,6 +223,7 @@ export function resolvePeriod(
     days,
     granularity: granularityFor(days),
     isAnchoredToData,
+    previousCoverage,
   }
 }
 
