@@ -4,7 +4,7 @@
  */
 
 import { ratio, sum } from './parse'
-import type { Channel, DailyPoint, Order } from './types'
+import type { Channel, DailyPoint, LineItem, Order } from './types'
 
 /** Minimum history before a moving average says anything a raw line doesn't. */
 export const MIN_DAYS_FOR_MOVING_AVERAGE = 7
@@ -113,19 +113,19 @@ export function buildChannelDaily(
 
 /** Per-product daily revenue, for the product detail chart. */
 export function buildProductDaily(
-  orders: readonly Order[],
+  lineItems: readonly LineItem[],
   productKey: string,
   daily: readonly DailyPoint[],
 ): DailyPoint[] {
-  const own = orders.filter((order) => order.productKey === productKey && order.date)
+  const own = lineItems.filter((line) => line.productKey === productKey && line.date)
   const buckets = new Map<string, { orders: number; units: number; revenue: number; margin: number }>()
-  for (const order of own) {
-    const key = order.date!.toISOString().slice(0, 10)
+  for (const line of own) {
+    const key = line.date!.toISOString().slice(0, 10)
     const bucket = buckets.get(key) ?? { orders: 0, units: 0, revenue: 0, margin: 0 }
     bucket.orders += 1
-    bucket.units += order.qty
-    bucket.revenue += order.revenuePLN
-    bucket.margin += order.marginPLN
+    bucket.units += line.qty
+    bucket.revenue += line.revenuePLN
+    bucket.margin += line.marginPLN
     buckets.set(key, bucket)
   }
 
@@ -140,6 +140,7 @@ export function buildProductDaily(
       revenuePLN: revenue,
       marginPLN: margin,
       marginPct: ratio(margin, revenue) * 100,
+      avgOrderValuePLN: ratio(revenue, bucket?.orders ?? 0),
     }
   })
 }

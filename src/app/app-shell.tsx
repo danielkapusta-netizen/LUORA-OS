@@ -6,7 +6,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { SidebarContent } from '@/app/sidebar'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { useBusinessContext } from '@/hooks/use-business-context'
+import { useSnapshot } from '@/hooks/use-snapshot'
 import { useTheme } from '@/hooks/use-theme'
 
 /**
@@ -16,7 +16,7 @@ import { useTheme } from '@/hooks/use-theme'
  */
 export function AppShell() {
   const { theme, toggleTheme } = useTheme()
-  const { context } = useBusinessContext()
+  const { snapshot } = useSnapshot()
   const [isDrawerOpen, setDrawerOpen] = useState(false)
   const location = useLocation()
 
@@ -26,7 +26,7 @@ export function AppShell() {
   }, [location.pathname])
 
   const actionableInsights =
-    context?.insights.filter((insight) => insight.severity !== 'info').length ?? 0
+    snapshot?.insights.filter((insight) => insight.severity !== 'info').length ?? 0
 
   return (
     <TooltipProvider delayDuration={200}>

@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 
 import App from '@/App'
+import { SnapshotProvider } from '@/hooks/use-snapshot'
 import { queryClient } from '@/lib/query-client'
 import './index.css'
 
@@ -14,7 +15,9 @@ createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <App />
+        <SnapshotProvider>
+          <App />
+        </SnapshotProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

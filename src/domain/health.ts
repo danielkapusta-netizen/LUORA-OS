@@ -15,13 +15,13 @@ import type {
   HealthBand,
   HealthComponent,
   HealthScore,
-  Order,
+  LineItem,
   PeriodComparison,
   ProductPerformance,
 } from './types'
 
 export interface HealthInput {
-  orders: readonly Order[]
+  lineItems: readonly LineItem[]
   products: readonly ProductPerformance[]
   channels: readonly ChannelPerformance[]
   comparison: PeriodComparison
@@ -53,8 +53,8 @@ function band(score: number): HealthBand {
 
 function headlineFor(score: number, input: HealthInput): string {
   const marginPct = ratio(
-    sum(input.orders, (order) => order.marginPLN),
-    sum(input.orders, (order) => order.revenuePLN),
+    sum(input.lineItems, (line) => line.marginPLN),
+    sum(input.lineItems, (line) => line.revenuePLN),
   ) * 100
 
   const critical = input.criticalFindings ?? 0
@@ -79,10 +79,10 @@ function headlineFor(score: number, input: HealthInput): string {
 }
 
 export function computeHealthScore(input: HealthInput): HealthScore {
-  const { orders, products, channels, comparison, coverage } = input
+  const { lineItems, products, channels, comparison, coverage } = input
 
-  const totalRevenue = sum(orders, (order) => order.revenuePLN)
-  const totalMargin = sum(orders, (order) => order.marginPLN)
+  const totalRevenue = sum(lineItems, (line) => line.revenuePLN)
+  const totalMargin = sum(lineItems, (line) => line.marginPLN)
   const marginPct = ratio(totalMargin, totalRevenue) * 100
 
   // 1. Profitability — the anchor. Everything else modulates it.
@@ -149,7 +149,7 @@ export function computeHealthScore(input: HealthInput): HealthScore {
 
   // 5. Data integrity — confidence in every number above.
   const integrityScore = coverage.costCoverage * 100 -
-    (coverage.totalOrders - coverage.completeOrders) * 2
+    (coverage.totalLineItems - coverage.completeLineItems) * 2
   const dataIntegrity: HealthComponent = {
     key: 'data-integrity',
     label: 'Data confidence',
@@ -157,7 +157,7 @@ export function computeHealthScore(input: HealthInput): HealthScore {
     score: clamp(integrityScore, 0, 100),
     value: formatPercent(coverage.costCoverage * 100, 0),
     detail:
-      coverage.ordersMissingCost > 0
+      coverage.linesMissingCost > 0
         ? `${formatPLN(coverage.revenueMissingCostPLN)} of revenue has no landed cost on file, so its profit is overstated.`
         : 'Every order is matched to a landed cost.',
   }

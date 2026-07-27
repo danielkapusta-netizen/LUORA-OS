@@ -18,13 +18,13 @@ import type {
   ChannelPerformance,
   DataCoverage,
   Insight,
-  Order,
+  LineItem,
   PeriodComparison,
   ProductPerformance,
 } from './types'
 
 export interface InsightInput {
-  orders: readonly Order[]
+  lineItems: readonly LineItem[]
   products: readonly ProductPerformance[]
   channels: readonly ChannelPerformance[]
   comparison: PeriodComparison
@@ -54,11 +54,11 @@ export function channelName(source: string): string {
 }
 
 export function generateInsights(input: InsightInput): Insight[] {
-  const { orders, products, channels, comparison, coverage } = input
+  const { lineItems, products, channels, comparison, coverage } = input
   const insights: Insight[] = []
 
-  const totalRevenue = sum(orders, (order) => order.revenuePLN)
-  const totalMargin = sum(orders, (order) => order.marginPLN)
+  const totalRevenue = sum(lineItems, (line) => line.revenuePLN)
+  const totalMargin = sum(lineItems, (line) => line.marginPLN)
   const portfolioMarginPct = ratio(totalMargin, totalRevenue) * 100
 
   // ── Rule 1 ── Margin leak: material products earning far below portfolio rate.
@@ -102,12 +102,12 @@ export function generateInsights(input: InsightInput): Insight[] {
   }
 
   // ── Rule 3 ── Unknown cost base: profit figures that cannot be trusted.
-  if (coverage.ordersMissingCost > 0) {
+  if (coverage.linesMissingCost > 0) {
     insights.push({
       id: 'cost-coverage',
       kind: 'risk',
       severity: coverage.costCoverage < 0.9 ? 'attention' : 'info',
-      title: `${coverage.ordersMissingCost} orders have no landed cost on file`,
+      title: `${coverage.linesMissingCost} orders have no landed cost on file`,
       why: `${formatPLN(coverage.revenueMissingCostPLN)} of revenue is matched to no cost record, so its margin is reported without COGS and is overstated. These orders currently average a far higher margin than the rest of the book — that gap is a data artefact, not performance.`,
       action:
         'Add landed costs for these listings in the product cost sheet. Until then, treat their profit as unverified.',
@@ -193,7 +193,7 @@ export function generateInsights(input: InsightInput): Insight[] {
   }
 
   // ── Rule 7 ── Rows the pipeline could not read.
-  const incomplete = coverage.totalOrders - coverage.completeOrders
+  const incomplete = coverage.totalLineItems - coverage.completeLineItems
   if (incomplete > 0) {
     insights.push({
       id: 'incomplete-rows',
@@ -207,18 +207,18 @@ export function generateInsights(input: InsightInput): Insight[] {
     })
   }
 
-  // ── Rule 8 ── Volume concentrated in near-zero-margin orders.
-  const thinOrders = orders.filter(
-    (order) => order.marginPct !== null && order.marginPct < CRITICAL_MARGIN_PCT,
+  // ── Rule 8 ── Volume concentrated in near-zero-margin sales.
+  const thinLines = lineItems.filter(
+    (line) => line.marginPct !== null && line.marginPct < CRITICAL_MARGIN_PCT,
   )
-  if (thinOrders.length > 0 && thinOrders.length / Math.max(1, orders.length) > 0.1) {
-    const thinRevenue = sum(thinOrders, (order) => order.revenuePLN)
+  if (thinLines.length > 0 && thinLines.length / Math.max(1, lineItems.length) > 0.1) {
+    const thinRevenue = sum(thinLines, (line) => line.revenuePLN)
     insights.push({
       id: 'thin-order-share',
       kind: 'risk',
       severity: 'attention',
-      title: `${formatPercent((thinOrders.length / orders.length) * 100, 0)} of orders earn under ${CRITICAL_MARGIN_PCT}% margin`,
-      why: `${thinOrders.length} of ${orders.length} orders returned less than ${CRITICAL_MARGIN_PCT}% profit, on ${formatPLN(thinRevenue)} of revenue. These orders consume the same packing, shipping and support effort as your profitable ones.`,
+      title: `${formatPercent((thinLines.length / lineItems.length) * 100, 0)} of items sell under ${CRITICAL_MARGIN_PCT}% margin`,
+      why: `${thinLines.length} of ${lineItems.length} product lines returned less than ${CRITICAL_MARGIN_PCT}% profit, on ${formatPLN(thinRevenue)} of revenue. These consume the same packing, shipping and support effort as your profitable ones.`,
       action:
         'Reprice or retire the listings behind these orders. Fulfilment capacity spent here is capacity not spent on your high-margin catalogue.',
       impactPLN: (thinRevenue * (portfolioMarginPct - CRITICAL_MARGIN_PCT)) / 100,

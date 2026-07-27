@@ -135,7 +135,7 @@ export function SettingsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <QualityCard
               title="Rows read cleanly"
-              value={`${formatNumber(context.coverage.completeOrders)} / ${formatNumber(context.coverage.totalOrders)}`}
+              value={`${formatNumber(context.coverage.completeLineItems)} / ${formatNumber(context.coverage.totalLineItems)}`}
               detail="Orders whose PLN price and margin parsed. The remainder are excluded from totals and flagged in the Action Centre."
             />
             <QualityCard

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
 import type { Insight } from '@/domain/types'
-import { useBusinessContext } from '@/hooks/use-business-context'
+import { useSnapshot } from '@/hooks/use-snapshot'
 import { formatPLN } from '@/lib/format'
 
 type Filter = 'all' | 'risks' | 'opportunities'
@@ -30,24 +30,24 @@ function matches(insight: Insight, filter: Filter): boolean {
  * founder knows what a clear list is worth before reading a single card.
  */
 export function ActionCentrePage() {
-  const { context, isLoading, isError, error, refetch } = useBusinessContext()
+  const { snapshot, isLoading, isError, error, refetch } = useSnapshot()
   const [filter, setFilter] = useState<Filter>('all')
 
   const totals = useMemo(() => {
-    if (!context) return null
-    const risks = context.insights.filter((insight) => insight.kind === 'risk')
-    const opportunities = context.insights.filter((insight) => insight.kind === 'opportunity')
+    if (!snapshot) return null
+    const risks = snapshot.insights.filter((insight) => insight.kind === 'risk')
+    const opportunities = snapshot.insights.filter((insight) => insight.kind === 'opportunity')
     return {
       risks: risks.length,
       opportunities: opportunities.length,
-      critical: context.insights.filter((insight) => insight.severity === 'critical').length,
-      atStake: context.insights.reduce((total, insight) => total + (insight.impactPLN ?? 0), 0),
+      critical: snapshot.insights.filter((insight) => insight.severity === 'critical').length,
+      atStake: snapshot.insights.reduce((total, insight) => total + (insight.impactPLN ?? 0), 0),
     }
-  }, [context])
+  }, [snapshot])
 
   if (isLoading) return <PageSkeleton />
 
-  if (isError || !context || !totals) {
+  if (isError || !snapshot || !totals) {
     return (
       <div className="space-y-8">
         <PageHeader eyebrow="Action Centre" title="Action Centre" />
@@ -56,7 +56,7 @@ export function ActionCentrePage() {
     )
   }
 
-  const visible = context.insights.filter((insight) => matches(insight, filter))
+  const visible = snapshot.insights.filter((insight) => matches(insight, filter))
 
   return (
     <div className="space-y-10">
@@ -65,7 +65,7 @@ export function ActionCentrePage() {
         title="What is worth your attention, priced"
         description={
           <>
-            {context.insights.length} findings from your live numbers —{' '}
+            {snapshot.insights.length} findings from your live numbers —{' '}
             <span className="font-medium text-ink">{formatPLN(totals.atStake)}</span> of profit at
             stake across all of them. Each one states its evidence and the next step.
           </>

@@ -2,15 +2,20 @@
  * Canonical domain model for Luora OS.
  *
  * These types describe the business, not the spreadsheet. Raw API payloads are
- * translated into this shape exactly once (see `parse.ts`) so that no component
- * ever has to know that `margin` can arrive as an empty string.
+ * translated into this shape exactly once (see `mappers.ts`) so that no
+ * component ever has to know that `margin` can arrive as an empty string.
+ *
+ * The central distinction: a **LineItem** is one row in the sheet (one product
+ * within a purchase); an **Order** is what the customer actually placed. A
+ * three-product basket is one order, not three. Conflating them overstated
+ * order counts by 6.9% and made average basket value meaningless.
  */
 
 export type Currency = 'PLN' | 'EUR' | 'CZK' | 'HUF'
 export type Channel = 'allegro' | 'empik'
 
-/** A single sale, normalised and denominated in PLN for aggregation. */
-export interface Order {
+/** One product line within an order — one row of the source sheet. */
+export interface LineItem {
   /** Stable synthetic id — the source has no primary key. */
   id: string
   /** Raw SKU string exactly as stored in the sheet. */
@@ -26,8 +31,17 @@ export interface Order {
   netPriceOriginal: number
   commissionOriginal: number
   shipmentOriginal: number
+  /**
+   * Implied FX rate for this line (pricePLN / price). The sheet stores only
+   * converted price, so this is how shipping and commission reach PLN.
+   */
+  fxRate: number
   /** Gross revenue converted to PLN. */
   revenuePLN: number
+  /** Marketplace commission in PLN. */
+  commissionPLN: number
+  /** Shipping charged on this line, in PLN. */
+  shipmentPLN: number
   /** True profit in PLN, net of marketplace commission and product cost. */
   marginPLN: number
   /** Margin as a share of revenue, or null when revenue is unknown. */
@@ -36,6 +50,28 @@ export interface Order {
   source: Channel
   date: Date | null
   /** False when the source row had missing or unparseable financials. */
+  isComplete: boolean
+  /** Key identifying the order this line belongs to. */
+  orderKey: string
+}
+
+/** A customer purchase: one or more line items bought together. */
+export interface Order {
+  id: string
+  date: Date | null
+  customerName: string
+  source: Channel
+  items: LineItem[]
+  /** Number of distinct product lines. */
+  lineCount: number
+  /** Total units across all lines. */
+  units: number
+  revenuePLN: number
+  marginPLN: number
+  marginPct: number | null
+  commissionPLN: number
+  shipmentPLN: number
+  /** False when any line failed to parse. */
   isComplete: boolean
 }
 
@@ -84,21 +120,31 @@ export interface TopProduct {
   marginPLN: number
 }
 
-/** One day of trading activity. */
+/** One bucket of trading activity at whatever grain is being viewed. */
 export interface DailyPoint {
-  /** ISO date, `YYYY-MM-DD`. */
+  /** ISO date, `YYYY-MM-DD` — the bucket's starting day. */
   date: string
   orders: number
   units: number
   revenuePLN: number
   marginPLN: number
   marginPct: number
+  /** Revenue divided by orders — average basket for the bucket. */
+  avgOrderValuePLN: number
 }
 
-/** Everything known about a single product, joined across orders and costs. */
+/** The grain a time series is aggregated at. */
+export type Granularity = 'day' | 'week' | 'month' | 'quarter' | 'year'
+
+/** Everything known about a single product, joined across line items and costs. */
 export interface ProductPerformance {
   productKey: string
   label: string
+  /** Brand inferred from the listing title. */
+  brand: string
+  /** Coarse product category inferred from the listing title. */
+  category: string
+  /** Orders containing this product. */
   orders: number
   units: number
   revenuePLN: number
@@ -109,6 +155,8 @@ export interface ProductPerformance {
   /** Share of total company profit, 0–1. */
   marginShare: number
   avgOrderValuePLN: number
+  /** Average selling price per unit, in PLN. */
+  avgUnitPricePLN: number
   unitCostPLN: number | null
   /** True when this product could not be matched to a cost record. */
   costUnknown: boolean
@@ -152,10 +200,11 @@ export interface PeriodTotals {
 /** How much of the business we can actually vouch for. */
 export interface DataCoverage {
   totalOrders: number
-  /** Orders whose financials parsed cleanly. */
-  completeOrders: number
-  /** Orders we could not match to a cost record — their margin is overstated. */
-  ordersMissingCost: number
+  totalLineItems: number
+  /** Line items whose financials parsed cleanly. */
+  completeLineItems: number
+  /** Lines we could not match to a cost record — their margin is overstated. */
+  linesMissingCost: number
   revenueMissingCostPLN: number
   /** Share of revenue backed by a known landed cost, 0–1. */
   costCoverage: number
@@ -210,22 +259,37 @@ export interface Insight {
   impactLabel: string | null
   /** The product or channel this concerns, for drill-through. */
   entity?: { type: 'product' | 'channel'; key: string; label: string }
+  /** How much the evidence supports the finding. */
+  confidence?: Confidence
+  /** Concrete supporting facts, rendered as a list. */
+  evidence?: string[]
 }
 
+export type Confidence = 'high' | 'medium' | 'low'
+
 /**
- * The single derived object the entire UI reads from. Built once per data load
- * so that pages stay presentational and calculations stay testable.
+ * A KPI carries its own context: what it was, where it peaked, what is typical,
+ * and its shape over the period. A bare number cannot be judged.
  */
-export interface BusinessContext {
-  orders: Order[]
-  costs: ProductCost[]
-  summary: Summary
-  daily: DailyPoint[]
-  monthly: MonthlyPoint[]
-  products: ProductPerformance[]
-  channels: ChannelPerformance[]
-  comparison: PeriodComparison
-  coverage: DataCoverage
-  health: HealthScore
-  insights: Insight[]
+export interface Kpi {
+  key: string
+  label: string
+  value: number
+  /** Same measure over the preceding equal-length window. */
+  previous: number | null
+  /** Percentage change vs the previous window (percentage points for rates). */
+  changePct: number | null
+  /** True when this measure is a rate, so deltas are percentage points. */
+  isRate?: boolean
+  /** Highest bucket value within the period. */
+  peak: { value: number; label: string } | null
+  /** Mean bucket value within the period. */
+  average: number
+  /** Bucket values, for the sparkline. */
+  series: number[]
+  format: 'pln' | 'number' | 'percent'
+  /** How the figure is derived — surfaced as a tooltip. */
+  hint: string
+  /** False when a rise in this measure is bad news. */
+  higherIsBetter?: boolean
 }

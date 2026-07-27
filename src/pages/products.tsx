@@ -12,8 +12,9 @@ import { Segmented } from '@/components/ui/segmented'
 import { Tooltip } from '@/components/ui/tooltip'
 import { channelName } from '@/domain/insights'
 import { buildProductDaily } from '@/domain/trends'
-import type { BusinessContext, ProductPerformance } from '@/domain/types'
-import { useBusinessContext } from '@/hooks/use-business-context'
+import type { BusinessContext } from '@/domain/context'
+import type { Insight, ProductPerformance } from '@/domain/types'
+import { useSnapshot } from '@/hooks/use-snapshot'
 import { formatDate, formatNumber, formatPercent, formatPLN } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -50,12 +51,12 @@ function lifecycle(product: ProductPerformance, lastOrder: Date | null): string 
 }
 
 export function ProductsPage() {
-  const { context, isLoading, isError, error, refetch } = useBusinessContext()
+  const { context, snapshot, isLoading, isError, error, refetch } = useSnapshot()
   const [sortKey, setSortKey] = useState<SortKey>('revenue')
   const [openKey, setOpenKey] = useState<string | null>(null)
 
   if (isLoading) return <PageSkeleton />
-  if (isError || !context) {
+  if (isError || !context || !snapshot) {
     return (
       <div className="space-y-8">
         <PageHeader eyebrow="Products" title="Products" />
@@ -94,6 +95,7 @@ export function ProductsPage() {
               product={product}
               rank={index + 1}
               context={context}
+              insights={snapshot.insights}
               isOpen={openKey === product.productKey}
               onToggle={() =>
                 setOpenKey(openKey === product.productKey ? null : product.productKey)
@@ -110,12 +112,14 @@ function ProductRow({
   product,
   rank,
   context,
+  insights,
   isOpen,
   onToggle,
 }: {
   product: ProductPerformance
   rank: number
   context: BusinessContext
+  insights: readonly Insight[]
   isOpen: boolean
   onToggle: () => void
 }) {
@@ -181,7 +185,7 @@ function ProductRow({
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
-              <ProductDetail product={product} context={context} />
+              <ProductDetail product={product} context={context} insights={insights} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -214,17 +218,17 @@ function Figure({
 function ProductDetail({
   product,
   context,
+  insights,
 }: {
   product: ProductPerformance
   context: BusinessContext
+  insights: readonly Insight[]
 }) {
   const daily = useMemo(
-    () => buildProductDaily(context.orders, product.productKey, context.daily),
-    [context.orders, context.daily, product.productKey],
+    () => buildProductDaily(context.lineItems, product.productKey, context.daily),
+    [context.lineItems, context.daily, product.productKey],
   )
-  const ownInsights = context.insights.filter(
-    (insight) => insight.entity?.key === product.productKey,
-  )
+  const ownInsights = insights.filter((insight) => insight.entity?.key === product.productKey)
   const profitPerOrder = product.orders > 0 ? product.marginPLN / product.orders : 0
 
   const stats: Array<{ label: string; value: string; hint?: string }> = [

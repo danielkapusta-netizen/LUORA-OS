@@ -3,7 +3,7 @@ import { useQueries } from '@tanstack/react-query'
 
 import { luoraApi } from '@/domain/api'
 import { buildBusinessContext } from '@/domain/context'
-import type { BusinessContext } from '@/domain/types'
+import type { BusinessContext } from '@/domain/context'
 
 export const queryKeys = {
   transactions: ['luora', 'transactions'] as const,

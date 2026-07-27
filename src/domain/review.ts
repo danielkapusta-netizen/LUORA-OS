@@ -10,7 +10,8 @@ import { formatDateRange, formatPercent, formatPLN } from '@/lib/format'
 import { channelName } from './insights'
 import { ratio, sum } from './parse'
 import { shortLabel } from './sku'
-import type { BusinessContext, ProductPerformance } from './types'
+import type { BusinessContext } from './context'
+import type { ProductPerformance } from './types'
 
 export interface ProductScorecard {
   product: ProductPerformance
@@ -34,7 +35,7 @@ export interface BusinessReview {
 }
 
 export function buildBusinessReview(context: BusinessContext): BusinessReview {
-  const { orders, products, channels, comparison, coverage, summary } = context
+  const { products, channels, comparison, coverage, summary } = context
   const { current, previous, windowDays, isReliable } = comparison
 
   const periodLabel = isReliable
@@ -47,17 +48,17 @@ export function buildBusinessReview(context: BusinessContext): BusinessReview {
   if (isReliable) {
     const fromCurrent = new Date(`${current.from}T00:00:00Z`).getTime()
     const fromPrevious = new Date(`${previous.from}T00:00:00Z`).getTime()
-    for (const order of orders) {
-      if (!order.date) continue
-      const time = order.date.getTime()
-      const entry = windowRevenue.get(order.productKey) ?? { current: 0, previous: 0 }
+    for (const line of context.lineItems) {
+      if (!line.date) continue
+      const time = line.date.getTime()
+      const entry = windowRevenue.get(line.productKey) ?? { current: 0, previous: 0 }
       if (time >= fromCurrent) {
-        entry.current += order.revenuePLN
-        currentSet.add(order.productKey)
+        entry.current += line.revenuePLN
+        currentSet.add(line.productKey)
       } else if (time >= fromPrevious) {
-        entry.previous += order.revenuePLN
+        entry.previous += line.revenuePLN
       }
-      windowRevenue.set(order.productKey, entry)
+      windowRevenue.set(line.productKey, entry)
     }
   }
 
@@ -114,9 +115,9 @@ export function buildBusinessReview(context: BusinessContext): BusinessReview {
     )
   }
 
-  if (coverage.ordersMissingCost > 0) {
+  if (coverage.linesMissingCost > 0) {
     narrative.push(
-      `Caveat: ${formatPLN(coverage.revenueMissingCostPLN)} of revenue (${coverage.ordersMissingCost} orders) has no landed cost on file, so its reported profit excludes COGS. Figures above should be read as slightly optimistic until those costs are recorded.`,
+      `Caveat: ${formatPLN(coverage.revenueMissingCostPLN)} of revenue (${coverage.linesMissingCost} product lines) has no landed cost on file, so its reported profit excludes COGS. Figures above should be read as slightly optimistic until those costs are recorded.`,
     )
   }
 

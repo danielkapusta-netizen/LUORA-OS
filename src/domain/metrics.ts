@@ -2,8 +2,14 @@
  * Aggregation engine. Pure functions over the domain model — no React, no
  * formatting, no presentation concerns. Everything here could be lifted into
  * Apps Script unchanged if these calculations ever move server-side.
+ *
+ * All volume metrics count **orders**, not line items. Product metrics count
+ * the orders a product appeared in, so a three-item basket contributes one
+ * order to each of its three products but only one to company volume.
  */
 
+import { inferBrand, inferCategory } from './orders'
+import { bucketKey, isWithin, nextBucket } from './period'
 import { ratio, sum, toIsoDay } from './parse'
 import { resolveCostKey } from './sku'
 import type {
@@ -11,6 +17,8 @@ import type {
   ChannelPerformance,
   DailyPoint,
   DataCoverage,
+  Granularity,
+  LineItem,
   Order,
   PeriodComparison,
   PeriodTotals,
@@ -18,7 +26,6 @@ import type {
   ProductPerformance,
 } from './types'
 
-const DAY_MS = 86_400_000
 /** Longest comparison window we will ever use, even with years of history. */
 const MAX_WINDOW_DAYS = 7
 /** Below this many trading days a period-over-period read is not honest. */
@@ -32,14 +39,28 @@ export function buildCostIndex(costs: readonly ProductCost[]): Map<string, Produ
   return index
 }
 
+/** Filter orders to a window. */
+export function ordersWithin(orders: readonly Order[], from: Date, to: Date): Order[] {
+  return orders.filter((order) => isWithin(order.date, from, to))
+}
+
+/** Every line item belonging to the given orders. */
+export function linesOf(orders: readonly Order[]): LineItem[] {
+  return orders.flatMap((order) => order.items)
+}
+
 /**
- * Daily series across the full calendar span, including days with no trading.
- * Gaps are represented as real zeros rather than skipped, so a quiet Sunday
- * reads as a quiet Sunday instead of vanishing from the chart.
+ * Time series across the full span at the requested grain, including buckets
+ * with no trading. Gaps are represented as real zeros rather than skipped, so a
+ * quiet Sunday reads as a quiet Sunday instead of vanishing from the chart.
  */
-export function buildDailySeries(orders: readonly Order[]): DailyPoint[] {
+export function buildSeries(
+  orders: readonly Order[],
+  granularity: Granularity,
+  range?: { from: Date; to: Date },
+): DailyPoint[] {
   const dated = orders.filter((order) => order.date !== null)
-  if (dated.length === 0) return []
+  if (dated.length === 0 && !range) return []
 
   const buckets = new Map<string, { orders: number; units: number; revenue: number; margin: number }>()
   let min = Number.POSITIVE_INFINITY
@@ -50,40 +71,41 @@ export function buildDailySeries(orders: readonly Order[]): DailyPoint[] {
     if (time < min) min = time
     if (time > max) max = time
 
-    const key = toIsoDay(order.date!)
+    const key = bucketKey(order.date!, granularity)
     const bucket = buckets.get(key) ?? { orders: 0, units: 0, revenue: 0, margin: 0 }
     bucket.orders += 1
-    bucket.units += order.qty
+    bucket.units += order.units
     bucket.revenue += order.revenuePLN
     bucket.margin += order.marginPLN
     buckets.set(key, bucket)
   }
 
-  const series: DailyPoint[] = []
-  const startDay = Date.UTC(
-    new Date(min).getUTCFullYear(),
-    new Date(min).getUTCMonth(),
-    new Date(min).getUTCDate(),
-  )
-  const endDay = Date.UTC(
-    new Date(max).getUTCFullYear(),
-    new Date(max).getUTCMonth(),
-    new Date(max).getUTCDate(),
-  )
+  const start = range ? range.from : new Date(min)
+  const end = range ? range.to : new Date(max)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return []
 
-  for (let time = startDay; time <= endDay; time += DAY_MS) {
-    const key = toIsoDay(new Date(time))
+  const series: DailyPoint[] = []
+  let cursor = new Date(`${bucketKey(start, granularity)}T00:00:00Z`)
+  const limit = end.getTime()
+  let guard = 0
+
+  while (cursor.getTime() <= limit && guard < 5000) {
+    const key = toIsoDay(cursor)
     const bucket = buckets.get(key)
     const revenue = bucket?.revenue ?? 0
     const margin = bucket?.margin ?? 0
+    const orderCount = bucket?.orders ?? 0
     series.push({
       date: key,
-      orders: bucket?.orders ?? 0,
+      orders: orderCount,
       units: bucket?.units ?? 0,
       revenuePLN: revenue,
       marginPLN: margin,
       marginPct: ratio(margin, revenue) * 100,
+      avgOrderValuePLN: ratio(revenue, orderCount),
     })
+    cursor = nextBucket(cursor, granularity)
+    guard += 1
   }
 
   return series
@@ -94,45 +116,58 @@ export function buildProductPerformance(
   costs: readonly ProductCost[],
 ): ProductPerformance[] {
   const costIndex = buildCostIndex(costs)
-  const totalRevenue = sum(orders, (order) => order.revenuePLN)
-  const totalMargin = sum(orders, (order) => order.marginPLN)
+  const lines = linesOf(orders)
+  const totalRevenue = sum(lines, (line) => line.revenuePLN)
+  const totalMargin = sum(lines, (line) => line.marginPLN)
 
-  const groups = new Map<string, Order[]>()
+  const groups = new Map<string, { lines: LineItem[]; orderIds: Set<string> }>()
   for (const order of orders) {
-    const existing = groups.get(order.productKey)
-    if (existing) existing.push(order)
-    else groups.set(order.productKey, [order])
+    for (const line of order.items) {
+      const existing = groups.get(line.productKey)
+      if (existing) {
+        existing.lines.push(line)
+        existing.orderIds.add(order.id)
+      } else {
+        groups.set(line.productKey, { lines: [line], orderIds: new Set([order.id]) })
+      }
+    }
   }
 
   const products: ProductPerformance[] = []
   for (const [productKey, group] of groups) {
-    const first = group[0]
+    const first = group.lines[0]
     if (!first) continue
 
-    const revenue = sum(group, (order) => order.revenuePLN)
-    const margin = sum(group, (order) => order.marginPLN)
-    const units = sum(group, (order) => order.qty)
+    const revenue = sum(group.lines, (line) => line.revenuePLN)
+    const margin = sum(group.lines, (line) => line.marginPLN)
+    const units = sum(group.lines, (line) => line.qty)
+    const orderCount = group.orderIds.size
 
     const costKey = resolveCostKey(first.rawSku, costIndex)
     const cost = costKey ? costIndex.get(costKey) : undefined
 
-    const dates = group.map((order) => order.date).filter((date): date is Date => date !== null)
-    const times = dates.map((date) => date.getTime())
+    const times = group.lines
+      .map((line) => line.date)
+      .filter((date): date is Date => date !== null)
+      .map((date) => date.getTime())
 
     products.push({
       productKey,
       label: first.productLabel,
-      orders: group.length,
+      brand: inferBrand(first.productLabel),
+      category: inferCategory(first.productLabel),
+      orders: orderCount,
       units,
       revenuePLN: revenue,
       marginPLN: margin,
       marginPct: ratio(margin, revenue) * 100,
       revenueShare: ratio(revenue, totalRevenue),
       marginShare: ratio(margin, totalMargin),
-      avgOrderValuePLN: ratio(revenue, group.length),
+      avgOrderValuePLN: ratio(revenue, orderCount),
+      avgUnitPricePLN: ratio(revenue, units),
       unitCostPLN: cost?.totalCostPLN ?? null,
       costUnknown: cost === undefined,
-      channels: [...new Set(group.map((order) => order.source))],
+      channels: [...new Set(group.lines.map((line) => line.source))],
       firstSold: times.length ? new Date(Math.min(...times)) : null,
       lastSold: times.length ? new Date(Math.max(...times)) : null,
     })
@@ -183,12 +218,9 @@ function totalsFor(points: readonly DailyPoint[]): PeriodTotals {
 }
 
 /**
- * Like-for-like comparison of the two most recent equal-length windows.
- *
- * The window adapts to the history available: with ten days of data a "last 7
- * days vs previous 7" read would compare seven days against three and overstate
- * growth. We halve the available span instead, and flag the result as
- * unreliable when there is not enough history to say anything at all.
+ * Like-for-like comparison of the two most recent equal-length windows, used
+ * where no explicit period is selected. The window adapts to the history
+ * available and flags itself unreliable when there is too little.
  */
 export function buildComparison(daily: readonly DailyPoint[]): PeriodComparison {
   const available = daily.length
@@ -217,15 +249,19 @@ export function buildComparison(daily: readonly DailyPoint[]): PeriodComparison 
 /**
  * How much of the reported profit we can actually stand behind.
  *
- * Orders whose product has no cost record still report a margin, but that
- * margin excludes COGS and is therefore overstated. Quantifying that exposure
- * is the difference between a dashboard and a decision tool.
+ * Lines whose product has no cost record still report a margin, but that margin
+ * excludes COGS and is therefore overstated. Quantifying that exposure is the
+ * difference between a dashboard and a decision tool.
  */
-export function buildCoverage(orders: readonly Order[], costs: readonly ProductCost[]): DataCoverage {
+export function buildCoverage(
+  orders: readonly Order[],
+  costs: readonly ProductCost[],
+): DataCoverage {
   const costIndex = buildCostIndex(costs)
-  const missing = orders.filter((order) => resolveCostKey(order.rawSku, costIndex) === null)
-  const totalRevenue = sum(orders, (order) => order.revenuePLN)
-  const missingRevenue = sum(missing, (order) => order.revenuePLN)
+  const lines = linesOf(orders)
+  const missing = lines.filter((line) => resolveCostKey(line.rawSku, costIndex) === null)
+  const totalRevenue = sum(lines, (line) => line.revenuePLN)
+  const missingRevenue = sum(missing, (line) => line.revenuePLN)
 
   const times = orders
     .map((order) => order.date)
@@ -233,15 +269,14 @@ export function buildCoverage(orders: readonly Order[], costs: readonly ProductC
     .map((date) => date.getTime())
 
   const uniqueDays = new Set(
-    orders
-      .filter((order) => order.date !== null)
-      .map((order) => toIsoDay(order.date!)),
+    orders.filter((order) => order.date !== null).map((order) => toIsoDay(order.date!)),
   )
 
   return {
     totalOrders: orders.length,
-    completeOrders: orders.filter((order) => order.isComplete).length,
-    ordersMissingCost: missing.length,
+    totalLineItems: lines.length,
+    completeLineItems: lines.filter((line) => line.isComplete).length,
+    linesMissingCost: missing.length,
     revenueMissingCostPLN: missingRevenue,
     costCoverage: totalRevenue > 0 ? 1 - missingRevenue / totalRevenue : 1,
     firstOrder: times.length ? new Date(Math.min(...times)) : null,
