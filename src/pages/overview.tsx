@@ -11,7 +11,7 @@ import { InsightCard } from '@/components/insight-card'
 import { KpiCard } from '@/components/kpi-card'
 import { PageHeader, SectionHeading } from '@/components/page-header'
 import { PeriodSelector } from '@/components/period-selector'
-import { ProductLeaderboard, type LeaderboardMetric } from '@/components/product-leaderboard'
+import { ProductTable, type ProductTableMetric } from '@/components/product-table'
 import { QuestionCard } from '@/components/question-card'
 import { EmptyState, ErrorState, PageSkeleton } from '@/components/states'
 import { Button } from '@/components/ui/button'
@@ -58,7 +58,7 @@ export function OverviewPage() {
   } = useSnapshot()
 
   const [trendMetric, setTrendMetric] = useState<TrendMetric>('revenue')
-  const [leaderMetric, setLeaderMetric] = useState<LeaderboardMetric>('revenue')
+  const [leaderMetric, setLeaderMetric] = useState<ProductTableMetric>('revenue')
 
   const brief = useMemo(() => (snapshot ? buildExecutiveBrief(snapshot) : null), [snapshot])
   const questions = useMemo(
@@ -170,7 +170,35 @@ export function OverviewPage() {
             </div>
           </section>
 
-          {/* ── 3. Executive questions ────────────────────────────────── */}
+          {/* ── 3. Product detail, kept beside the summary it explains ── */}
+          <section className="space-y-5">
+            <SectionHeading
+              title="Top products"
+              description={`What the ${formatNumber(totals.revenuePLN > 0 ? products.length : 0)} products traded in this period actually returned. Full catalogue lives on the Products page.`}
+              actions={
+                <div className="flex items-center gap-2">
+                  <Segmented
+                    options={LEADERBOARD_OPTIONS}
+                    value={leaderMetric}
+                    onChange={setLeaderMetric}
+                    aria-label="Rank products by"
+                  />
+                  <Button asChild variant="secondary" size="sm">
+                    <Link to="/products">All products</Link>
+                  </Button>
+                </div>
+              }
+            />
+            <Card className="overflow-hidden">
+              {products.length > 0 ? (
+                <ProductTable products={products} metric={leaderMetric} />
+              ) : (
+                <EmptyState title="No products in this period" />
+              )}
+            </Card>
+          </section>
+
+          {/* ── 4. Executive questions ────────────────────────────────── */}
           {questions.length > 0 && (
             <section className="space-y-5">
               <SectionHeading
@@ -185,7 +213,7 @@ export function OverviewPage() {
             </section>
           )}
 
-          {/* ── 4. Health ─────────────────────────────────────────────── */}
+          {/* ── 5. Health ─────────────────────────────────────────────── */}
           <motion.section
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -194,7 +222,7 @@ export function OverviewPage() {
             <HealthScoreCard health={health} />
           </motion.section>
 
-          {/* ── 5. Recommendations ────────────────────────────────────── */}
+          {/* ── 6. Recommendations ────────────────────────────────────── */}
           <section className="space-y-5">
             <SectionHeading
               title="What needs a decision"
@@ -256,7 +284,7 @@ export function OverviewPage() {
             </div>
           </section>
 
-          {/* ── 6. Interactive analytics ──────────────────────────────── */}
+          {/* ── 7. Interactive analytics ──────────────────────────────── */}
           <section className="space-y-5">
             <SectionHeading
               title="Business pulse"
@@ -284,7 +312,9 @@ export function OverviewPage() {
             </Card>
           </section>
 
-          <section className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+          {/* Products have already been covered in detail above, so this row
+              carries only the channel split. */}
+          <section className="grid grid-cols-1 items-start gap-6">
             <Card>
               <CardHeader className="pb-5">
                 <CardTitle>Where you sell</CardTitle>
@@ -294,25 +324,6 @@ export function OverviewPage() {
                   <ChannelComparison channels={channels} />
                 ) : (
                   <EmptyState title="No channel data" />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex-row items-center justify-between gap-4 pb-5">
-                <CardTitle>Top products</CardTitle>
-                <Segmented
-                  options={LEADERBOARD_OPTIONS}
-                  value={leaderMetric}
-                  onChange={setLeaderMetric}
-                  aria-label="Rank products by"
-                />
-              </CardHeader>
-              <CardContent className="pt-0">
-                {products.length > 0 ? (
-                  <ProductLeaderboard products={products} metric={leaderMetric} />
-                ) : (
-                  <EmptyState title="No products in this period" />
                 )}
               </CardContent>
             </Card>

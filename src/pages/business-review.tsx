@@ -16,10 +16,12 @@ import {
   type AnalyticsMetric,
   type OverlayKey,
 } from '@/domain/analytics'
+import { buildSeries } from '@/domain/metrics'
 import { buildBusinessReview } from '@/domain/review'
 import { useSnapshot } from '@/hooks/use-snapshot'
-import { formatPLN } from '@/lib/format'
+import { formatNumber, formatPercent, formatPLN } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 const TREND_METRICS: AnalyticsMetric[] = ['revenue', 'profit', 'margin', 'orders']
 
@@ -34,6 +36,8 @@ const TONE_ICON = {
   negative: TrendingDown,
   neutral: Minus,
 }
+
+const DAILY_PAGE_SIZE = 31
 
 /**
  * Executive reporting, not a second catalogue.
@@ -59,6 +63,16 @@ export function BusinessReviewPage() {
 
   const [trendMetric, setTrendMetric] = useState<AnalyticsMetric>('revenue')
   const [heatmapDimension, setHeatmapDimension] = useState<'product' | 'brand' | 'category'>('brand')
+  const [dailyLimit, setDailyLimit] = useState(DAILY_PAGE_SIZE)
+
+  // Always daily, whatever grain the period chart uses — this is the ledger
+  // view, and rolling it up to weeks would defeat the point of having it.
+  const daily = useMemo(() => {
+    if (!snapshot || !period) return []
+    return buildSeries(snapshot.orders, 'day', { from: period.from, to: period.to })
+      .filter((point) => point.orders > 0)
+      .reverse()
+  }, [snapshot, period])
 
   const review = useMemo(
     () => (snapshot && context ? buildBusinessReview(snapshot, context.coverage) : null),
@@ -248,6 +262,101 @@ export function BusinessReviewPage() {
           </CardContent>
         </Card>
       </section>
+
+      {/* ── Daily ledger ───────────────────────────────────────────────── */}
+      {daily.length > 0 && (
+        <section className="space-y-5">
+          <SectionHeading
+            title="Daily breakdown"
+            description={`Every trading day in this period, newest first. ${formatNumber(daily.length)} days with orders.`}
+          />
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[620px] text-left">
+                <thead>
+                  <tr className="border-b border-hairline bg-surface-sunken/50 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                    <th className="px-5 py-2.5 font-semibold">Date</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Sales</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Units</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Revenue</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Profit</th>
+                    <th className="px-5 py-2.5 text-right font-semibold">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {daily.slice(0, dailyLimit).map((point) => {
+                    const date = new Date(`${point.date}T00:00:00Z`)
+                    const isWeekend = [0, 6].includes(date.getUTCDay())
+                    return (
+                      <tr
+                        key={point.date}
+                        className="border-b border-hairline text-[13px] last:border-b-0"
+                      >
+                        <td className="px-5 py-2.5">
+                          <span className="text-ink">
+                            {date.toLocaleDateString('en-GB', {
+                              day: 'numeric',
+                              month: 'short',
+                              timeZone: 'UTC',
+                            })}
+                          </span>
+                          <span
+                            className={cn(
+                              'ml-2 text-[11px]',
+                              isWeekend ? 'text-accent-ink' : 'text-ink-subtle',
+                            )}
+                          >
+                            {date.toLocaleDateString('en-GB', {
+                              weekday: 'short',
+                              timeZone: 'UTC',
+                            })}
+                          </span>
+                        </td>
+                        <td className="tnum px-3 py-2.5 text-right text-ink">
+                          {formatNumber(point.orders)}
+                        </td>
+                        <td className="tnum px-3 py-2.5 text-right text-ink-muted">
+                          {formatNumber(point.units)}
+                        </td>
+                        <td className="tnum px-3 py-2.5 text-right text-ink">
+                          {formatPLN(point.revenuePLN)}
+                        </td>
+                        <td
+                          className={cn(
+                            'tnum px-3 py-2.5 text-right',
+                            point.marginPLN < 0 ? 'font-medium text-negative' : 'text-ink',
+                          )}
+                        >
+                          {formatPLN(point.marginPLN)}
+                        </td>
+                        <td
+                          className={cn(
+                            'tnum px-5 py-2.5 text-right',
+                            point.marginPct < 10 ? 'font-medium text-negative' : 'text-ink-muted',
+                          )}
+                        >
+                          {formatPercent(point.marginPct)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {daily.length > dailyLimit && (
+              <div className="flex justify-center border-t border-hairline p-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setDailyLimit((limit) => limit + DAILY_PAGE_SIZE)}
+                >
+                  Show {Math.min(DAILY_PAGE_SIZE, daily.length - dailyLimit)} more days
+                </Button>
+              </div>
+            )}
+          </Card>
+        </section>
+      )}
 
       {/* ── Concentration heatmap ──────────────────────────────────────── */}
       {heatmap && heatmap.rows.length > 0 && (

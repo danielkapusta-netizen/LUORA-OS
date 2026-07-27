@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { AlertCircle, ChevronDown, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { MarginTrendChart } from '@/components/charts/margin-trend-chart'
 import { InsightCard } from '@/components/insight-card'
 import { PageHeader } from '@/components/page-header'
 import { PeriodSelector } from '@/components/period-selector'
@@ -179,6 +180,11 @@ export function ProductsPage() {
               allOrders={context.orders}
               isOpen={openKey === row.key}
               onToggle={() => setOpenKey(openKey === row.key ? null : row.key)}
+              onDrillToProducts={() => {
+                setDimension('product')
+                setSearch('')
+                setOpenKey(null)
+              }}
             />
           ))}
         </div>
@@ -195,6 +201,7 @@ function CatalogueRowCard({
   allOrders,
   isOpen,
   onToggle,
+  onDrillToProducts,
 }: {
   row: CatalogueRow
   rank: number
@@ -203,6 +210,7 @@ function CatalogueRowCard({
   allOrders: readonly Order[]
   isOpen: boolean
   onToggle: () => void
+  onDrillToProducts: () => void
 }) {
   const isThin = row.marginPct < 15
 
@@ -275,7 +283,13 @@ function CatalogueRowCard({
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
-              <RowDetail row={row} snapshot={snapshot} allOrders={allOrders} />
+              <RowDetail
+                row={row}
+                dimension={dimension}
+                snapshot={snapshot}
+                allOrders={allOrders}
+                onDrillToProducts={onDrillToProducts}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -304,12 +318,16 @@ function Figure({ label, value, tone }: { label: string; value: string; tone?: '
 
 function RowDetail({
   row,
+  dimension,
   snapshot,
   allOrders,
+  onDrillToProducts,
 }: {
   row: CatalogueRow
+  dimension: CatalogueDimension
   snapshot: Snapshot
   allOrders: readonly Order[]
+  onDrillToProducts: () => void
 }) {
   // History runs over all orders, not the snapshot period — a trend confined to
   // the selected window would restate the same number it sits beneath.
@@ -391,6 +409,49 @@ function RowDetail({
         ))}
       </dl>
 
+      {history.length >= 2 && (
+        <div className="space-y-2.5">
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+              Margin over time
+            </p>
+            <p className="mt-1 text-[12px] text-ink-subtle">
+              Margin rate against the portfolio average, with realised unit price behind it — a
+              margin falling while price holds points at cost, both falling points at discounting.
+            </p>
+          </div>
+          <div className="rounded-xl border border-hairline bg-surface p-4">
+            <MarginTrendChart
+              history={history}
+              portfolioMarginPct={snapshot.totals.marginPct}
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-ink-muted">
+              <span className="flex items-center gap-1.5">
+                <span className="h-0.5 w-4 rounded-full bg-accent" />
+                Margin %
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="h-0.5 w-4 rounded-full"
+                  style={{
+                    backgroundImage:
+                      'repeating-linear-gradient(to right, var(--caution) 0 3px, transparent 3px 6px)',
+                  }}
+                />
+                Avg unit price (right axis)
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* A brand or category is only actionable once you can see which of its
+          products is responsible — the rollup names the problem, this names
+          the listing to go and fix. */}
+      {dimension !== 'product' && (
+        <MemberProducts row={row} snapshot={snapshot} onDrillToProducts={onDrillToProducts} />
+      )}
+
       {history.length >= 2 && <HistoryTable history={history} />}
 
       {ownInsights.length > 0 && (
@@ -405,6 +466,128 @@ function RowDetail({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The products inside a brand or category rollup.
+ *
+ * Ranked by revenue with each one's own margin, so the founder can see whether
+ * a weak brand is weak throughout or dragged down by one listing — which are
+ * completely different problems with completely different fixes.
+ */
+function MemberProducts({
+  row,
+  snapshot,
+  onDrillToProducts,
+}: {
+  row: CatalogueRow
+  snapshot: Snapshot
+  onDrillToProducts: () => void
+}) {
+  const members = useMemo(() => {
+    const wanted = new Set(row.productKeys)
+    return snapshot.products
+      .filter((product) => wanted.has(product.productKey))
+      .sort((a, b) => b.revenuePLN - a.revenuePLN)
+  }, [row.productKeys, snapshot.products])
+
+  if (members.length === 0) return null
+
+  const peak = Math.max(...members.map((product) => product.revenuePLN), 1)
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+            Products in this {row.memberCount === 1 ? 'group' : 'group'}
+          </p>
+          <p className="mt-1 text-[12px] text-ink-subtle">
+            {members.length} {members.length === 1 ? 'product' : 'products'} traded in this period,
+            ranked by revenue.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onDrillToProducts}
+          className="text-[12px] font-medium text-accent-ink underline decoration-hairline-strong underline-offset-4 hover:decoration-accent"
+        >
+          Open the full product view
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[600px] text-left">
+          <thead>
+            <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <th className="pb-2 font-semibold">Product</th>
+              <th className="pb-2 text-right font-semibold">Orders</th>
+              <th className="pb-2 text-right font-semibold">Units</th>
+              <th className="pb-2 pl-4 font-semibold">Revenue</th>
+              <th className="pb-2 text-right font-semibold">Profit</th>
+              <th className="pb-2 text-right font-semibold">Margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {members.map((product) => (
+              <tr key={product.productKey} className="border-t border-hairline text-[12px]">
+                <td className="max-w-[280px] py-2 pr-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-ink" title={product.label}>
+                      {product.label}
+                    </span>
+                    {product.costUnknown && (
+                      <Tooltip content="No landed cost on file — this product's profit is overstated.">
+                        <AlertCircle
+                          className="h-3 w-3 shrink-0 text-caution"
+                          aria-label="Cost missing"
+                        />
+                      </Tooltip>
+                    )}
+                  </div>
+                </td>
+                <td className="tnum py-2 text-right text-ink-muted">
+                  {formatNumber(product.orders)}
+                </td>
+                <td className="tnum py-2 text-right text-ink-muted">
+                  {formatNumber(product.units)}
+                </td>
+                <td className="py-2 pl-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-sunken">
+                      <div
+                        className="h-full rounded-full bg-accent"
+                        style={{
+                          width: `${Math.max(2, (product.revenuePLN / peak) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <span className="tnum text-ink">{formatPLN(product.revenuePLN)}</span>
+                  </div>
+                </td>
+                <td
+                  className={cn(
+                    'tnum py-2 text-right',
+                    product.marginPLN < 0 ? 'font-medium text-negative' : 'text-ink',
+                  )}
+                >
+                  {formatPLN(product.marginPLN)}
+                </td>
+                <td
+                  className={cn(
+                    'tnum py-2 text-right',
+                    product.marginPct < 15 ? 'font-medium text-negative' : 'text-ink-muted',
+                  )}
+                >
+                  {formatPercent(product.marginPct)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
