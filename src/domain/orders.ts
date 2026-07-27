@@ -44,6 +44,39 @@ function dropPlaceholderDuplicates(items: readonly LineItem[]): LineItem[] {
   })
 }
 
+/**
+ * Collapses genuine duplicate rows within an order — confirmed live, not
+ * hypothetical: a row that initially appeared as an incomplete placeholder was
+ * checked again once the sheet finished calculating it, and it had resolved
+ * into an exact copy of the order's other line rather than the distinct
+ * second product actually purchased. That rules out "still calculating" as
+ * the explanation; the source sheet is writing the wrong SKU into the second
+ * line of some multi-product orders, and the real second product is not
+ * recoverable from this feed.
+ *
+ * Collapsed only when *every* line in the order shares the same product, price
+ * and currency — a real multi-item basket (different SKUs) is never touched.
+ * Returns both the deduplicated lines and whether a collapse happened, since
+ * the order total still understates what actually sold and callers need to
+ * be able to flag that rather than silently present it as complete.
+ */
+function collapseDuplicateLines(items: readonly LineItem[]): { items: LineItem[]; collapsed: boolean } {
+  if (items.length < 2) return { items: [...items], collapsed: false }
+
+  const first = items[0]!
+  const allSameProduct = items.every(
+    (item) =>
+      item.productKey === first.productKey &&
+      item.priceOriginal === first.priceOriginal &&
+      item.currency === first.currency,
+  )
+  if (!allSameProduct) return { items: [...items], collapsed: false }
+
+  // Prefer keeping a complete line if one exists, so the order still prices.
+  const keep = items.find((item) => item.isComplete) ?? first
+  return { items: [keep], collapsed: true }
+}
+
 export function buildOrders(lineItems: readonly LineItem[]): Order[] {
   const groups = new Map<string, LineItem[]>()
   for (const item of lineItems) {
@@ -54,7 +87,8 @@ export function buildOrders(lineItems: readonly LineItem[]): Order[] {
 
   const orders: Order[] = []
   for (const [key, rawItems] of groups) {
-    const items = dropPlaceholderDuplicates(rawItems)
+    const deduped = dropPlaceholderDuplicates(rawItems)
+    const { items, collapsed } = collapseDuplicateLines(deduped)
     const first = items[0]
     if (!first) continue
 
@@ -74,6 +108,7 @@ export function buildOrders(lineItems: readonly LineItem[]): Order[] {
       marginPct: revenue > 0 ? (margin / revenue) * 100 : null,
       commissionPLN: sum(items, (item) => item.commissionPLN),
       shipmentPLN: sum(items, (item) => item.shipmentPLN),
+      hasSuspectedMissingLine: collapsed,
       isComplete: items.every((item) => item.isComplete),
     })
   }

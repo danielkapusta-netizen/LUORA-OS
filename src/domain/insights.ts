@@ -207,6 +207,21 @@ export function generateInsights(input: InsightInput): Insight[] {
     })
   }
 
+  // ── Rule 7b ── Orders where the sheet lost a second product to a duplicate row.
+  if (coverage.ordersWithMissingLine > 0) {
+    const n = coverage.ordersWithMissingLine
+    insights.push({
+      id: 'missing-line-duplicate',
+      kind: 'risk',
+      severity: 'attention',
+      title: `${n} order${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} missing a product line`,
+      why: `${n === 1 ? 'An' : 'These'} order${n === 1 ? '' : 's'} arrived with a second row that exactly duplicated the first product (same SKU and price) instead of the different item actually purchased alongside it. Luora drops the duplicate so it is not double-counted, but the real second product's revenue and profit are not in this feed at all — these order totals are undercounted, not just this one line.`,
+      action: 'Check the order-export formula for multi-product orders in the source sheet — the second product row is being overwritten with a copy of the first instead of the correct SKU.',
+      impactPLN: null,
+      impactLabel: null,
+    })
+  }
+
   // ── Rule 8 ── Volume concentrated in near-zero-margin sales.
   const thinLines = lineItems.filter(
     (line) => line.marginPct !== null && line.marginPct < CRITICAL_MARGIN_PCT,

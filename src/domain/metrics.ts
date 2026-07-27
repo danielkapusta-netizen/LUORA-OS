@@ -279,6 +279,7 @@ export function buildCoverage(
     linesMissingCost: missing.length,
     revenueMissingCostPLN: missingRevenue,
     costCoverage: totalRevenue > 0 ? 1 - missingRevenue / totalRevenue : 1,
+    ordersWithMissingLine: orders.filter((order) => order.hasSuspectedMissingLine).length,
     firstOrder: times.length ? new Date(Math.min(...times)) : null,
     lastOrder: times.length ? new Date(Math.max(...times)) : null,
     tradingDays: uniqueDays.size,

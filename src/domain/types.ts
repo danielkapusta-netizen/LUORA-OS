@@ -73,6 +73,16 @@ export interface Order {
   shipmentPLN: number
   /** False when any line failed to parse. */
   isComplete: boolean
+  /**
+   * True when this order originally arrived as two or more rows that were
+   * exact duplicates of the same product (same SKU, price and currency),
+   * with no other product present. This is a known source-sheet fault where
+   * a second product's row is written as a copy of the first instead of the
+   * actual item — the true second product is not recoverable from the feed.
+   * The duplicate row is dropped so revenue is not double-counted, but the
+   * order total still understates what was really sold.
+   */
+  hasSuspectedMissingLine: boolean
 }
 
 /** Landed cost of one product, as maintained in the cost sheet. */
@@ -206,6 +216,12 @@ export interface DataCoverage {
   /** Lines we could not match to a cost record — their margin is overstated. */
   linesMissingCost: number
   revenueMissingCostPLN: number
+  /**
+   * Orders where the source sheet wrote a duplicate of one product into the
+   * row meant for a second, different product — the true second item is not
+   * recoverable from this feed, so these orders understate what actually sold.
+   */
+  ordersWithMissingLine: number
   /** Share of revenue backed by a known landed cost, 0–1. */
   costCoverage: number
   firstOrder: Date | null

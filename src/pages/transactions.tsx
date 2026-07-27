@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronDown, Package, Search, Truck } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Package, Search, Truck } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { PageHeader } from '@/components/page-header'
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
+import { Tooltip } from '@/components/ui/tooltip'
 import { channelName } from '@/domain/insights'
 import type { LineItem, Order } from '@/domain/types'
 import { useSnapshot } from '@/hooks/use-snapshot'
@@ -248,6 +249,16 @@ function OrderRow({
                 {order.lineCount}
               </Badge>
             )}
+            {order.hasSuspectedMissingLine && (
+              <Tooltip content="This order arrived with a duplicated row instead of its real second product. That product's revenue and profit are missing from this feed entirely — this order total is understated.">
+                <span className="inline-flex">
+                  <Badge variant="caution" size="sm" className="shrink-0">
+                    <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                    Missing item
+                  </Badge>
+                </span>
+              </Tooltip>
+            )}
           </span>
           <span className="mt-0.5 block truncate text-[11px] text-ink-subtle">
             {order.customerName || 'Unnamed customer'}
@@ -432,6 +443,13 @@ function OrderDetail({ order }: { order: Order }) {
         <p className="text-[12px] text-caution">
           At least one line in this order is missing its PLN conversion in the source sheet, so the
           order is excluded from profit totals.
+        </p>
+      )}
+      {order.hasSuspectedMissingLine && (
+        <p className="text-[12px] text-caution">
+          This order arrived with a row that exactly duplicated the product above instead of a
+          second, different product. Luora dropped the duplicate so revenue is not double-counted,
+          but the real second item is not present in this feed — the total below is understated.
         </p>
       )}
     </div>
