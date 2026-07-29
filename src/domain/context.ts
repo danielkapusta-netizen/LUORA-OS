@@ -7,7 +7,7 @@
  */
 
 import type { RawProductCost, RawTransaction } from './api'
-import { applyLandedCostMargin, mapProductCost, mapTransaction } from './mappers'
+import { mapProductCost, mapTransaction } from './mappers'
 import {
   buildChannelPerformance,
   buildComparison,
@@ -75,11 +75,8 @@ function deriveSummary(orders: readonly Order[], products: readonly ProductPerfo
 }
 
 export function buildBusinessContext(input: BusinessContextInput): BusinessContext {
+  const lineItems = input.transactions.map(mapTransaction)
   const costs = input.productCosts.map(mapProductCost)
-  // Margin depends on landed cost, so it is applied once costs are available
-  // rather than at raw-row mapping time — see applyLandedCostMargin for why
-  // the sheet's own margin column cannot be used directly for qty > 1 lines.
-  const lineItems = applyLandedCostMargin(input.transactions.map(mapTransaction), costs)
   const orders = buildOrders(lineItems)
 
   const products = buildProductPerformance(orders, costs)
