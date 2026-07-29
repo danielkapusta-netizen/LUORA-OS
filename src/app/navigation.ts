@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BadgePercent,
   Boxes,
   LayoutDashboard,
   LineChart,
@@ -61,6 +62,12 @@ export const navigation: NavSection[] = [
         label: 'Products',
         icon: Boxes,
         description: 'Per-SKU intelligence and lifecycle',
+      },
+      {
+        to: '/pricing',
+        label: 'Pricing',
+        icon: BadgePercent,
+        description: 'Target prices, simulator, and margin health',
       },
       {
         to: '/trends',

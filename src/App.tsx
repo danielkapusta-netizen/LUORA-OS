@@ -5,6 +5,7 @@ import { AppShell } from '@/app/app-shell'
 import { ActionCentrePage } from '@/pages/action-centre'
 import { BusinessReviewPage } from '@/pages/business-review'
 import { OverviewPage } from '@/pages/overview'
+import { PricingPage } from '@/pages/pricing'
 import { ProductsPage } from '@/pages/products'
 import { SettingsPage } from '@/pages/settings'
 import { TransactionsPage } from '@/pages/transactions'
@@ -62,6 +63,14 @@ export default function App() {
           element={
             <PageTransition>
               <ProductsPage />
+            </PageTransition>
+          }
+        />
+        <Route
+          path="pricing"
+          element={
+            <PageTransition>
+              <PricingPage />
             </PageTransition>
           }
         />
