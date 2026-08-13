@@ -72,8 +72,10 @@ function iso(d){
     s0.window.baselineStart.slice(0, 19) === "2026-08-06T00:22:10", s0.window.baselineStart);
   check("Red vendors = 1", s0.kpis.redVendors === 1, "got " + s0.kpis.redVendors);
   check("Yellow vendors = 0", s0.kpis.yellowVendors === 0, "got " + s0.kpis.yellowVendors);
-  check("Streak-active vendors = 10", s0.kpis.streakActiveVendors === 10, "got " + s0.kpis.streakActiveVendors);
-  check("Rule 2 alerts = 293", s0.rule2Alerts === 293, "got " + s0.rule2Alerts);
+  check("Streak-active vendors = 8 (live only)", s0.kpis.streakActiveVendors === 8, "got " + s0.kpis.streakActiveVendors);
+  check("Rule 2 alerts = 282 (live only)", s0.rule2Alerts === 282, "got " + s0.rule2Alerts);
+  check("Rule 2 alerts = 293 across all monitored brands",
+    s0.kpis.monitoredRule2Alerts === 293, "got " + s0.kpis.monitoredRule2Alerts);
   check("Analysed transactions = 19,762", s0.kpis.analysedTransactions === 19762, "got " + s0.kpis.analysedTransactions);
 
   const splunk = s0.signals.SPLUNK;
@@ -94,19 +96,138 @@ function iso(d){
     /62\.5%/.test(splunkMsg) && /5 failures from 8 transactions/.test(splunkMsg)
       && /54\.4%/.test(splunkMsg) && /cluster/.test(splunkMsg), splunkMsg);
 
+  // -------------------------------------------------------------- liveness
+  console.log("\nVENDOR SCOPE (live since 1 Aug 2026)");
+  const live = new Set(s0.scope.liveKeys);
+  check("24 live of 51 monitored",
+    s0.scope.liveCount === 24 && s0.scope.monitoredCount === 51,
+    `${s0.scope.liveCount}/${s0.scope.monitoredCount}`);
+  check("27 retired brands excluded from the default view", s0.scope.retiredCount === 27,
+    "got " + s0.scope.retiredCount);
+  check("fallback not triggered on this dataset", s0.scope.fellBack === false);
+  const RETIRED = ["ARROW ECS UK", "ARROW ECS GERMANY", "ARROW ECS ITALY", "ARROW ECS AUSTRIA",
+                   "ARROW ECS SWITZERLAND", "ARROW ECS SAS",
+                   "HEWLETT PACKARD ENTREPRISE SERVICES DE SOUTIEN FIXES"];
+  check("the 7 dormant Arrow ECS / HPE brands are all out of scope",
+    RETIRED.every(k => !live.has(k)), RETIRED.filter(k => live.has(k)).join(", "));
+  check("live brands still include the ones transacting today",
+    ["SPLUNK", "FORTINET", "CHECKPOINT"].every(k => live.has(k)));
+  const liveRowCount = await page.evaluate(() => document.querySelectorAll("#liveTable tbody tr").length);
+  check("Live Monitor shows exactly the live brands", liveRowCount === 24, "got " + liveRowCount);
+
   // -------------------------------------------------------------- dormancy
   console.log("\nDECISIONS D1 / D2");
-  const dormant = Object.entries(s0.activity).filter(([, a]) => a.dormant);
-  check("D1: long-silent vendors escalate out of GREY",
-    dormant.length === 7 && dormant.every(([, a]) => a.light === "RED"),
-    dormant.length + " dormant");
+  // The liveness filter and D1 were solving overlapping problems: every vendor
+  // D1 used to escalate was retired, so within the live scope it now fires on
+  // nobody. It stays configured for a live brand that genuinely goes silent.
+  const liveDormant = Object.entries(s0.activity).filter(([k, a]) => a.dormant && live.has(k));
+  check("D1: no live brand is dormant (the 7 that were are all retired)",
+    liveDormant.length === 0 && s0.kpis.dormantVendors === 0,
+    liveDormant.map(([k]) => k).join(", "));
+  check("D1: still escalates retired brands when scope is widened",
+    Object.values(s0.activity).filter(a => a.dormant).length === 7);
   check("D1: quiet hours still suppress normal gaps",
-    Object.values(s0.activity).some(a => a.light === "GREY" && a.hourClass === "QUIET"));
+    Object.entries(s0.activity).some(([k, a]) => live.has(k) && a.light === "GREY" && a.hourClass === "QUIET"));
   const fortinet = s0.activity.FORTINET;
   check("D2: WATCH vendor past its relaxed threshold reaches RED",
     fortinet.hourClass === "WATCH" && fortinet.light === "RED"
       && fortinet.minutesSinceLast > fortinet.dynamicThresholdMin,
     `${fortinet.hourClass}/${fortinet.light} ${fortinet.minutesSinceLast}>${fortinet.dynamicThresholdMin}`);
+  check("activity lights within scope are 1 red / 0 yellow / 2 green / 20 grey",
+    s0.kpis.activityRed === 1 && s0.kpis.activityYellow === 0
+      && s0.kpis.activityGreen === 2 && s0.kpis.activityGrey === 20,
+    `${s0.kpis.activityRed}/${s0.kpis.activityYellow}/${s0.kpis.activityGreen}/${s0.kpis.activityGrey}`);
+
+  // ----------------------------------------------------------------- today
+  console.log("\nTODAY PAGE");
+  const td = s0.todayPage;
+  check("today is the anchor's calendar day", td.dayKey === "2026-08-13", td.dayKey);
+  check("39 transactions, 19 failures today",
+    td.transactions === 39 && td.failures === 19, `${td.transactions}/${td.failures}`);
+  check("failure rate today 48.7%", Math.abs(td.failureRate - 19 / 39) < 1e-12, String(td.failureRate));
+  check("2 Rule 2 breaches today", td.rule2Alerts === 2, "got " + td.rule2Alerts);
+  check("5 brands transacted today", td.activeVendors === 5, "got " + td.activeVendors);
+  check("like-for-like prior slices are same-time-of-day, not full days",
+    JSON.stringify(td.priorSlices) === JSON.stringify([0, 24, 0, 0, 18, 4, 14]),
+    JSON.stringify(td.priorSlices));
+  check("today's alert list is populated", td.alerts > 0, "got " + td.alerts);
+  const alertCards = await page.evaluate(() => ({
+    cards: document.querySelectorAll("#todayAlerts .alert-item").length,
+    titles: [...document.querySelectorAll("#todayAlerts .title")].map(e => e.textContent)
+  }));
+  check("alerts are grouped one card per brand, not per signal",
+    alertCards.cards === new Set(alertCards.titles).size && alertCards.cards < td.alerts,
+    `${alertCards.cards} cards for ${td.alerts} alerts across ${new Set(alertCards.titles).size} brands`);
+  const todayText = await page.evaluate(() => document.querySelector("#panel-today").textContent);
+  check("Today page shows no all-time transaction total", !/19,762/.test(todayText));
+  check("Today page states the like-for-like band", /typically/.test(todayText));
+
+  // ------------------------------------------------------------ operations
+  console.log("\nOPERATIONS FILTERS");
+  await page.click('.tab[data-tab="operations"]');
+  await page.waitForTimeout(200);
+  const opsCounts = async () => page.evaluate(() => ({
+    vendorRows: document.querySelectorAll("#opsVendorTable tbody tr").length,
+    rule2Rows: document.querySelectorAll("#opsRule2Table tbody tr").length,
+    kpiText: document.querySelector("#opsKpis").textContent,
+    sub: document.querySelector("#opsSub").textContent,
+    brandOptions: document.querySelectorAll("#opsVendor option").length
+  }));
+
+  const base = await opsCounts();
+  check("all-time defaults to the 24 live brands",
+    base.vendorRows === 24 && base.brandOptions === 25, // +1 for "All brands"
+    `${base.vendorRows} rows, ${base.brandOptions} options`);
+  check("all-time Rule 2 history is the live-scoped 282",
+    base.rule2Rows === 282, "got " + base.rule2Rows);
+
+  await page.selectOption("#opsRetired", []).catch(() => {});
+  await page.check("#opsRetired");
+  await page.waitForTimeout(200);
+  const withRetired = await opsCounts();
+  check("include-retired restores all 51 brands",
+    withRetired.brandOptions === 52, "got " + withRetired.brandOptions);
+  check("include-retired changes the vendor table",
+    withRetired.vendorRows > base.vendorRows,
+    `${base.vendorRows} -> ${withRetired.vendorRows}`);
+  check("include-retired changes the Rule 2 history",
+    withRetired.rule2Rows === 293, "got " + withRetired.rule2Rows);
+  await page.uncheck("#opsRetired");
+  await page.waitForTimeout(200);
+
+  await page.selectOption("#opsVendor", "SPLUNK");
+  await page.waitForTimeout(200);
+  const oneBrand = await opsCounts();
+  check("selecting one brand narrows every panel",
+    oneBrand.vendorRows === 1 && oneBrand.rule2Rows < base.rule2Rows,
+    `${oneBrand.vendorRows} rows, ${oneBrand.rule2Rows} breaches`);
+  check("brand name appears in the period summary", /SPLUNK/.test(oneBrand.sub), oneBrand.sub);
+
+  await page.selectOption("#opsVendor", "ALL");
+  await page.selectOption("#opsPeriod", "7d");
+  await page.waitForTimeout(200);
+  const week = await opsCounts();
+  check("period filter reduces the Rule 2 history",
+    week.rule2Rows > 0 && week.rule2Rows < base.rule2Rows, "got " + week.rule2Rows);
+
+  await page.selectOption("#opsGranularity", "week");
+  await page.waitForTimeout(200);
+  const weeklyPoints = await page.evaluate(() =>
+    document.querySelectorAll("#opsChartVolume svg .hit").length);
+  await page.selectOption("#opsGranularity", "month");
+  await page.waitForTimeout(200);
+  const monthlyPoints = await page.evaluate(() =>
+    document.querySelectorAll("#opsChartVolume svg .hit").length);
+  check("granularity changes the chart buckets",
+    monthlyPoints > 0 && monthlyPoints <= weeklyPoints,
+    `week=${weeklyPoints} month=${monthlyPoints}`);
+
+  await page.click("#opsReset");
+  await page.waitForTimeout(200);
+  const reset = await opsCounts();
+  check("reset restores the default view",
+    reset.vendorRows === base.vendorRows && reset.rule2Rows === base.rule2Rows,
+    `${reset.vendorRows}/${reset.rule2Rows}`);
 
   // ------------------------------------------------------------ escaping
   console.log("\nOUTPUT ESCAPING");
@@ -135,6 +256,13 @@ function iso(d){
     Object.keys(s1.registry).join(","));
   check("previous dataset leaves nothing behind",
     !("SPLUNK" in s1.signals) && s1.rule2Alerts !== s0.rule2Alerts);
+  // The 1 Aug 2026 cutoff is fixed, so a 2027 dataset is entirely "live" —
+  // this is the path that must not blank the dashboard.
+  check("liveness recomputed against the new data",
+    s1.scope.liveCount === 1 && s1.scope.fellBack === false,
+    `${s1.scope.liveCount} live, fellBack=${s1.scope.fellBack}`);
+  check("Today recomputed for the new anchor day",
+    s1.todayPage.dayKey === "2027-01-23", s1.todayPage.dayKey);
   check("failure burst detected in the new data",
     s1.signals.ACME.currentFailures === 6 && s1.signals.ACME.light === "RED",
     JSON.stringify(s1.signals.ACME.signals));
@@ -179,6 +307,24 @@ function iso(d){
     check(name, got === expected && errors.length === 0,
       `analysed ${got}, expected ${expected}` + (errors.length ? "; errors: " + errors.join("; ") : ""));
   }
+
+  // The liveness cutoff is a fixed date. A dataset that predates it must fall
+  // back to showing everything with a warning, never an empty dashboard.
+  console.log("\nLIVENESS FALLBACK (dataset entirely before the cutoff)");
+  errors.length = 0;
+  await page.setInputFiles("#fileInput", write("old.csv", csv(
+    Array.from({ length: 40 }, (_, i) =>
+      ["Success", "OLDCO", "N/A", "P" + i, iso(new Date(2025, 4, 6, 9, i * 4))]))));
+  await page.waitForFunction(() => STATE && STATE.kpis.analysedTransactions === 40, { timeout: 10000 });
+  const sOld = await page.evaluate(() => selfTestPayload());
+  check("fallback engages rather than blanking the view",
+    sOld.scope.fellBack === true && sOld.scope.liveCount === 1,
+    `fellBack=${sOld.scope.fellBack} live=${sOld.scope.liveCount}`);
+  const stripText = await page.evaluate(() => document.querySelector("#scopeStrip").textContent);
+  check("fallback is stated in the header", /No brand has transacted since/.test(stripText), stripText.trim());
+  const liveRowsOld = await page.evaluate(() => document.querySelectorAll("#liveTable tbody tr").length);
+  check("brands still render under fallback", liveRowsOld >= 1, "got " + liveRowsOld);
+  check("no exception during fallback", errors.length === 0, errors.join("; "));
 
   // XSS specifically: the tricky-reason case must render escaped, not execute.
   await page.setInputFiles("#fileInput", write("xss.csv", csv([

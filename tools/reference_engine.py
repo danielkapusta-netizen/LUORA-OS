@@ -59,6 +59,10 @@ CFG = {
     "signalMaxNameLen": 100,
     "signalMinTotalVolume": 5,
     "excludeSubstrings": ("VENDORBACKLOG", "<HTML"),
+    # A vendor is live if its LAST transaction falls on or after this date.
+    # Mirrors CONFIG.vendorScope.liveSince in rpa-monitor.html.
+    "liveSince": dt.datetime(2026, 8, 1),
+    "todayComparisonDays": 7,
     "freqHighMaxMedian": 2,
     "freqMediumMaxMedian": 30,
     "freqBounds": {
@@ -229,6 +233,7 @@ def build_registry(txns: list[Txn]) -> dict:
         for r in rows:
             spellings[r.vendor] += 1
         display = max(sorted(spellings), key=lambda s: spellings[s])
+        last_txn = max(t.date for t in rows)
         registry[key] = {
             "vendorKey": key,
             "displayName": display,
@@ -239,8 +244,71 @@ def build_registry(txns: list[Txn]) -> dict:
                      else "SIGNAL_ONLY"),
             "signalEligible": signal_ok,
             "internal": key.startswith("ARROW ECS"),
+            "lastTxn": last_txn,
+            # Scope filter, not an exclusion tier: retired vendors keep their
+            # tier and full history and stay available to historical reporting.
+            "live": last_txn >= CFG["liveSince"],
         }
     return registry
+
+
+def aggregate(txns: list[Txn], vendor_keys=None, start=None, end=None) -> dict:
+    """Roll up a filtered slice of transactions. Mirrors aggregate() in the
+    dashboard so both sides answer the same question the same way."""
+    rows = [t for t in txns
+            if (vendor_keys is None or t.vendor_key in vendor_keys)
+            and (start is None or t.date >= start)
+            and (end is None or t.date <= end)]
+
+    vendor_days: dict[tuple, list[int]] = defaultdict(lambda: [0, 0])
+    cats: dict[str, dict] = {}
+    unmapped: dict[str, int] = defaultdict(int)
+    failures = 0
+
+    for t in rows:
+        if t.is_failure:
+            failures += 1
+        slot = vendor_days[(t.vendor_key, t.day)]
+        slot[0] += 1
+        slot[1] += 1 if t.is_failure else 0
+        if not t.is_failure:
+            continue
+        c = cats.setdefault(t.category, {"failures": 0, "vendors": set(),
+                                         "first": t.date, "last": t.date})
+        c["failures"] += 1
+        c["vendors"].add(t.vendor_key)
+        c["first"] = min(c["first"], t.date)
+        c["last"] = max(c["last"], t.date)
+        if t.category == DEFAULT_CATEGORY:
+            txt = str(t.reason).strip()
+            if txt and txt.upper() != "N/A":
+                unmapped[txt] += 1
+
+    alerts = [{"vendorKey": k, "day": d, "transactions": n, "failures": f,
+               "failureRate": f / n if n else 0.0}
+              for (k, d), (n, f) in vendor_days.items()
+              if n >= CFG["rule2MinTxns"] and (f / n if n else 0) > CFG["rule2RateThreshold"]]
+
+    return {
+        "rows": rows,
+        "totals": {
+            "transactions": len(rows),
+            "failures": failures,
+            "successes": len(rows) - failures,
+            "failureRate": failures / len(rows) if rows else 0.0,
+            "days": len({t.day for t in rows}),
+            "vendors": len({t.vendor_key for t in rows}),
+        },
+        "rule2Alerts": alerts,
+        "categories": sorted(
+            ({"category": k, "failures": v["failures"],
+              "share": v["failures"] / failures if failures else 0.0,
+              "vendors": len(v["vendors"]),
+              "firstSeen": v["first"].isoformat(), "lastSeen": v["last"].isoformat()}
+             for k, v in cats.items()),
+            key=lambda r: -r["failures"]),
+        "unmapped": dict(sorted(unmapped.items(), key=lambda kv: -kv[1])),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -257,25 +325,8 @@ def rule1(rows: list[Txn]) -> dict:
     return {"currentStreak": current, "maxStreak": best, "status": status}
 
 
-def rule2_vendor_days(registry: dict) -> list[dict]:
-    out = []
-    for key, entry in registry.items():
-        if entry["tier"] == "EXCLUDED_JUNK":
-            continue
-        per_day: dict[str, list[int]] = defaultdict(lambda: [0, 0])
-        for t in entry["rows"]:
-            slot = per_day[t.day]
-            slot[0] += 1
-            slot[1] += 1 if t.is_failure else 0
-        for day, (total, fails) in per_day.items():
-            rate = fails / total if total else 0.0
-            out.append({"vendorKey": key, "displayName": entry["displayName"],
-                        "day": day, "transactions": total,
-                        "failures": fails, "failureRate": rate,
-                        "alert": total >= CFG["rule2MinTxns"]
-                                 and rate > CFG["rule2RateThreshold"]})
-    out.sort(key=lambda r: (r["day"], r["vendorKey"]))
-    return out
+# Rule 2 (per vendor per calendar day) is computed inside aggregate() so it
+# honours whatever vendor and date scope the caller is asking about.
 
 
 # ---------------------------------------------------------------------------
@@ -569,44 +620,38 @@ def build(path: str, parity: bool = False) -> dict:
 
     signals = compute_signals(registry, current_end)
     activity = compute_activity(registry, current_end, parity=parity)
-    vendor_days = rule2_vendor_days(registry)
-    alerts = [r for r in vendor_days if r["alert"]]
 
     streaks = {k: rule1(e["rows"]) for k, e in registry.items()
                if e["tier"] != "EXCLUDED_JUNK"}
 
+    # --- vendor scope ----------------------------------------------------
+    # Liveness filters the VIEW, not the engines: signals, activity, streaks and
+    # the registry above stay unscoped so the parity check keeps its full reach.
+    monitored = [e for e in registry.values() if e["tier"] != "EXCLUDED_JUNK"]
+    live_entries = [e for e in monitored if e["live"]]
+    fell_back = not live_entries and bool(monitored)
+    if fell_back:
+        live_entries = monitored
+    live_keys = {e["vendorKey"] for e in live_entries}
+
+    monitored_agg = aggregate(txns, {e["vendorKey"] for e in monitored})
+    live_agg = aggregate(txns, live_keys)
+
+    # --- today -----------------------------------------------------------
+    day_start = dt.datetime(current_end.year, current_end.month, current_end.day)
+    elapsed = current_end - day_start
+    today_agg = aggregate(txns, live_keys, day_start, current_end)
+    prior_slices = []
+    for i in range(1, CFG["todayComparisonDays"] + 1):
+        s = day_start - dt.timedelta(days=i)
+        prior_slices.append(aggregate(txns, live_keys, s, s + elapsed)["totals"]["transactions"])
+
     total = len(txns)
     failures = sum(1 for t in txns if t.is_failure)
 
-    # Reason breakdown over failures only.
-    cats: dict[str, dict] = {}
-    for t in txns:
-        if not t.is_failure:
-            continue
-        c = cats.setdefault(t.category, {"failures": 0, "vendors": set(),
-                                         "first": t.date, "last": t.date,
-                                         "reasons": defaultdict(int)})
-        c["failures"] += 1
-        c["vendors"].add(t.vendor_key)
-        c["first"] = min(c["first"], t.date)
-        c["last"] = max(c["last"], t.date)
-        c["reasons"][t.reason] += 1
-    category_rows = sorted(
-        ({"category": k, "failures": v["failures"],
-          "share": v["failures"] / failures if failures else 0.0,
-          "vendors": len(v["vendors"]),
-          "firstSeen": v["first"].isoformat(), "lastSeen": v["last"].isoformat()}
-         for k, v in cats.items()),
-        key=lambda r: -r["failures"])
-
-    unmapped: dict[str, int] = defaultdict(int)
-    for t in txns:
-        if t.is_failure and t.category == DEFAULT_CATEGORY:
-            txt = str(t.reason).strip()
-            if txt and txt.upper() != "N/A":
-                unmapped[txt] += 1
-
-    eligible = [v for k, v in signals.items()
+    live_signals = {k: v for k, v in signals.items() if k in live_keys}
+    live_activity = {k: v for k, v in activity.items() if k in live_keys}
+    eligible = [v for v in live_signals.values()
                 if v["totalVolume"] >= CFG["signalMinTotalVolume"]]
 
     return {
@@ -617,6 +662,23 @@ def build(path: str, parity: bool = False) -> dict:
             "currentStart": current_start.isoformat(),
             "baselineStart": baseline_start.isoformat(),
         },
+        "scope": {
+            "liveSince": CFG["liveSince"].isoformat(),
+            "liveCount": len(live_entries),
+            "monitoredCount": len(monitored),
+            "retiredCount": len(monitored) - len(live_entries),
+            "fellBack": fell_back,
+            "liveKeys": sorted(live_keys),
+        },
+        "todayPage": {
+            "dayKey": day_start.date().isoformat(),
+            "transactions": today_agg["totals"]["transactions"],
+            "failures": today_agg["totals"]["failures"],
+            "failureRate": today_agg["totals"]["failureRate"],
+            "rule2Alerts": len(today_agg["rule2Alerts"]),
+            "activeVendors": today_agg["totals"]["vendors"],
+            "priorSlices": prior_slices,
+        },
         "kpis": {
             "analysedTransactions": total,
             "analysedSuccesses": total - failures,
@@ -625,23 +687,32 @@ def build(path: str, parity: bool = False) -> dict:
             "workbookTotal": quality.get("workbookTotal"),
             "workbookFailureRate": (quality["workbookFailures"] / quality["workbookTotal"]
                                     if quality.get("workbookTotal") else None),
+            "todayTransactions": today_agg["totals"]["transactions"],
+            "todayFailures": today_agg["totals"]["failures"],
+            "todayFailureRate": today_agg["totals"]["failureRate"],
+            "todayRule2Alerts": len(today_agg["rule2Alerts"]),
+            "todayActiveVendors": today_agg["totals"]["vendors"],
             "redVendors": sum(1 for v in eligible if v["light"] == "RED"),
             "yellowVendors": sum(1 for v in eligible if v["light"] == "YELLOW"),
             "streakActiveVendors": sum(1 for v in eligible if v["streakActive"]),
-            "rule2Alerts": len(alerts),
-            "rule2VendorsAffected": len({a["vendorKey"] for a in alerts}),
+            "rule2Alerts": len(live_agg["rule2Alerts"]),
+            "rule2VendorsAffected": len({a["vendorKey"] for a in live_agg["rule2Alerts"]}),
+            "monitoredRule2Alerts": len(monitored_agg["rule2Alerts"]),
             "daysMonitored": len({t.day for t in txns}),
-            "activityRed": sum(1 for v in activity.values() if v["light"] == "RED"),
-            "activityYellow": sum(1 for v in activity.values() if v["light"] == "YELLOW"),
-            "activityGreen": sum(1 for v in activity.values() if v["light"] == "GREEN"),
-            "activityGrey": sum(1 for v in activity.values() if v["light"] == "GREY"),
+            "monitoredVendors": len(monitored),
+            "liveVendors": len(live_entries),
+            "dormantVendors": sum(1 for v in live_activity.values() if v["dormant"]),
+            "activityRed": sum(1 for v in live_activity.values() if v["light"] == "RED"),
+            "activityYellow": sum(1 for v in live_activity.values() if v["light"] == "YELLOW"),
+            "activityGreen": sum(1 for v in live_activity.values() if v["light"] == "GREEN"),
+            "activityGrey": sum(1 for v in live_activity.values() if v["light"] == "GREY"),
         },
         "signals": signals,
         "activity": activity,
         "streaks": streaks,
-        "rule2Alerts": alerts,
-        "categories": category_rows,
-        "unmapped": dict(sorted(unmapped.items(), key=lambda kv: -kv[1])),
+        "rule2Alerts": live_agg["rule2Alerts"],
+        "categories": live_agg["categories"],
+        "unmapped": live_agg["unmapped"],
         "registry": {k: {"displayName": e["displayName"], "tier": e["tier"],
                          "signalEligible": e["signalEligible"],
                          "internal": e["internal"], "rows": len(e["rows"])}

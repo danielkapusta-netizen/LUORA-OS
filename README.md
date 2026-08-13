@@ -1,15 +1,50 @@
 # RPA Vendor Monitor
 
-A standalone HTML dashboard for monitoring RPA transaction health by vendor. It answers two
+A standalone HTML dashboard for monitoring RPA transaction health by brand. It answers two
 operational questions at a glance:
 
-1. **Which vendors are failing** — spikes, critical failure rates, clusters, and consecutive streaks.
-2. **Which vendors have gone quiet** — judged against each vendor's own history, so a vendor that is
+1. **Which brands are failing** — spikes, critical failure rates, clusters, and consecutive streaks.
+2. **Which brands have gone quiet** — judged against each brand's own history, so a brand that is
    normally idle at 03:00 on a Sunday is not alerted on.
 
 Open `rpa-monitor.html` by double-clicking it. No server, no build step, no network access, no
-dependencies. Every KPI, alert, chart, vendor status and explanation is computed in the browser from
+dependencies. Every KPI, alert, chart, brand status and explanation is computed in the browser from
 raw transaction rows.
+
+## Pages
+
+| Tab | Purpose |
+|---|---|
+| **Today** | The daily check. Today's transactions, failures, failure rate and every alert raised today — one card per brand. No all-time totals |
+| **Live Monitor** | Current state per live brand: both traffic lights, last seen, current-window volume and rate. Click a row for the full signal and cadence detail |
+| **Operations** | All historical analysis, filtered by brand, period (week / month / custom) and granularity. Trends, brand performance, Rule 2 breach history, category breakdown |
+| **Reasons** | Failure categories and the unmapped-reason list that keeps the keyword map current |
+| **Vendor Detail** | One brand in depth: daily history, cadence profile, hour-of-day pattern, recent raw transactions |
+
+### Brand scope
+
+Only brands that are still live appear by default. A brand is **live if its last transaction falls
+on or after `CONFIG.vendorScope.liveSince`** (currently 1 August 2026). On the shipped dataset that
+keeps 24 of 51 monitored brands; the 27 excluded are the Arrow ECS entities, HPE Services and a tail
+of one-off names that all stopped transacting in June/July — decommissioned, not broken.
+
+Retired brands keep their full history and stay reachable: Operations has an **include retired
+brands** toggle, and Vendor Detail lists them under a separate group. The header always states the
+active cutoff and the resulting count.
+
+> **The cutoff is a fixed date and does not maintain itself.** Update it when the reporting period
+> moves. If a dataset has nothing after the cutoff the dashboard falls back to showing every
+> monitored brand with a warning rather than rendering an empty page — but it will not re-exclude
+> newly retired brands on its own.
+
+### "Today" on a partial day
+
+Today is the calendar day of the `MAX(Date)` anchor, which is usually **partial** — the shipped
+dataset's anchor is 02:22, so today holds 39 transactions against a typical full day of ~150.
+Comparing that against yesterday's total would read as a 70% collapse when nothing is wrong, so
+every comparison on the Today page is **like-for-like**: today's elapsed window against the same
+time-of-day slice on each of the previous 7 days, reported as a range (`typically 0–24 at this
+hour`) rather than a percentage, because a delta like "+875%" is noise on numbers that small.
 
 ## Why this exists
 
@@ -63,9 +98,14 @@ The dashboard reproduces `Signal Monitor`!C4:C6 and B9:F9 exactly:
 | | |
 |---|---|
 | CurrentEnd / CurrentStart / BaselineStart | `2026-08-13 02:22:10` / `00:22:10` / `2026-08-06 00:22:10` |
-| Red vendors / Yellow vendors / Streak-active | 1 / 0 / 10 |
+| Red brands / Yellow brands | 1 / 0 |
 | SPLUNK | 8 txns, 5 failures, 62.5% current, 54.386% baseline, Red at alert score 2 |
 | Workbook `Total Transactions` / failure rate | 19,869 / `0.2817957622426896` |
+
+Figures that count brands are now scoped to live brands, so they differ from the workbook's
+unscoped equivalents. Both are reported: streak-active is 8 live (10 across all monitored brands),
+Rule 2 is 282 live (293 across all monitored). Engine parity — signals, activity, streaks and the
+registry — stays **unscoped**, so the two implementations are still compared across all 51 brands.
 
 ## Data contract
 
@@ -187,12 +227,17 @@ reproducible but hides a total feed outage: the anchor simply stops moving.
 
 Three, each deliberate and switchable. `reference_engine.py --parity` turns all three off.
 
-**D1 — Dormancy override** (`CONFIG.activity.dormancy`). At the data anchor, 28 of 31 vendors were
-GREY, including 7 silent for 40+ days and `Warehouse` — which normally transacts every ~1.1 minutes —
-silent for 6.6 days. Quiet-hour suppression is right for a 90-minute gap at 03:00 and wrong for a
-six-day outage. Silence beyond `max(7 days, 3 × the vendor's longest historical gap)` now escalates to
-RED as a distinct `DORMANT` signal, so the original QUIET reasoning stays visible in the explanation.
-Normal quiet hours still suppress as before.
+**D1 — Dormancy override** (`CONFIG.activity.dormancy`). Silence beyond
+`max(7 days, 3 × the brand's longest historical gap)` escalates GREY to RED as a distinct `DORMANT`
+signal, because quiet-hour suppression is right for a 90-minute gap at 03:00 and wrong for a six-day
+outage. The original QUIET reasoning stays visible in the explanation.
+
+*Now largely redundant, deliberately kept.* Every brand D1 escalated on the shipped dataset — 7 Arrow
+ECS / HPE entities — turns out to be retired, and the brand-scope filter removes them more cleanly
+than an alert does. Within the live scope D1 currently fires on **nobody**. It stays configured
+because it is what will catch a *live* brand going silent, which is the case that actually matters.
+Note the 7-day floor means a live brand quiet for, say, 5 days during a quiet hour still shows GREY
+(`Forcepoint` is one today) — lower `hardCeilingMinutes` if that is too permissive.
 
 **D2 — WATCH escalation** (`CONFIG.activity.watchCanEscalate`). The workbook gated RED on
 `PEAK`/`ACTIVE`, so a WATCH vendor was capped at YELLOW however overdue it became: `FORTINET` sat at
@@ -224,16 +269,22 @@ appear in the logic. `REASON_MAP` sits directly below it.
 | `frequency` | median ≤2 / ≤30 min bands, threshold clamps (10–15, 30–60, 180–240) |
 | `hourClass` | 0.70 peak, 0.30 active, 2 watch minimum, ×1.0/×1.5/×3.0 multipliers |
 | `activity` | 0.75 yellow ratio, WATCH escalation, dormancy ceiling and gap multiple |
+| `vendorScope` | `liveSince` — the brand-liveness cutoff |
+| `today` | `comparisonDays` — how many prior days form the like-for-like band |
 | `freshness` | Fresh ≤60 min, Delayed ≤240 min, Stale beyond |
 
-`dormancy`, `freshness` and the WATCH escalation are the three worth revisiting once someone has seen
-the alert volume they produce in practice — the values shipped are reasonable defaults, not
-measurements.
+`vendorScope.liveSince`, `dormancy`, `freshness` and the WATCH escalation are the ones worth
+revisiting once someone has seen the alert volume they produce in practice — the values shipped are
+reasonable defaults, not measurements.
 
 ## Known open questions
 
-- `HPE File has been processed successfully for` (287 rows), `Partial - CHECKPOINT`, `MYD - SPLUNK`
-  and `MYD -Citrix` look like parse artefacts rather than real vendors, but they pass every documented
-  filter and are treated as real pending confirmation.
-- `Arrow ECS *` entities are internal; the workbook's export dropped them. They are kept visible here
-  with an `internal` flag, since 7 of them are among the long-dormant vendors.
+- `HPE File has been processed successfully for` (287 rows) looks like a parse artefact rather than a
+  real brand, but it passes every documented filter — and it is live, transacting today, one of only
+  five brands active in the current window. `MYD - SPLUNK` and `MYD -Citrix` are similar. All are
+  treated as real brands pending confirmation.
+- The `liveSince` cutoff is a fixed date that needs updating by hand as the reporting period moves.
+  The header displays it and the zero-live guard prevents a silent empty dashboard, but it will not
+  self-maintain.
+- `Arrow ECS *` entities are internal and all now fall outside the live scope. They remain available
+  through the Operations "include retired brands" toggle.

@@ -68,6 +68,13 @@ def main() -> None:
         if o[:19] != (b or ""):
             diffs.append((f"window.{key}", o, b))
 
+    # Vendor scope and the Today page, both live-scoped. The rendered alert
+    # count is a UI concern rather than an engine output, so it is not mirrored
+    # in the oracle and is compared only on keys the two sides share.
+    walk("scope", oracle["scope"], browser["scope"], diffs)
+    walk("todayPage", oracle["todayPage"],
+         {k: v for k, v in browser["todayPage"].items() if k in oracle["todayPage"]}, diffs)
+
     # Per-vendor signal and activity fields.
     walk("signals", oracle["signals"], browser["signals"], diffs)
     walk("activity", {k: {kk: vv for kk, vv in v.items()

@@ -18,10 +18,13 @@
   --green:#16a34a; --green-bg:#f0fdf4; --green-border:#bbf7d0;
   --grey:#64748b; --grey-bg:#f8fafc; --grey-border:#e2e8f0;
   --blue:#2563eb; --blue-bg:#eff6ff; --blue-border:#bfdbfe;
-  --shadow:0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.05);
+  --shadow:0 1px 2px rgba(15,23,42,.04);
   --shadow-lg:0 8px 32px rgba(15,23,42,.14);
   --radius:12px; --radius-sm:8px;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  /* Spacing scale. Charts were touching their frames and each other; these
+     two tokens drive every gap and every card interior. */
+  --gap:22px; --pad:20px;
 }
 :root[data-theme="dark"]{
   --bg:#0b1120; --surface:#111827; --surface-2:#0f172a; --surface-3:#1e293b;
@@ -32,10 +35,13 @@
   --green:#4ade80; --green-bg:#0f2418; --green-border:#14532d;
   --grey:#94a3b8; --grey-bg:#151d2c; --grey-border:#293548;
   --blue:#60a5fa; --blue-bg:#12203a; --blue-border:#1e3a8a;
-  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
+  --shadow:0 1px 2px rgba(0,0,0,.3);
   --shadow-lg:0 8px 32px rgba(0,0,0,.5);
 }
 *,*::before,*::after{box-sizing:border-box}
+/* display rules on .panel and label.field are more specific than the UA's
+   [hidden] rule, which would otherwise leave hidden controls visible. */
+[hidden]{display:none!important}
 body{
   margin:0; background:var(--bg); color:var(--text);
   font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -110,9 +116,27 @@ button{font:inherit; font-variant-numeric:tabular-nums}
 }
 .tab .count.alarm{background:var(--red-bg); color:var(--red)}
 
-main{max-width:1680px; margin:0 auto; padding:20px}
+main{max-width:1680px; margin:0 auto; padding:var(--gap) 20px 56px}
 .panel[hidden]{display:none}
-section+section{margin-top:20px}
+.panel>*+*{margin-top:var(--gap)}
+
+/* Page heading. One title per screen; the tab bar already says where you are,
+   so cards below carry short labels instead of repeating context. */
+.section-title{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding:0 2px}
+.section-title h2{font-size:19px; letter-spacing:-.025em}
+.section-title span{font-size:12.5px; color:var(--text-dim)}
+.section-title .controls{margin-left:auto}
+
+/* Muted inline note. Replaces the paragraph blocks that used to sit in the
+   main flow — same information, one line, out of the way. */
+.hint{font-size:12px; color:var(--text-faint); font-weight:450}
+.hint strong{color:var(--text-dim); font-weight:620}
+
+.scope-strip{
+  max-width:1680px; margin:0 auto; padding:8px 20px 0;
+  font-size:12px; color:var(--text-faint);
+}
+.scope-strip .warn{color:var(--amber); font-weight:600}
 
 /* ================================ cards ================================== */
 .card{
@@ -120,30 +144,29 @@ section+section{margin-top:20px}
   border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden;
 }
 .card-head{
-  padding:13px 16px; border-bottom:1px solid var(--border);
-  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  padding:14px var(--pad); display:flex; align-items:center; gap:12px; flex-wrap:wrap;
 }
-.card-head h2{font-size:14px}
+.card-head+.card-body{padding-top:0}
+.card-head h2{font-size:13.5px; font-weight:640}
 .card-head h3{font-size:13px}
-.card-sub{font-size:12px; color:var(--text-dim); font-weight:450}
-.card-body{padding:16px}
+.card-body{padding:var(--pad)}
 .card-body.flush{padding:0}
+.card.filters .card-body{padding:14px var(--pad)}
 
-.grid{display:grid; gap:14px}
-.kpis{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
-.two-col{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}
+.grid{display:grid; gap:var(--gap)}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.two-col{grid-template-columns:repeat(auto-fit,minmax(430px,1fr))}
 .three-col{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 
 .kpi{
   background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--radius); padding:14px 15px; box-shadow:var(--shadow);
+  border-radius:var(--radius); padding:16px 18px; box-shadow:var(--shadow);
 }
 .kpi-label{
-  font-size:10.5px; text-transform:uppercase; letter-spacing:.07em;
-  color:var(--text-faint); font-weight:660; margin-bottom:7px;
+  font-size:11px; color:var(--text-dim); font-weight:560; margin-bottom:9px;
 }
-.kpi-value{font-size:27px; font-weight:680; letter-spacing:-.025em; line-height:1.05}
-.kpi-sub{font-size:11.5px; color:var(--text-dim); margin-top:5px; line-height:1.35}
+.kpi-value{font-size:30px; font-weight:640; letter-spacing:-.03em; line-height:1}
+.kpi-sub{font-size:11.5px; color:var(--text-faint); margin-top:7px; line-height:1.35}
 .kpi.is-red .kpi-value{color:var(--red)}
 .kpi.is-amber .kpi-value{color:var(--amber)}
 .kpi.is-green .kpi-value{color:var(--green)}
@@ -161,24 +184,22 @@ section+section{margin-top:20px}
 .light-GREEN{color:var(--green); background:var(--green-bg); border-color:var(--green-border)}
 .light-GREY{color:var(--grey); background:var(--grey-bg); border-color:var(--grey-border)}
 
+/* Signal pills render only when a signal is actually on, so an unremarkable
+   vendor row carries no badges at all. */
 .sig{
   display:inline-block; padding:2px 7px; margin:1px 3px 1px 0; border-radius:5px;
-  font-size:10.5px; font-weight:650; border:1px solid;
+  font-size:10.5px; font-weight:620; border:1px solid;
   color:var(--text-dim); background:var(--surface-3); border-color:var(--border);
 }
 .sig.on-red{color:var(--red); background:var(--red-bg); border-color:var(--red-border)}
 .sig.on-amber{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border)}
 .sig.on-blue{color:var(--blue); background:var(--blue-bg); border-color:var(--blue-border)}
 
-.tag{
-  display:inline-block; padding:1.5px 7px; border-radius:5px; font-size:10.5px;
-  font-weight:620; background:var(--surface-3); color:var(--text-dim);
-  border:1px solid var(--border);
-}
-.tag.peak{color:var(--red); background:var(--red-bg); border-color:var(--red-border)}
-.tag.active{color:var(--blue); background:var(--blue-bg); border-color:var(--blue-border)}
-.tag.watch{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border)}
-.tag.quiet{color:var(--grey); background:var(--grey-bg); border-color:var(--grey-border)}
+/* Classification is context, not status — plain muted text rather than another
+   coloured chip competing with the traffic lights. */
+.tag{font-size:11.5px; color:var(--text-dim); white-space:nowrap}
+.tag.quiet{color:var(--text-faint)}
+.tag.peak{color:var(--red)}
 
 /* =============================== tables ================================= */
 .table-wrap{overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch}
@@ -231,24 +252,41 @@ tr.detail-row td{background:var(--surface-3)!important; padding:0}
 .explain+.explain{margin-top:8px}
 
 .alert-item{
-  padding:11px 13px; border-radius:var(--radius-sm); border:1px solid var(--border);
-  background:var(--surface-2); display:flex; gap:11px; align-items:flex-start;
+  padding:14px 16px; border-radius:var(--radius-sm); border:1px solid var(--border);
+  background:var(--surface-2); display:flex; gap:14px; align-items:flex-start;
 }
-.alert-item+.alert-item{margin-top:9px}
+.alert-item+.alert-item{margin-top:12px}
 .alert-item.sev-RED{background:var(--red-bg); border-color:var(--red-border)}
 .alert-item.sev-YELLOW{background:var(--amber-bg); border-color:var(--amber-border)}
 .alert-item .body{flex:1; min-width:0}
-.alert-item .title{font-weight:660; font-size:13px; margin-bottom:3px}
-.alert-item .msg{font-size:12.5px; line-height:1.5; color:var(--text-dim)}
+.alert-item .title{font-weight:640; font-size:13.5px; margin-bottom:4px}
+.alert-item .msg{font-size:12.5px; line-height:1.55; color:var(--text-dim)}
+.alert-item .kinds{margin:0 0 7px; display:flex; flex-wrap:wrap; gap:2px}
+.alert-item .msg-more{
+  margin:8px 0 0; padding-left:16px; font-size:12px; line-height:1.55;
+  color:var(--text-faint);
+}
+.alert-item .msg-more li+li{margin-top:5px}
+.all-clear{
+  display:flex; align-items:center; gap:14px; padding:26px var(--pad);
+  color:var(--text-dim); font-size:13.5px;
+}
+.all-clear .mark{
+  width:34px; height:34px; border-radius:50%; flex:none; display:grid; place-items:center;
+  background:var(--green-bg); color:var(--green); border:1px solid var(--green-border);
+  font-size:15px;
+}
+.all-clear strong{color:var(--text); font-weight:620; display:block; margin-bottom:2px}
 
 /* ================================ charts ================================ */
 .chart{width:100%; height:auto; display:block; overflow:visible}
 .chart text{font-size:10px; fill:var(--text-faint); font-family:inherit}
-.chart .axis-line{stroke:var(--border-strong); stroke-width:1}
-.chart .grid-line{stroke:var(--border); stroke-width:1; stroke-dasharray:2 3}
-.chart .thresh{stroke:var(--red); stroke-width:1.5; stroke-dasharray:5 4}
+.chart .axis-line{stroke:var(--border); stroke-width:1}
+.chart .grid-line{stroke:var(--border); stroke-width:1; opacity:.55}
+.chart .thresh{stroke:var(--red); stroke-width:1.25; stroke-dasharray:4 4; opacity:.75}
+.chart .band{fill:var(--text-faint); opacity:.13}
 .chart .hit{fill:transparent; cursor:crosshair}
-.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--text-dim); padding:0 4px 8px}
+.legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--text-dim); padding:0 2px 12px}
 .legend .key{display:inline-flex; align-items:center; gap:5px}
 .legend .swatch{width:9px; height:9px; border-radius:2px; flex:none}
 .tooltip{
@@ -267,24 +305,31 @@ tr.detail-row td{background:var(--surface-3)!important; padding:0}
 .minibar span{position:absolute; inset:0 auto 0 0; background:var(--blue); opacity:.75}
 
 /* ============================ misc + controls =========================== */
-.controls{display:flex; gap:9px; align-items:center; flex-wrap:wrap}
+.controls{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
 select,input[type=text],input[type=date],input[type=search]{
-  padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border-strong);
+  padding:7px 11px; border-radius:var(--radius-sm); border:1px solid var(--border-strong);
   background:var(--surface); color:var(--text); font:inherit; font-size:12.5px; max-width:100%;
 }
 select:focus,input:focus{outline:2px solid var(--blue); outline-offset:-1px; border-color:var(--blue)}
-label.field{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-dim); font-weight:560}
+label.field{display:inline-flex; align-items:center; gap:7px; font-size:12px; color:var(--text-dim); font-weight:540}
+label.field.checkbox{gap:6px; cursor:pointer}
+label.field.checkbox input{accent-color:var(--blue); width:15px; height:15px; cursor:pointer}
+.custom-range span{color:var(--text-faint)}
+.btn-quiet{border-color:transparent; background:none; color:var(--text-dim)}
+.btn-quiet:hover{background:var(--surface-3); border-color:var(--border)}
 
-.empty{padding:34px 20px; text-align:center; color:var(--text-faint); font-size:13px}
-.empty .big{font-size:26px; margin-bottom:8px; opacity:.5}
+.empty{padding:40px 20px; text-align:center; color:var(--text-faint); font-size:13px}
+.empty .big{font-size:24px; margin-bottom:10px; opacity:.4}
+/* Retained for the Data quality modal, which is genuinely explanatory. Notes
+   were removed from the main dashboard flow in favour of `.hint` one-liners. */
 .note{
-  font-size:12px; line-height:1.55; color:var(--text-dim); padding:10px 12px;
-  border-radius:var(--radius-sm); background:var(--blue-bg);
-  border:1px solid var(--blue-border);
+  font-size:12px; line-height:1.55; color:var(--text-dim); padding:11px 13px;
+  border-radius:var(--radius-sm); background:var(--surface-2);
+  border:1px solid var(--border);
 }
 .note.warn{background:var(--amber-bg); border-color:var(--amber-border)}
 .note strong{color:var(--text)}
-.stat-line{display:flex; justify-content:space-between; gap:16px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12.5px}
+.stat-line{display:flex; justify-content:space-between; gap:16px; padding:7px 0; border-bottom:1px solid var(--border); font-size:12.5px}
 .stat-line:last-child{border-bottom:0}
 .stat-line .k{color:var(--text-dim)}
 .stat-line .v{font-weight:640; font-variant-numeric:tabular-nums}
@@ -312,11 +357,14 @@ label.field{display:inline-flex; align-items:center; gap:6px; font-size:12px; co
 .sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
 
 @media (max-width:720px){
-  main{padding:13px}
-  .topbar-inner{padding:9px 13px; gap:11px}
-  .tabs-inner{padding:0 13px}
+  :root{--gap:14px; --pad:15px}
+  main{padding:var(--gap) 14px 40px}
+  .topbar-inner{padding:9px 14px; gap:11px}
+  .tabs-inner{padding:0 14px}
+  .scope-strip{padding:8px 14px 0}
   .asof{padding-left:11px}
-  .kpi-value{font-size:23px}
+  .kpi-value{font-size:24px}
+  .section-title h2{font-size:17px}
 }
 @media print{
   .topbar,.tabs,.btn{display:none}
@@ -348,113 +396,149 @@ label.field{display:inline-flex; align-items:center; gap:6px; font-size:12px; co
 
 <nav class="tabs">
   <div class="tabs-inner" role="tablist">
-    <button class="tab" role="tab" data-tab="overview"  aria-selected="true">Executive Overview</button>
-    <button class="tab" role="tab" data-tab="live"      aria-selected="false">Live Vendor Monitor <span class="count" id="cntLive"></span></button>
-    <button class="tab" role="tab" data-tab="failure"   aria-selected="false">Failure Monitor <span class="count" id="cntFailure"></span></button>
-    <button class="tab" role="tab" data-tab="activity"  aria-selected="false">Activity Monitor <span class="count" id="cntActivity"></span></button>
-    <button class="tab" role="tab" data-tab="reason"    aria-selected="false">Reason Analysis</button>
-    <button class="tab" role="tab" data-tab="vendor"    aria-selected="false">Vendor Detail</button>
+    <button class="tab" role="tab" data-tab="today"      aria-selected="true">Today <span class="count" id="cntToday"></span></button>
+    <button class="tab" role="tab" data-tab="live"       aria-selected="false">Live Monitor <span class="count" id="cntLive"></span></button>
+    <button class="tab" role="tab" data-tab="operations" aria-selected="false">Operations</button>
+    <button class="tab" role="tab" data-tab="reason"     aria-selected="false">Reasons</button>
+    <button class="tab" role="tab" data-tab="vendor"     aria-selected="false">Vendor Detail</button>
   </div>
 </nav>
 
+<div class="scope-strip" id="scopeStrip"></div>
+
 <main>
-  <!-- ============================ OVERVIEW ============================ -->
-  <section class="panel" id="panel-overview">
-    <div class="grid kpis" id="kpiRow"></div>
-    <section class="grid two-col">
+  <!-- ============================== TODAY ============================== -->
+  <section class="panel" id="panel-today">
+    <div class="section-title"><h2 id="todayTitle">Today</h2><span id="todaySub"></span></div>
+    <div class="grid kpis" id="todayKpis"></div>
+
+    <div class="card">
+      <div class="card-head"><h2>Alerts today</h2><div class="spacer"></div><span id="todayAlertCount"></span></div>
+      <div class="card-body" id="todayAlerts"></div>
+    </div>
+
+    <div class="grid two-col">
       <div class="card">
-        <div class="card-head"><h2>Daily transaction volume</h2><span class="card-sub">successes vs failures</span></div>
-        <div class="card-body" id="chartVolume"></div>
+        <div class="card-head"><h2>Through the day</h2></div>
+        <div class="card-body" id="todayIntraday"></div>
       </div>
       <div class="card">
-        <div class="card-head"><h2>Daily failure rate</h2><span class="card-sub">with 20% Rule 2 threshold</span></div>
-        <div class="card-body" id="chartRate"></div>
+        <div class="card-head"><h2>What is failing today</h2></div>
+        <div class="card-body" id="todayCategories"></div>
       </div>
-    </section>
-    <section class="grid two-col">
-      <div class="card">
-        <div class="card-head"><h2>Vendors requiring attention</h2><span class="card-sub" id="critSub"></span></div>
-        <div class="card-body scroll-y" id="criticalAlerts" style="max-height:620px"></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h2>Top failure categories</h2></div>
-        <div class="card-body" id="chartCategories"></div>
-      </div>
-    </section>
+    </div>
   </section>
 
-  <!-- ============================== LIVE ============================== -->
+  <!-- ============================== LIVE =============================== -->
   <section class="panel" id="panel-live" hidden>
+    <div class="section-title"><h2>Live monitor</h2><span id="liveSub"></span></div>
+    <div class="grid kpis" id="liveKpis"></div>
     <div class="card">
       <div class="card-head">
-        <h2>Live vendor monitor</h2>
-        <span class="card-sub" id="liveSub"></span>
-        <div class="spacer"></div>
         <div class="controls">
-          <label class="field">Status
-            <select id="liveStatus">
-              <option value="ALL">All</option>
-              <option value="ATTENTION">Needs attention</option>
-              <option value="RED">Red</option>
-              <option value="YELLOW">Yellow</option>
-              <option value="GREEN">Green</option>
-              <option value="GREY">Grey</option>
-            </select>
-          </label>
-          <input type="search" id="liveSearch" placeholder="Filter vendor…">
+          <select id="liveStatus" aria-label="Filter by status">
+            <option value="ALL">All statuses</option>
+            <option value="ATTENTION">Needs attention</option>
+            <option value="RED">Red</option>
+            <option value="YELLOW">Yellow</option>
+            <option value="GREEN">Green</option>
+            <option value="GREY">Grey</option>
+          </select>
+          <input type="search" id="liveSearch" placeholder="Find vendor…">
         </div>
+        <div class="spacer"></div>
+        <span class="hint" id="liveHint"></span>
       </div>
-      <div class="card-body" style="padding:0 16px 12px"><div class="note" id="liveNote"></div></div>
       <div class="card-body flush"><div class="table-wrap"><table id="liveTable"></table></div></div>
     </div>
   </section>
 
-  <!-- ============================= FAILURE ============================= -->
-  <section class="panel" id="panel-failure" hidden>
-    <div class="grid kpis" id="failureKpis"></div>
-    <section class="card">
-      <div class="card-head"><h2>Signal detail</h2><span class="card-sub">current 2-hour window vs 7-day baseline, per vendor</span></div>
-      <div class="card-body flush"><div class="table-wrap"><table id="signalTable"></table></div></div>
-    </section>
-    <section class="grid two-col">
-      <div class="card">
-        <div class="card-head"><h2>Consecutive failure streaks</h2><span class="card-sub">Rule 1</span></div>
-        <div class="card-body flush"><div class="table-wrap scroll-y"><table id="streakTable"></table></div></div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h2>Daily failure-rate alerts</h2><span class="card-sub">Rule 2 · ≥5 transactions and &gt;20% failures</span>
+  <!-- =========================== OPERATIONS ============================ -->
+  <section class="panel" id="panel-operations" hidden>
+    <div class="section-title"><h2>Operations</h2><span id="opsSub"></span></div>
+
+    <div class="card filters">
+      <div class="card-body">
+        <div class="controls">
+          <label class="field">Brand
+            <select id="opsVendor"><option value="ALL">All brands</option></select>
+          </label>
+          <label class="field">Period
+            <select id="opsPeriod">
+              <option value="7d">Last 7 days</option>
+              <option value="4w">Last 4 weeks</option>
+              <option value="thisMonth">This month</option>
+              <option value="lastMonth">Last month</option>
+              <option value="all" selected>All time</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </label>
+          <label class="field custom-range" id="opsRange" hidden>
+            <input type="date" id="opsFrom"> <span>to</span> <input type="date" id="opsTo">
+          </label>
+          <label class="field">View by
+            <select id="opsGranularity">
+              <option value="day" selected>Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+            </select>
+          </label>
+          <label class="field checkbox">
+            <input type="checkbox" id="opsRetired"> Include retired brands
+          </label>
           <div class="spacer"></div>
-          <div class="controls"><input type="search" id="rule2Search" placeholder="Filter vendor…"></div>
+          <button class="btn btn-quiet" id="opsReset" type="button">Reset</button>
         </div>
-        <div class="card-body flush"><div class="table-wrap scroll-y"><table id="rule2Table"></table></div></div>
       </div>
-    </section>
-  </section>
+    </div>
 
-  <!-- ============================ ACTIVITY ============================= -->
-  <section class="panel" id="panel-activity" hidden>
-    <div class="grid kpis" id="activityKpis"></div>
-    <section class="card">
-      <div class="card-head">
-        <h2>Activity monitor</h2>
-        <span class="card-sub">each vendor judged against its own historical cadence</span>
-        <div class="spacer"></div>
-        <div class="controls"><input type="search" id="activitySearch" placeholder="Filter vendor…"></div>
-      </div>
-      <div class="card-body flush"><div class="table-wrap"><table id="activityTable"></table></div></div>
-    </section>
-  </section>
+    <div class="grid kpis" id="opsKpis"></div>
 
-  <!-- ============================= REASON ============================== -->
-  <section class="panel" id="panel-reason" hidden>
     <div class="grid two-col">
       <div class="card">
-        <div class="card-head"><h2>Failure categories</h2><span class="card-sub" id="reasonSub"></span></div>
+        <div class="card-head"><h2>Transaction volume</h2></div>
+        <div class="card-body" id="opsChartVolume"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Failure rate</h2></div>
+        <div class="card-body" id="opsChartRate"></div>
+      </div>
+    </div>
+
+    <div class="grid two-col">
+      <div class="card">
+        <div class="card-head"><h2>Brands by failures</h2></div>
+        <div class="card-body" id="opsTopBrands"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Failure categories</h2></div>
+        <div class="card-body" id="opsCategories"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Brand performance</h2></div>
+      <div class="card-body flush"><div class="table-wrap"><table id="opsVendorTable"></table></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Daily failure-rate breaches</h2><div class="spacer"></div>
+        <span class="hint">Rule 2 · ≥5 transactions and over 20% failed</span></div>
+      <div class="card-body flush"><div class="table-wrap scroll-y"><table id="opsRule2Table"></table></div></div>
+    </div>
+  </section>
+
+  <!-- ============================= REASONS ============================= -->
+  <section class="panel" id="panel-reason" hidden>
+    <div class="section-title"><h2>Reasons</h2><span id="reasonSub"></span></div>
+    <div class="grid two-col">
+      <div class="card">
+        <div class="card-head"><h2>Categories</h2></div>
         <div class="card-body flush"><div class="table-wrap"><table id="categoryTable"></table></div></div>
       </div>
       <div class="card">
-        <div class="card-head"><h2>Unmapped reasons</h2><span class="card-sub">raw texts still landing in “Unspecified”</span></div>
-        <div class="card-body" style="padding:12px 16px 0"><div class="note warn" id="unmappedNote"></div></div>
+        <div class="card-head"><h2>Unmapped</h2><div class="spacer"></div>
+          <span class="hint" id="unmappedHint"></span></div>
         <div class="card-body flush"><div class="table-wrap scroll-y"><table id="unmappedTable"></table></div></div>
       </div>
     </div>
@@ -462,16 +546,10 @@ label.field{display:inline-flex; align-items:center; gap:6px; font-size:12px; co
 
   <!-- ============================= VENDOR ============================== -->
   <section class="panel" id="panel-vendor" hidden>
-    <div class="card">
-      <div class="card-head">
-        <h2>Vendor detail</h2>
-        <div class="spacer"></div>
-        <div class="controls">
-          <label class="field">Vendor <select id="vendorPick"></select></label>
-        </div>
-      </div>
-      <div class="card-body" id="vendorDetail"></div>
+    <div class="section-title"><h2>Vendor detail</h2>
+      <div class="controls"><select id="vendorPick" aria-label="Select vendor"></select></div>
     </div>
+    <div id="vendorDetail"></div>
   </section>
 </main>
 
@@ -538,6 +616,15 @@ const CONFIG = Object.freeze({
     signalMinTotalVolume: 5,  // vendors under this are excluded from KPI tiles
     excludeSubstrings: ["VENDORBACKLOG", "<HTML"]
   },
+  vendorScope: {
+    // A vendor counts as live if its LAST transaction falls on or after this
+    // date; retired vendors keep all their history but drop out of the default
+    // view. Fixed cutoff by explicit choice — update it when the reporting
+    // period moves. The header always shows the active cutoff and the resulting
+    // count, and a dataset with nothing after it falls back to showing
+    // everything rather than rendering an empty dashboard.
+    liveSince: "2026-08-01"
+  },
   frequency: {
     highMaxMedianMin: 2,      // median gap <=2 min  -> HIGH_FREQUENCY
     mediumMaxMedianMin: 30,   // median gap <=30 min -> MEDIUM_FREQUENCY
@@ -564,6 +651,10 @@ const CONFIG = Object.freeze({
     }
   },
   freshness: { freshMinutes: 60, delayedMinutes: 240 },
+  today: {
+    // How many preceding days form the like-for-like band on the Today page.
+    comparisonDays: 7
+  },
   display:   { recentTransactions: 60, topUnmapped: 200, maxReasonChars: 400 }
 });
 
@@ -933,6 +1024,8 @@ function applyCategories(txns){
    everywhere — otherwise a single table cannot show both lights on one row.
    ========================================================================== */
 function buildRegistry(txns){
+  const liveSince = parseLocalDate(CONFIG.vendorScope.liveSince);
+  const liveSinceTime = liveSince ? liveSince.getTime() : -Infinity;
   const byKey = new Map();
   for(const t of txns){
     let e = byKey.get(t.vendorKey);
@@ -954,6 +1047,9 @@ function buildRegistry(txns){
     const display = [...e.spellings.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
 
+    // Rows are chronological, so the last one is the vendor's latest activity.
+    const lastTxn = e.rows[e.rows.length - 1].date;
+
     registry.set(key, {
       vendorKey: key,
       displayName: display,
@@ -962,7 +1058,12 @@ function buildRegistry(txns){
       tier: junk ? "EXCLUDED_JUNK"
           : e.rows.length >= CONFIG.vendor.hubMinTxns ? "FULL" : "SIGNAL_ONLY",
       signalEligible: !junk && key.length <= CONFIG.vendor.signalMaxNameLen,
-      internal: key.startsWith("ARROW ECS")
+      internal: key.startsWith("ARROW ECS"),
+      lastTxn,
+      // Liveness is a scope filter, not an exclusion tier: a retired vendor
+      // keeps its tier and its full history so Operations can still report on
+      // it. It is simply outside the default view.
+      live: lastTxn.getTime() >= liveSinceTime
     });
   }
   return registry;
@@ -988,31 +1089,9 @@ function rule1(rows){
   };
 }
 
-/** Rule 2: per vendor per calendar day, alert when >=5 transactions AND >20%
- *  failed. Fewer than 5 transactions never alerts, even at 100% failure. */
-function rule2VendorDays(registry){
-  const out = [];
-  for(const [key, entry] of registry){
-    if(entry.tier === "EXCLUDED_JUNK") continue;
-    const perDay = new Map();
-    for(const t of entry.rows){
-      let slot = perDay.get(t.dayKey);
-      if(!slot){ slot = { transactions: 0, failures: 0 }; perDay.set(t.dayKey, slot); }
-      slot.transactions++;
-      if(t.isFailure) slot.failures++;
-    }
-    for(const [day, slot] of perDay){
-      const rate = ratio(slot.failures, slot.transactions);
-      out.push({
-        vendorKey: key, displayName: entry.displayName, day,
-        transactions: slot.transactions, failures: slot.failures, failureRate: rate,
-        alert: slot.transactions >= CONFIG.rule2.minTxns && rate > CONFIG.rule2.rateThreshold
-      });
-    }
-  }
-  out.sort((a, b) => a.day < b.day ? 1 : a.day > b.day ? -1 : b.failureRate - a.failureRate);
-  return out;
-}
+/* Rule 2 (per vendor per calendar day: alert when >=5 transactions AND >20%
+   failed) is computed inside aggregate() below, so it honours whatever vendor
+   and date filters the current view is using. */
 
 /** Top failure category for a set of rows, formatted "Category (n)". */
 function topCategory(rows){
@@ -1026,20 +1105,162 @@ function topCategory(rows){
   return { category: cat, count: n, label: `${cat} (${n})` };
 }
 
-function dailyOverview(txns, alertsByDay){
-  const perDay = new Map();
-  for(const t of txns){
-    let slot = perDay.get(t.dayKey);
-    if(!slot){ slot = { day: t.dayKey, transactions: 0, failures: 0 }; perDay.set(t.dayKey, slot); }
-    slot.transactions++;
-    if(t.isFailure) slot.failures++;
+/* --------------------------------------------------------------------------
+   aggregate() — the one rollup used by Today, Operations and Vendor Detail.
+   Having a single implementation is what stops the three pages disagreeing
+   about the same numbers under different filters.
+   -------------------------------------------------------------------------- */
+
+/** Bucket key for a transaction at the requested granularity. Weeks start
+ *  Monday; months are calendar months. */
+function bucketKey(t, granularity){
+  if(granularity === "month") return t.dayKey.slice(0, 7);
+  if(granularity === "week"){
+    const d = new Date(t.date.getFullYear(), t.date.getMonth(), t.date.getDate());
+    // getDay(): Sun=0. Shift so Monday is the start of the week.
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
-  return [...perDay.values()]
-    .map(d => ({ ...d,
-      successes: d.transactions - d.failures,
-      failureRate: ratio(d.failures, d.transactions),
-      rule2Alerts: alertsByDay.get(d.day) || 0 }))
-    .sort((a, b) => a.day.localeCompare(b.day));
+  return t.dayKey;
+}
+function bucketLabel(key, granularity){
+  if(granularity === "month"){
+    const [y, m] = key.split("-").map(Number);
+    return `${MONTHS[m - 1]} ${y}`;
+  }
+  if(granularity === "week") return "w/c " + fmtDay(key);
+  return fmtDay(key);
+}
+
+/**
+ * Roll up any filtered slice of transactions.
+ * opts: { vendorKeys:Set|null, from:Date|null, to:Date|null, granularity }
+ */
+function aggregate(txns, opts){
+  opts = opts || {};
+  const granularity = opts.granularity || "day";
+  const fromTime = opts.from ? opts.from.getTime() : -Infinity;
+  const toTime = opts.to ? opts.to.getTime() : Infinity;
+  const keys = opts.vendorKeys || null;
+
+  const rows = txns.filter(t =>
+    t.time >= fromTime && t.time <= toTime && (!keys || keys.has(t.vendorKey)));
+
+  const buckets = new Map();      // bucketKey -> counts
+  const vendorDays = new Map();   // "vendorKey|day" -> counts, for Rule 2
+  const byVendor = new Map();
+  const cats = new Map();
+  const unmappedMap = new Map();
+  let failures = 0;
+
+  for(const t of rows){
+    if(t.isFailure) failures++;
+
+    const bk = bucketKey(t, granularity);
+    let b = buckets.get(bk);
+    if(!b){ b = { key: bk, transactions: 0, failures: 0 }; buckets.set(bk, b); }
+    b.transactions++; if(t.isFailure) b.failures++;
+
+    const vdKey = t.vendorKey + "|" + t.dayKey;
+    let vd = vendorDays.get(vdKey);
+    if(!vd){ vd = { vendorKey: t.vendorKey, day: t.dayKey, transactions: 0, failures: 0 }; vendorDays.set(vdKey, vd); }
+    vd.transactions++; if(t.isFailure) vd.failures++;
+
+    let v = byVendor.get(t.vendorKey);
+    if(!v){
+      v = { vendorKey: t.vendorKey, displayName: t.originalVendor,
+            transactions: 0, failures: 0, days: new Set(), lastTxn: t.date };
+      byVendor.set(t.vendorKey, v);
+    }
+    v.transactions++; if(t.isFailure) v.failures++;
+    v.days.add(t.dayKey);
+    if(t.date > v.lastTxn) v.lastTxn = t.date;
+
+    if(!t.isFailure) continue;
+    let c = cats.get(t.category);
+    if(!c){
+      c = { category: t.category, failures: 0, vendors: new Set(),
+            firstSeen: t.date, lastSeen: t.date, reasons: new Map() };
+      cats.set(t.category, c);
+    }
+    c.failures++;
+    c.vendors.add(t.vendorKey);
+    if(t.date < c.firstSeen) c.firstSeen = t.date;
+    if(t.date > c.lastSeen)  c.lastSeen = t.date;
+    c.reasons.set(t.reason, (c.reasons.get(t.reason) || 0) + 1);
+
+    if(t.category === DEFAULT_CATEGORY){
+      const txt = String(t.reason).trim();
+      if(txt && txt.toUpperCase() !== "N/A"){
+        let u = unmappedMap.get(txt);
+        if(!u){ u = { reason: txt, count: 0, vendors: new Set(), lastSeen: t.date }; unmappedMap.set(txt, u); }
+        u.count++; u.vendors.add(t.vendorKey);
+        if(t.date > u.lastSeen) u.lastSeen = t.date;
+      }
+    }
+  }
+
+  const rule2All = [...vendorDays.values()].map(vd => ({
+    ...vd,
+    failureRate: ratio(vd.failures, vd.transactions),
+    alert: vd.transactions >= CONFIG.rule2.minTxns
+        && ratio(vd.failures, vd.transactions) > CONFIG.rule2.rateThreshold
+  }));
+  const rule2Alerts = rule2All.filter(r => r.alert)
+    .sort((a, b) => a.day < b.day ? 1 : a.day > b.day ? -1 : b.failureRate - a.failureRate);
+
+  const alertsByBucket = new Map();
+  for(const a of rule2Alerts){
+    const bk = granularity === "day" ? a.day
+      : bucketKey({ dayKey: a.day, date: parseLocalDate(a.day) }, granularity);
+    alertsByBucket.set(bk, (alertsByBucket.get(bk) || 0) + 1);
+  }
+
+  const series = [...buckets.values()]
+    .map(b => ({ ...b,
+      label: bucketLabel(b.key, granularity),
+      successes: b.transactions - b.failures,
+      failureRate: ratio(b.failures, b.transactions),
+      rule2Alerts: alertsByBucket.get(b.key) || 0 }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+  const worstDayByVendor = new Map();
+  for(const vd of rule2All){
+    const cur = worstDayByVendor.get(vd.vendorKey);
+    const rate = ratio(vd.failures, vd.transactions);
+    if(!cur || rate > cur.failureRate) worstDayByVendor.set(vd.vendorKey, { day: vd.day, failureRate: rate });
+  }
+  const breachDays = new Map();
+  for(const a of rule2Alerts) breachDays.set(a.vendorKey, (breachDays.get(a.vendorKey) || 0) + 1);
+
+  return {
+    rows,
+    series,
+    granularity,
+    totals: {
+      transactions: rows.length,
+      failures,
+      successes: rows.length - failures,
+      failureRate: ratio(failures, rows.length),
+      vendors: byVendor.size,
+      days: new Set(rows.map(t => t.dayKey)).size
+    },
+    rule2Alerts,
+    byVendor: [...byVendor.values()].map(v => ({
+      ...v,
+      activeDays: v.days.size,
+      failureRate: ratio(v.failures, v.transactions),
+      breachDays: breachDays.get(v.vendorKey) || 0,
+      worstDay: worstDayByVendor.get(v.vendorKey) || null
+    })).sort((a, b) => b.failures - a.failures || b.transactions - a.transactions),
+    categories: [...cats.values()]
+      .map(c => ({ ...c, share: ratio(c.failures, failures), vendorCount: c.vendors.size,
+                   topReasons: [...c.reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12) }))
+      .sort((a, b) => b.failures - a.failures),
+    unmapped: [...unmappedMap.values()]
+      .map(u => ({ ...u, vendorCount: u.vendors.size }))
+      .sort((a, b) => b.count - a.count)
+  };
 }
 
 /* ==========================================================================
@@ -1420,11 +1641,82 @@ function buildAlerts(entry, sig, act, streak, rule2Count){
    moving. This compares the anchor against the wall clock and NEVER feeds back
    into the signal windows.
    ========================================================================== */
+/** Display name from a registry, for use inside computeAll before STATE exists. */
+function vendorNameFrom(registry, key){
+  const e = registry.get(key);
+  return e ? e.displayName : key;
+}
+
 function assessFreshness(currentEnd, nowWallClock){
   const ageMinutes = (nowWallClock - currentEnd) / MS_MIN;
   const state = ageMinutes <= CONFIG.freshness.freshMinutes ? "Fresh"
               : ageMinutes <= CONFIG.freshness.delayedMinutes ? "Delayed" : "Stale";
   return { ageMinutes, state, checkedAt: new Date(nowWallClock) };
+}
+
+/* ==========================================================================
+   TODAY — the daily operational view.
+   "Today" is the calendar day of the MAX(Date) anchor, which is usually a
+   PARTIAL day: this dataset's anchor is 02:22, so today holds 39 transactions
+   against a typical full day of ~150. Comparing that to yesterday's total would
+   read as a 70% collapse when nothing is wrong, so the baseline is like-for-like
+   — the same time-of-day slice on each of the preceding days.
+   ========================================================================== */
+function todaySummary(txns, vendorKeys, anchor){
+  const dayStart = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  const elapsedMs = anchor.getTime() - dayStart.getTime();
+
+  const today = aggregate(txns, { vendorKeys, from: dayStart, to: anchor, granularity: "day" });
+
+  // Same elapsed slice on each of the preceding days.
+  const priorSlices = [];
+  for(let i = 1; i <= CONFIG.today.comparisonDays; i++){
+    const start = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() - i);
+    const end = new Date(start.getTime() + elapsedMs);
+    const slice = aggregate(txns, { vendorKeys, from: start, to: end, granularity: "day" });
+    priorSlices.push({
+      dayKey: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`,
+      transactions: slice.totals.transactions,
+      failures: slice.totals.failures,
+      failureRate: slice.totals.failureRate
+    });
+  }
+
+  // Reported as a range rather than a percentage: on small early-morning
+  // numbers a delta like "+875%" is noise, while "typical 0–24" is readable.
+  const band = values => values.length
+    ? { min: Math.min(...values), max: Math.max(...values), median: percentile([...values].sort((a, b) => a - b), 0.5) }
+    : null;
+  const volumeBand = band(priorSlices.map(s => s.transactions));
+  const failureBand = band(priorSlices.map(s => s.failures));
+  // Rate is only meaningful on days that actually had traffic in this slice.
+  const rateBand = band(priorSlices.filter(s => s.transactions > 0).map(s => s.failureRate));
+
+  // Transactions by hour today, against the mean profile for this weekday.
+  const hourToday = new Array(24).fill(0);
+  for(const t of today.rows) hourToday[t.hour]++;
+  const dow = anchor.getDay() + 1;
+  const hourTypical = new Array(24).fill(0);
+  const weekdayDays = new Set();
+  for(const t of txns){
+    if(t.dow !== dow) continue;                        // same weekday only
+    if(t.time >= dayStart.getTime()) continue;         // history only, excludes today
+    if(vendorKeys && !vendorKeys.has(t.vendorKey)) continue;
+    hourTypical[t.hour]++;
+    weekdayDays.add(t.dayKey);
+  }
+  const weekdayCount = Math.max(1, weekdayDays.size);
+  const hourTypicalMean = hourTypical.map(n => n / weekdayCount);
+
+  return {
+    dayKey: `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, "0")}-${String(anchor.getDate()).padStart(2, "0")}`,
+    dayName: DAY_NAMES[anchor.getDay()],
+    elapsedMinutes: elapsedMs / MS_MIN,
+    agg: today,
+    priorSlices, volumeBand, failureBand, rateBand,
+    hourToday, hourTypicalMean, weekdayCount,
+    activeVendors: today.byVendor.length
+  };
 }
 
 /* ==========================================================================
@@ -1434,9 +1726,9 @@ function assessFreshness(currentEnd, nowWallClock){
 function computeAll(rawRows){
   const { accepted, ledger } = validate(rawRows);
   if(!accepted.length){
-    return { empty: true, ledger, txns: [], vendors: [], registry: new Map(),
-             categories: [], unmapped: [], daily: [], rule2: [], rule2Alerts: [],
-             kpis: {}, window: null, freshness: null };
+    return { empty: true, ledger, txns: [], vendors: [], liveVendors: [],
+             registry: new Map(), signals: new Map(), activity: new Map(),
+             kpis: {}, window: null, freshness: null, today: null, scope: null };
   }
 
   const txns = applyCategories(normalise(accepted));
@@ -1449,15 +1741,13 @@ function computeAll(rawRows){
 
   const signals = computeSignals(registry, currentEnd);
   const activity = computeActivity(registry, anchor);
-  const rule2 = rule2VendorDays(registry);
-  const rule2Alerts = rule2.filter(r => r.alert);
 
-  const alertsByDay = new Map();
-  for(const a of rule2Alerts) alertsByDay.set(a.day, (alertsByDay.get(a.day) || 0) + 1);
-  const daily = dailyOverview(txns, alertsByDay);
-
+  // Rule 2 over every monitored vendor, for per-vendor breach counts.
+  const monitoredKeys = new Set([...registry.values()]
+    .filter(e => e.tier !== "EXCLUDED_JUNK").map(e => e.vendorKey));
+  const allTime = aggregate(txns, { vendorKeys: monitoredKeys, granularity: "day" });
   const rule2ByVendor = new Map();
-  for(const a of rule2Alerts) rule2ByVendor.set(a.vendorKey, (rule2ByVendor.get(a.vendorKey) || 0) + 1);
+  for(const a of allTime.rule2Alerts) rule2ByVendor.set(a.vendorKey, (rule2ByVendor.get(a.vendorKey) || 0) + 1);
 
   // --- assemble one row per monitored vendor ----------------------------
   const vendors = [];
@@ -1477,6 +1767,8 @@ function computeAll(rawRows){
       tier: entry.tier,
       signalEligible: entry.signalEligible,
       internal: entry.internal,
+      live: entry.live,
+      lastTxn: entry.lastTxn,
       totalVolume: entry.rows.length,
       totalFailures: entry.rows.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0),
       overall: combineStatus(failureLight, activityLight),
@@ -1495,75 +1787,100 @@ function computeAll(rawRows){
     || (b.failure ? b.failure.alertScore : 0) - (a.failure ? a.failure.alertScore : 0)
     || a.displayName.localeCompare(b.displayName));
 
-  // --- reason analysis ---------------------------------------------------
-  const totalFailures = txns.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0);
-  const catMap = new Map(), unmappedMap = new Map();
-  for(const t of txns){
-    if(!t.isFailure) continue;
-    let c = catMap.get(t.category);
-    if(!c){
-      c = { category: t.category, failures: 0, vendors: new Set(),
-            firstSeen: t.date, lastSeen: t.date, reasons: new Map() };
-      catMap.set(t.category, c);
-    }
-    c.failures++;
-    c.vendors.add(t.vendorKey);
-    if(t.date < c.firstSeen) c.firstSeen = t.date;
-    if(t.date > c.lastSeen)  c.lastSeen = t.date;
-    c.reasons.set(t.reason, (c.reasons.get(t.reason) || 0) + 1);
+  // --- vendor scope ------------------------------------------------------
+  // The cutoff is a fixed date, so a dataset that predates it would otherwise
+  // render an empty dashboard. Fall back to every monitored vendor and say so.
+  let liveVendors = vendors.filter(v => v.live);
+  const scopeFellBack = liveVendors.length === 0 && vendors.length > 0;
+  if(scopeFellBack) liveVendors = vendors;
+  const liveKeys = new Set(liveVendors.map(v => v.vendorKey));
+  const scope = {
+    liveSince: parseLocalDate(CONFIG.vendorScope.liveSince),
+    liveCount: liveVendors.length,
+    monitoredCount: vendors.length,
+    retiredCount: vendors.length - liveVendors.length,
+    fellBack: scopeFellBack
+  };
 
-    if(t.category === DEFAULT_CATEGORY){
-      const txt = String(t.reason).trim();
-      if(txt && txt.toUpperCase() !== "N/A"){
-        let u = unmappedMap.get(txt);
-        if(!u){ u = { reason: txt, count: 0, vendors: new Set(), lastSeen: t.date }; unmappedMap.set(txt, u); }
-        u.count++; u.vendors.add(t.vendorKey);
-        if(t.date > u.lastSeen) u.lastSeen = t.date;
-      }
+  const today = todaySummary(txns, liveKeys, anchor);
+
+  // --- today's alert list ------------------------------------------------
+  // Everything that warrants attention right now, worst first. Rule 2 breaches
+  // are day-scoped so they are built here; failure and activity alerts already
+  // exist on the vendor and are reused rather than regenerated.
+  const todayAlerts = [];
+  for(const a of today.agg.rule2Alerts){
+    const entry = registry.get(a.vendorKey);
+    if(!entry) continue;
+    todayAlerts.push(makeAlert(a.vendorKey, entry.displayName, "FAILURE", "RULE2_DAILY_RATE", "RED", a));
+  }
+  for(const v of liveVendors){
+    for(const a of v.alerts){
+      if(a.severity !== "RED" && a.severity !== "YELLOW") continue;
+      if(a.signal === "QUIET_SUPPRESSED") continue;      // grey is not an alert
+      todayAlerts.push(a);
     }
   }
-  const categories = [...catMap.values()]
-    .map(c => ({ ...c, share: ratio(c.failures, totalFailures),
-                 vendorCount: c.vendors.size,
-                 topReasons: [...c.reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12) }))
-    .sort((a, b) => b.failures - a.failures);
-  const unmapped = [...unmappedMap.values()]
-    .map(u => ({ ...u, vendorCount: u.vendors.size }))
-    .sort((a, b) => b.count - a.count);
+  const sevOrder = { RED: 0, YELLOW: 1, GREY: 2, INFO: 3 };
+  todayAlerts.sort((a, b) =>
+    sevOrder[a.severity] - sevOrder[b.severity]
+    || vendorNameFrom(registry, a.vendorKey).localeCompare(vendorNameFrom(registry, b.vendorKey)));
 
   // --- KPI tiles ---------------------------------------------------------
-  // Red/Yellow counts keep the workbook's total_volume >= 5 filter so the
-  // headline figures stay comparable with the source model.
-  const eligible = vendors.filter(v => v.failure && v.totalVolume >= CONFIG.vendor.signalMinTotalVolume);
+  // Scoped to live vendors so a tile can never contradict the table under it.
+  // Red/Yellow keep the workbook's total_volume >= 5 filter for comparability.
+  const eligible = liveVendors.filter(v => v.failure && v.totalVolume >= CONFIG.vendor.signalMinTotalVolume);
+  const liveAgg = aggregate(txns, { vendorKeys: liveKeys, granularity: "day" });
+  // Analysed totals cover every admissible row, junk vendors included: they are
+  // the data-quality reconciliation figures, not a monitoring scope.
+  const analysedFailures = txns.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0);
   const kpis = {
     analysedTransactions: txns.length,
-    analysedSuccesses: txns.length - totalFailures,
-    analysedFailures: totalFailures,
-    analysedFailureRate: ratio(totalFailures, txns.length),
+    analysedSuccesses: txns.length - analysedFailures,
+    analysedFailures,
+    analysedFailureRate: ratio(analysedFailures, txns.length),
+    todayTransactions: today.agg.totals.transactions,
+    todayFailures: today.agg.totals.failures,
+    todayFailureRate: today.agg.totals.failureRate,
+    todayRule2Alerts: today.agg.rule2Alerts.length,
+    todayActiveVendors: today.activeVendors,
     redVendors: eligible.filter(v => v.failure.light === "RED").length,
     yellowVendors: eligible.filter(v => v.failure.light === "YELLOW").length,
     streakActiveVendors: eligible.filter(v => v.failure.streakActive).length,
-    lowActivityVendors: vendors.filter(v => v.activity && (v.activity.light === "RED" || v.activity.light === "YELLOW")).length,
-    dormantVendors: vendors.filter(v => v.activity && v.activity.dormant).length,
-    activityRed: vendors.filter(v => v.activity && v.activity.light === "RED").length,
-    activityYellow: vendors.filter(v => v.activity && v.activity.light === "YELLOW").length,
-    activityGreen: vendors.filter(v => v.activity && v.activity.light === "GREEN").length,
-    activityGrey: vendors.filter(v => v.activity && v.activity.light === "GREY").length,
-    rule2Alerts: rule2Alerts.length,
-    rule2VendorsAffected: new Set(rule2Alerts.map(a => a.vendorKey)).size,
+    lowActivityVendors: liveVendors.filter(v => v.activity && (v.activity.light === "RED" || v.activity.light === "YELLOW")).length,
+    dormantVendors: liveVendors.filter(v => v.activity && v.activity.dormant).length,
+    activityRed: liveVendors.filter(v => v.activity && v.activity.light === "RED").length,
+    activityYellow: liveVendors.filter(v => v.activity && v.activity.light === "YELLOW").length,
+    activityGreen: liveVendors.filter(v => v.activity && v.activity.light === "GREEN").length,
+    activityGrey: liveVendors.filter(v => v.activity && v.activity.light === "GREY").length,
+    rule2Alerts: liveAgg.rule2Alerts.length,
+    rule2VendorsAffected: new Set(liveAgg.rule2Alerts.map(a => a.vendorKey)).size,
     daysMonitored: new Set(txns.map(t => t.dayKey)).size,
+    monitoredRule2Alerts: allTime.rule2Alerts.length,
     monitoredVendors: vendors.length,
+    liveVendors: liveVendors.length,
+    retiredVendors: vendors.length - liveVendors.filter(v => v.live).length,
     excludedVendors: [...registry.values()].filter(e => e.tier === "EXCLUDED_JUNK").length,
-    attentionVendors: vendors.filter(v => v.overall === "RED" || v.overall === "YELLOW").length
+    attentionVendors: liveVendors.filter(v => v.overall === "RED" || v.overall === "YELLOW").length
   };
 
   return {
-    empty: false, txns, registry, vendors, signals, activity,
-    daily, rule2, rule2Alerts, categories, unmapped, ledger, kpis,
+    empty: false, txns, registry, vendors, signals, activity, ledger, kpis,
+    liveVendors, liveKeys, scope, today, todayAlerts,
+    allTime,     // every monitored brand, all time — per-vendor breach counts
+    liveAgg,     // live brands, all time — drives Reasons and the headline KPIs
+    vendorByKey: new Map(vendors.map(v => [v.vendorKey, v])),
     window: { currentEnd: anchor, currentStart: new Date(currentStart),
               baselineStart: new Date(baselineStart) },
     freshness: assessFreshness(currentEnd, Date.now())
   };
+}
+
+/** Resolve a vendorKey to its display spelling. aggregate() deals only in keys,
+ *  so renderers come back through here for a name. */
+function vendorName(key){
+  const v = STATE && STATE.vendorByKey ? STATE.vendorByKey.get(key) : null;
+  return v ? v.displayName : key;
 }
 
 /* ==========================================================================
@@ -1575,12 +1892,11 @@ const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
 
 let STATE = null;
 const UI = {
-  tab: "overview",
+  tab: "today",
   liveStatus: "ALL", liveSearch: "", liveSort: { key: null, dir: 1 }, liveOpen: new Set(),
-  signalSort: { key: null, dir: 1 },
-  activitySearch: "", activitySort: { key: null, dir: 1 },
-  rule2Search: "", rule2Sort: { key: null, dir: 1 },
-  streakSort: { key: null, dir: 1 },
+  opsVendor: "ALL", opsPeriod: "all", opsGranularity: "day", opsRetired: false,
+  opsFrom: "", opsTo: "",
+  opsVendorSort: { key: null, dir: 1 }, opsRule2Sort: { key: null, dir: 1 },
   categorySort: { key: null, dir: 1 }, openCategory: null,
   vendor: null
 };
@@ -1623,14 +1939,17 @@ function niceCeil(value){
  * Multi-series line chart over a daily index.
  * series: [{ key, label, colour, values:[] }]
  */
-function lineChart(el, days, series, opts){
+function lineChart(el, keys, series, opts){
   opts = opts || {};
-  if(!days.length){ el.innerHTML = emptyChart(opts.emptyMessage || "No data in range"); return; }
-  const W = 760, H = 240, P = { t: 12, r: 14, b: 30, l: 46 };
+  if(!keys.length){ el.innerHTML = emptyChart(opts.emptyMessage || "No data in range"); return; }
+  // Right padding leaves room for the threshold label, which used to sit on top
+  // of the dashed rule itself.
+  const W = 760, H = 230, P = { t: 14, r: 16, b: 30, l: 48 };
   const iw = W - P.l - P.r, ih = H - P.t - P.b;
-  const maxVal = opts.max != null ? opts.max
-    : niceCeil(Math.max(1, ...series.flatMap(s => s.values.filter(v => isFinite(v)))));
-  const x = i => P.l + (days.length === 1 ? iw / 2 : (i / (days.length - 1)) * iw);
+  const label = (k, i) => opts.labelFormat ? opts.labelFormat(k, i) : fmtDay(k);
+  const finite = series.flatMap(s => s.values.filter(v => v != null && isFinite(v)));
+  const maxVal = opts.max != null ? opts.max : niceCeil(Math.max(1, ...finite));
+  const x = i => P.l + (keys.length === 1 ? iw / 2 : (i / (keys.length - 1)) * iw);
   const y = v => P.t + ih - (clamp(v, 0, maxVal) / maxVal) * ih;
 
   const ticks = 4;
@@ -1638,23 +1957,44 @@ function lineChart(el, days, series, opts){
   for(let i = 0; i <= ticks; i++){
     const v = (maxVal / ticks) * i, gy = y(v);
     grid += `<line class="grid-line" x1="${P.l}" y1="${gy}" x2="${W - P.r}" y2="${gy}"/>`
-         +  `<text x="${P.l - 7}" y="${gy + 3.5}" text-anchor="end">${esc(opts.yFormat ? opts.yFormat(v) : num(v))}</text>`;
+         +  `<text x="${P.l - 8}" y="${gy + 3.5}" text-anchor="end">${esc(opts.yFormat ? opts.yFormat(v) : num(v))}</text>`;
   }
-  // X labels: at most 7, always including first and last.
-  let xLabels = "";
-  const stride = Math.max(1, Math.ceil(days.length / 7));
-  days.forEach((d, i) => {
-    if(i % stride !== 0 && i !== days.length - 1) return;
-    xLabels += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(fmtDay(d))}</text>`;
-  });
 
+  // At most ~7 ticks, always including first and last. A strided tick sitting
+  // right next to the final one is dropped, otherwise the two labels collide.
+  const stride = Math.max(1, Math.ceil(keys.length / 7));
+  const last = keys.length - 1;
+  const tickIndices = [];
+  for(let i = 0; i < last; i += stride){
+    if(last - i >= stride * 0.6) tickIndices.push(i);
+  }
+  tickIndices.push(last);
+  let xLabels = "";
+  for(const i of tickIndices){
+    const anchorPos = i === 0 ? "start" : i === last ? "end" : "middle";
+    xLabels += `<text x="${x(i)}" y="${H - 10}" text-anchor="${anchorPos}">${esc(label(keys[i], i))}</text>`;
+  }
+
+  // null breaks the line rather than dropping to zero — used by the Today
+  // chart, where hours after "now" have not happened yet.
   let paths = "";
   for(const s of series){
-    const pts = s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-    paths += `<polyline points="${pts}" fill="none" stroke="${s.colour}" stroke-width="2"
-               stroke-linejoin="round" stroke-linecap="round"/>`;
-    if(days.length === 1){
-      paths += `<circle cx="${x(0)}" cy="${y(s.values[0])}" r="3.5" fill="${s.colour}"/>`;
+    const segments = [];
+    let run = [];
+    s.values.forEach((v, i) => {
+      if(v == null || !isFinite(v)){ if(run.length) segments.push(run); run = []; return; }
+      run.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    });
+    if(run.length) segments.push(run);
+    for(const seg of segments){
+      if(seg.length === 1){
+        const [cx, cy] = seg[0].split(",");
+        paths += `<circle cx="${cx}" cy="${cy}" r="3" fill="${s.colour}"/>`;
+      } else {
+        paths += `<polyline points="${seg.join(" ")}" fill="none" stroke="${s.colour}"
+                   stroke-width="${s.dashed ? 1.5 : 2}"${s.dashed ? ' stroke-dasharray="4 4"' : ""}
+                   stroke-linejoin="round" stroke-linecap="round"/>`;
+      }
     }
   }
 
@@ -1662,36 +2002,41 @@ function lineChart(el, days, series, opts){
   if(opts.threshold != null && opts.threshold <= maxVal){
     const ty = y(opts.threshold);
     threshold = `<line class="thresh" x1="${P.l}" y1="${ty}" x2="${W - P.r}" y2="${ty}"/>`
-      + `<text x="${W - P.r}" y="${ty - 5}" text-anchor="end" fill="var(--red)"
-              style="font-weight:650">${esc(opts.thresholdLabel || "")}</text>`;
+      + `<text x="${W - P.r + 2}" y="${ty + 3.5}" text-anchor="start" fill="var(--red)"
+              style="font-size:9px;font-weight:600">${esc(opts.thresholdLabel || "")}</text>`;
   }
 
-  // Invisible hit columns drive a cursor-following tooltip.
-  const colW = iw / Math.max(1, days.length);
+  const colW = iw / Math.max(1, keys.length);
   let hits = "";
-  days.forEach((d, i) => {
+  keys.forEach((k, i) => {
     hits += `<rect class="hit" x="${(x(i) - colW / 2).toFixed(1)}" y="${P.t}"
              width="${colW.toFixed(1)}" height="${ih}" data-i="${i}"/>`;
   });
 
+  // A legend for a single unlabelled series is noise — the card title says it.
+  const showLegend = series.length > 1;
+
   el.innerHTML =
-    `<div class="legend">${series.map(s =>
-      `<span class="key"><span class="swatch" style="background:${s.colour}"></span>${esc(s.label)}</span>`).join("")
-      + (opts.threshold != null ? `<span class="key"><span class="swatch" style="background:var(--red)"></span>${esc(opts.thresholdLabel || "threshold")}</span>` : "")}</div>`
-    + `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" style="height:240px">`
+    (showLegend ? `<div class="legend">${series.map(s =>
+      `<span class="key"><span class="swatch" style="background:${s.colour}${s.dashed ? ";opacity:.6" : ""}"></span>${esc(s.label)}</span>`).join("")}</div>` : "")
+    + `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" style="height:230px">`
     + grid
     + `<line class="axis-line" x1="${P.l}" y1="${P.t + ih}" x2="${W - P.r}" y2="${P.t + ih}"/>`
     + threshold + paths + xLabels + hits
-    + `</svg>`;
+    + `</svg>`
+    + (opts.footnote ? `<div class="hint" style="margin-top:8px">${esc(opts.footnote)}</div>` : "");
 
   const svg = $("svg", el);
   svg.addEventListener("mousemove", e => {
     const target = e.target.closest(".hit");
     if(!target) return hideTooltip();
     const i = +target.dataset.i;
-    showTooltip(e, `<div class="tt-title">${esc(fmtDay(days[i]))}</div>`
-      + series.map(s => `<div class="tt-row"><span>${esc(s.label)}</span>`
-        + `<span class="v">${esc(opts.tipFormat ? opts.tipFormat(s.values[i]) : num(s.values[i]))}</span></div>`).join(""));
+    showTooltip(e, `<div class="tt-title">${esc(label(keys[i], i))}</div>`
+      + series.map(s => {
+          const v = s.values[i];
+          return `<div class="tt-row"><span>${esc(s.label)}</span><span class="v">`
+            + `${v == null ? "—" : esc(opts.tipFormat ? opts.tipFormat(v) : num(v))}</span></div>`;
+        }).join(""));
   });
   svg.addEventListener("mouseleave", hideTooltip);
 }
@@ -1786,7 +2131,9 @@ function signalPills(sig){
   if(s.volumeAnomaly) pills.push(`<span class="sig on-amber">VOLUME ANOMALY</span>`);
   if(sig.streakActive) pills.push(`<span class="sig on-amber">STREAK ${sig.currentStreak}</span>`);
   if(sig.usedFallbackBaseline) pills.push(`<span class="sig on-blue" title="Fewer than ${CONFIG.window.fallbackMinVolume} transactions in the 7-day baseline, so the vendor's full history is used instead">FALLBACK BASELINE</span>`);
-  return pills.length ? pills.join("") : `<span class="sig">none</span>`;
+  // An unremarkable row carries no badge at all — a "none" chip on every quiet
+  // brand is noise competing with the rows that do have something to say.
+  return pills.length ? pills.join("") : `<span style="color:var(--text-faint)">—</span>`;
 }
 function hourClassTag(cls){
   return cls ? `<span class="tag ${cls.toLowerCase()}">${esc(cls)}</span>` : "—";
@@ -1796,7 +2143,10 @@ function explainBlock(alert){
   return `<div class="explain sev-${alert.severity}">${esc(alert.message)}</div>`;
 }
 
-/* ============================ TAB 1 — OVERVIEW ========================== */
+/* ============================== TAB 1 — TODAY ===========================
+   The daily operational view. One question: what is happening today?
+   No all-time totals live on this page — those belong on Operations.
+   ======================================================================== */
 function kpiCard(label, value, sub, tone){
   return `<div class="kpi${tone ? " is-" + tone : ""}">
     <div class="kpi-label">${esc(label)}</div>
@@ -1805,66 +2155,128 @@ function kpiCard(label, value, sub, tone){
   </div>`;
 }
 
-function renderOverview(s){
-  const k = s.kpis, L = s.ledger;
-  const excluded = L.excludedNoVendor + L.excludedBadDate;
-  $("#kpiRow").innerHTML = [
-    kpiCard("Total transactions", num(k.analysedTransactions),
-      excluded ? `${num(excluded)} row${excluded === 1 ? "" : "s"} excluded &mdash; see Data quality` : "all rows analysed"),
-    kpiCard("Successful", num(k.analysedSuccesses), pct(ratio(k.analysedSuccesses, k.analysedTransactions)) + " of total", "green"),
-    kpiCard("Failed", num(k.analysedFailures), `across ${num(k.daysMonitored)} days`, "red"),
-    kpiCard("Overall failure rate", pct(k.analysedFailureRate), `${num(k.rule2Alerts)} vendor-day breaches`,
-      k.analysedFailureRate > 0.2 ? "red" : k.analysedFailureRate > 0.1 ? "amber" : "green"),
-    kpiCard("Red vendors", num(k.redVendors), "failure signals in current window", k.redVendors ? "red" : "green"),
-    kpiCard("Yellow vendors", num(k.yellowVendors), "elevated but not critical", k.yellowVendors ? "amber" : "green"),
-    kpiCard("Active failure streaks", num(k.streakActiveVendors), `${CONFIG.rule1.minStreak}+ failures back-to-back, unbroken`,
-      k.streakActiveVendors ? "amber" : "green"),
-    kpiCard("Low-activity alerts", num(k.lowActivityVendors),
-      k.dormantVendors ? `${num(k.dormantVendors)} dormant beyond any historical gap` : "vendors overdue vs their own baseline",
-      k.lowActivityVendors ? "red" : "green")
-  ].join("");
-
-  const days = s.daily.map(d => d.day);
-  lineChart($("#chartVolume"), days, [
-    { label: "Successful", colour: CHART_COLOURS.success, values: s.daily.map(d => d.successes) },
-    { label: "Failed",     colour: CHART_COLOURS.failure, values: s.daily.map(d => d.failures) }
-  ], { emptyMessage: "No daily volume to plot" });
-
-  lineChart($("#chartRate"), days, [
-    { label: "Failure rate", colour: CHART_COLOURS.failure, values: s.daily.map(d => d.failureRate) }
-  ], {
-    max: Math.max(CONFIG.rule2.rateThreshold * 1.4, niceCeil(Math.max(0.01, ...s.daily.map(d => d.failureRate)))),
-    yFormat: v => pct(v, 0), tipFormat: v => pct(v),
-    threshold: CONFIG.rule2.rateThreshold,
-    thresholdLabel: pct(CONFIG.rule2.rateThreshold, 0) + " Rule 2 threshold",
-    emptyMessage: "No daily failure rates to plot"
-  });
-
-  const attention = s.vendors.filter(v => v.overall === "RED" || v.overall === "YELLOW");
-  $("#critSub").textContent = attention.length
-    ? `${attention.length} of ${s.vendors.length} monitored vendors`
-    : `all ${s.vendors.length} monitored vendors healthy`;
-  $("#criticalAlerts").innerHTML = attention.length
-    ? attention.slice(0, 20).map(v => `
-        <div class="alert-item sev-${v.overall}">
-          <div>${lightBadge(v.overall)}</div>
-          <div class="body">
-            <div class="title">${esc(v.displayName)}</div>
-            <div class="msg">${esc(v.primaryAlert ? v.primaryAlert.message : "")}</div>
-          </div>
-        </div>`).join("")
-    : emptyChart("No vendor currently requires attention");
-
-  barChart($("#chartCategories"), s.categories.slice(0, 10).map(c => ({
-    label: c.category, value: c.failures,
-    sub: `${pct(c.share)} · ${c.vendorCount} vendor${c.vendorCount === 1 ? "" : "s"}`
-  })), { emptyMessage: "No failures recorded" });
+/** Describe a like-for-like band without resorting to a percentage. On the
+ *  small numbers an early-morning slice produces, "+875%" is noise while
+ *  "typical 0–24 at this hour" is something you can act on. */
+function bandLabel(band, format){
+  if(!band) return "no comparable history";
+  const f = format || num;
+  return band.min === band.max
+    ? `typically ${esc(f(band.min))} at this hour`
+    : `typically ${esc(f(band.min))}–${esc(f(band.max))} at this hour`;
 }
 
-/* ========================= TAB 2 — LIVE MONITOR ========================= */
+function renderToday(s){
+  const t = s.today, k = s.kpis;
+  const totals = t.agg.totals;
+  const alertBrandCount = new Set(s.todayAlerts.map(a => a.vendorKey)).size;
+
+  $("#todayTitle").textContent = t.dayName;
+  $("#todaySub").textContent =
+    `${fmtDate(s.window.currentEnd)} · ${fmtDuration(t.elapsedMinutes)} into the day · `
+    + `${t.activeVendors} of ${s.liveVendors.length} brands active`;
+
+  $("#todayKpis").innerHTML = [
+    kpiCard("Transactions today", num(totals.transactions), bandLabel(t.volumeBand)),
+    kpiCard("Failures today", num(totals.failures), bandLabel(t.failureBand),
+      totals.failures ? "red" : "green"),
+    kpiCard("Failure rate today", pct(totals.failureRate),
+      t.rateBand ? bandLabel(t.rateBand, v => pct(v, 0)) : `${num(totals.failures)} of ${num(totals.transactions)}`,
+      totals.failureRate > CONFIG.rule2.rateThreshold ? "red"
+        : totals.failureRate > CONFIG.rule2.rateThreshold / 2 ? "amber" : "green"),
+    // Counted in brands, matching the cards below. A brand firing four signals
+    // is still one thing to go and look at.
+    kpiCard("Brands with alerts", num(alertBrandCount),
+      alertBrandCount
+        ? `${num(s.todayAlerts.length)} signal${s.todayAlerts.length === 1 ? "" : "s"} across ${num(s.liveVendors.length)} live brands`
+        : "nothing to action",
+      alertBrandCount ? (s.todayAlerts.some(a => a.severity === "RED") ? "red" : "amber") : "green")
+  ].join("");
+
+  // One card per brand, not per signal. A brand firing three signals is one
+  // thing to look at, and three near-identical cards was the noisiest part of
+  // the old page.
+  const byBrand = new Map();
+  for(const a of s.todayAlerts){
+    let g = byBrand.get(a.vendorKey);
+    if(!g){ g = { vendorKey: a.vendorKey, alerts: [] }; byBrand.set(a.vendorKey, g); }
+    g.alerts.push(a);
+  }
+  const groups = [...byBrand.values()];
+  const sevRank = { RED: 0, YELLOW: 1, GREY: 2, INFO: 3 };
+  for(const g of groups) g.severity = g.alerts[0].severity;
+  groups.sort((a, b) => sevRank[a.severity] - sevRank[b.severity]
+    || b.alerts.length - a.alerts.length
+    || vendorName(a.vendorKey).localeCompare(vendorName(b.vendorKey)));
+
+  const reds = groups.filter(g => g.severity === "RED").length;
+  $("#todayAlertCount").innerHTML = groups.length
+    ? `<span class="hint">${esc(num(groups.length))} brand${groups.length === 1 ? "" : "s"}`
+      + `${reds ? ` · <strong>${esc(num(reds))} red</strong>` : ""}</span>`
+    : "";
+
+  $("#todayAlerts").innerHTML = groups.length
+    ? groups.map(g => `
+        <div class="alert-item sev-${g.severity}">
+          <div>${lightBadge(g.severity)}</div>
+          <div class="body">
+            <div class="title">${esc(vendorName(g.vendorKey))}</div>
+            <div class="kinds">${g.alerts.map(a =>
+              `<span class="sig ${a.severity === "RED" ? "on-red" : "on-amber"}">`
+              + `${esc(ALERT_KIND[a.signal] || a.signal.replace(/_/g, " "))}</span>`).join("")}</div>
+            <div class="msg">${esc(g.alerts[0].message)}</div>
+            ${g.alerts.length > 1 ? `<ul class="msg-more">${g.alerts.slice(1)
+              .map(a => `<li>${esc(a.message)}</li>`).join("")}</ul>` : ""}
+          </div>
+        </div>`).join("")
+    : `<div class="all-clear"><div class="mark">✓</div>
+         <div><strong>Nothing to action</strong>
+         No failure spikes, no daily breaches and no brand overdue against its own pattern.</div>
+       </div>`;
+
+  // Intraday shape: today's hourly volume against the mean profile for this
+  // weekday, so a gap reads against what the day normally looks like.
+  const hours = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0") + ":00");
+  const elapsedHour = Math.floor(t.elapsedMinutes / 60);
+  lineChart($("#todayIntraday"), hours, [
+    { label: "Today", colour: CHART_COLOURS.accent,
+      values: t.hourToday.map((n, h) => h <= elapsedHour ? n : null) },
+    { label: `Typical ${t.dayName}`, colour: "var(--text-faint)", dashed: true,
+      values: t.hourTypicalMean }
+  ], {
+    labelFormat: l => l,
+    tipFormat: v => v == null ? "—" : (Math.round(v * 10) / 10).toString(),
+    emptyMessage: "No transactions today",
+    footnote: t.weekdayCount
+      ? `Typical line is the mean of ${t.weekdayCount} previous ${t.dayName}${t.weekdayCount === 1 ? "" : "s"}`
+      : ""
+  });
+
+  barChart($("#todayCategories"), t.agg.categories.slice(0, 8).map(c => ({
+    label: c.category, value: c.failures, sub: pct(c.share, 0)
+  })), { emptyMessage: "No failures today" });
+}
+
+/** Human label per signal, used as the small kicker above each alert. */
+const ALERT_KIND = {
+  CRITICAL_SPIKE: "Critical failure rate",
+  FAILURE_SPIKE: "Failure spike",
+  FAILURE_CLUSTER: "Failure cluster",
+  VOLUME_ANOMALY: "Unusual volume",
+  STREAK: "Consecutive failures",
+  RULE2_DAILY_RATE: "Daily failure rate",
+  DORMANT: "Brand dormant",
+  INACTIVITY: "Low activity",
+  QUIET_SUPPRESSED: "Quiet period"
+};
+
+/* ========================= TAB 2 — LIVE MONITOR =========================
+   Current state per live brand. Both dimensions on one row; everything else
+   in the expander, which is where the detail already lives.
+   ======================================================================== */
 function liveRows(s){
   const q = UI.liveSearch.trim().toLowerCase();
-  return s.vendors.filter(v => {
+  return s.liveVendors.filter(v => {
     if(q && v.displayName.toLowerCase().indexOf(q) === -1 && v.vendorKey.toLowerCase().indexOf(q) === -1) return false;
     if(UI.liveStatus === "ALL") return true;
     if(UI.liveStatus === "ATTENTION") return v.overall === "RED" || v.overall === "YELLOW";
@@ -1874,61 +2286,52 @@ function liveRows(s){
 
 function renderLive(s){
   const rows = liveRows(s);
-  const w = s.window;
-  $("#liveSub").textContent =
-    `${rows.length} of ${s.vendors.length} vendors · current window ${fmtDate(w.currentStart)} → ${fmtDate(w.currentEnd)}`;
+  const w = s.window, k = s.kpis;
 
-  // The anchor is MAX(Date), so at a quiet hour almost every vendor legitimately
-  // has zero current volume. Say so, rather than leaving a wall of zeros to be
-  // misread as an outage.
-  const active = s.vendors.filter(v => v.failure && v.failure.currentVolume > 0).length;
-  $("#liveNote").innerHTML = active === 0
-    ? `<strong>No transactions at all</strong> in the current ${CONFIG.window.currentHours}-hour window
-       (${esc(fmtDate(w.currentStart))} → ${esc(fmtDate(w.currentEnd))}). Failure signals need current
-       traffic to fire, so failure status is driven by history here. Activity status is unaffected.`
-    : `<strong>${esc(num(active))} of ${esc(num(s.vendors.length))} vendors</strong> transacted in the
-       current ${CONFIG.window.currentHours}-hour window (${esc(fmtDate(w.currentStart))} →
-       ${esc(fmtDate(w.currentEnd))}). Vendors with no current traffic cannot raise a failure spike;
-       their activity status still applies.`;
+  $("#liveSub").textContent =
+    `Current window ${fmtDate(w.currentStart)} → ${fmtDate(w.currentEnd)}`;
+
+  $("#liveKpis").innerHTML = [
+    kpiCard("Needs attention", num(k.attentionVendors), `of ${num(s.liveVendors.length)} live brands`,
+      k.attentionVendors ? "red" : "green"),
+    kpiCard("Failure signals", num(k.redVendors + k.yellowVendors),
+      `${num(k.redVendors)} red · ${num(k.yellowVendors)} yellow`,
+      k.redVendors ? "red" : k.yellowVendors ? "amber" : "green"),
+    kpiCard("Low activity", num(k.activityRed + k.activityYellow),
+      k.dormantVendors ? `${num(k.dormantVendors)} dormant` : `${num(k.activityGrey)} in a quiet period`,
+      k.activityRed ? "red" : k.activityYellow ? "amber" : "green"),
+    kpiCard("Active streaks", num(k.streakActiveVendors), `${CONFIG.rule1.minStreak}+ failures unbroken`,
+      k.streakActiveVendors ? "amber" : "green")
+  ].join("");
+
+  // The anchor is MAX(Date), so at a quiet hour most brands legitimately have
+  // zero current volume. Say it once, quietly, rather than leaving a wall of
+  // zeros to be misread as an outage.
+  const active = s.liveVendors.filter(v => v.failure && v.failure.currentVolume > 0).length;
+  $("#liveHint").innerHTML = `${esc(num(active))} of ${esc(num(s.liveVendors.length))} brands `
+    + `transacted in the last ${CONFIG.window.currentHours}h · click a row for detail`;
 
   const columns = [
-    { key: "overall", label: "Overall", sortValue: v => STATUS_RANK[v.overall], render: v => lightBadge(v.overall) },
+    { key: "overall", label: "Status", sortValue: v => STATUS_RANK[v.overall], render: v => lightBadge(v.overall) },
+    { key: "vendor", label: "Brand", cellClass: "vendor", sortValue: v => v.displayName,
+      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
     { key: "failure", label: "Failure", sortValue: v => STATUS_RANK[v.failure ? v.failure.light : "GREY"],
       render: v => lightBadge(v.failure ? v.failure.light : null) },
     { key: "activityLight", label: "Activity", sortValue: v => STATUS_RANK[v.activity ? v.activity.light : "GREY"],
       render: v => lightBadge(v.activity ? v.activity.light : null) },
-    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
-      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
-    { key: "last", label: "Last transaction", sortValue: v => v.activity ? v.activity.lastTxn.getTime() : (v.rows.length ? v.rows[v.rows.length-1].time : 0),
-      render: v => esc(fmtDate(v.activity ? v.activity.lastTxn : (v.rows.length ? v.rows[v.rows.length-1].date : null))) },
-    { key: "mins", label: "Since", num: true, title: "Minutes since the vendor's last transaction",
+    { key: "last", label: "Last seen",
+      sortValue: v => v.lastTxn.getTime(), render: v => esc(fmtDate(v.lastTxn)) },
+    { key: "mins", label: "Since", num: true,
       sortValue: v => v.activity ? v.activity.minutesSinceLast : -1,
       render: v => v.activity ? `<span title="${esc(num(v.activity.minutesSinceLast))} min">${esc(fmtDuration(v.activity.minutesSinceLast))}</span>` : "—" },
-    { key: "thr", label: "Threshold", num: true, title: "Dynamic inactivity threshold for this vendor-hour",
-      sortValue: v => v.activity && v.activity.dynamicThresholdMin != null ? v.activity.dynamicThresholdMin : -1,
-      render: v => v.activity && v.activity.dynamicThresholdMin != null ? num(v.activity.dynamicThresholdMin) + " min"
-        : `<span style="color:var(--text-faint)">suppressed</span>` },
-    { key: "hourClass", label: "Hour class", sortValue: v => v.activity ? v.activity.hourClass : "",
-      render: v => v.activity ? hourClassTag(v.activity.hourClass) : "—" },
-    { key: "freq", label: "Frequency", sortValue: v => v.activity ? v.activity.frequencyClass : "",
-      render: v => v.activity ? `<span class="tag">${esc(v.activity.frequencyClass.replace("_FREQUENCY", ""))}</span>` : "—" },
-    { key: "curVol", label: "Cur vol", num: true, sortValue: v => v.failure ? v.failure.currentVolume : -1,
+    { key: "curVol", label: "Volume", num: true, title: `Transactions in the current ${CONFIG.window.currentHours}-hour window`,
+      sortValue: v => v.failure ? v.failure.currentVolume : -1,
       render: v => v.failure ? num(v.failure.currentVolume) : "—" },
-    { key: "curFail", label: "Cur fail", num: true, sortValue: v => v.failure ? v.failure.currentFailures : -1,
-      render: v => v.failure ? num(v.failure.currentFailures) : "—" },
-    { key: "curRate", label: "Cur rate", num: true, sortValue: v => v.failure ? v.failure.currentRate : -1,
-      render: v => v.failure ? pct(v.failure.currentRate) : "—" },
-    { key: "baseRate", label: "Baseline", num: true, sortValue: v => v.failure ? v.failure.baselineRate : -1,
-      render: v => v.failure ? pct(v.failure.baselineRate) : "—" },
-    { key: "streak", label: "Streak", num: true, sortValue: v => v.streak.currentStreak,
-      render: v => v.streak.currentStreak >= CONFIG.rule1.minStreak
-        ? `<strong style="color:var(--red)">${esc(num(v.streak.currentStreak))}</strong>`
-        : num(v.streak.currentStreak) },
-    { key: "signals", label: "Active signals", sortable: false, render: v => signalPills(v.failure) },
-    { key: "why", label: "Why", sortable: false,
-      render: v => v.primaryAlert
-        ? `<span class="truncate" style="max-width:420px;color:var(--text-dim)" title="${esc(v.primaryAlert.message)}">${esc(v.primaryAlert.message)}</span>`
-        : `<span style="color:var(--text-faint)">healthy</span>` }
+    { key: "curRate", label: "Failure rate", num: true,
+      sortValue: v => v.failure ? v.failure.currentRate : -1,
+      render: v => !v.failure ? "—" : v.failure.currentVolume === 0
+        ? `<span style="color:var(--text-faint)">—</span>` : pct(v.failure.currentRate) },
+    { key: "signals", label: "Signals", sortable: false, render: v => signalPills(v.failure) }
   ];
 
   buildTable($("#liveTable"), columns, rows, UI.liveSort,
@@ -1937,7 +2340,8 @@ function renderLive(s){
       rowClass: v => "clickable row-" + v.overall,
       rowAttrs: v => `data-vendor="${esc(v.vendorKey)}"`,
       expanded: v => UI.liveOpen.has(v.vendorKey),
-      renderDetail: v => vendorDetailPanel(v, true)
+      renderDetail: v => vendorDetailPanel(v, true),
+      emptyMessage: "No brand matches the current filter"
     });
 
   $$("#liveTable tbody tr.clickable").forEach(tr => {
@@ -1949,7 +2353,282 @@ function renderLive(s){
   });
 }
 
-/** Shared by the inline expander and the Vendor Detail tab. */
+/* =========================== TAB 3 — OPERATIONS =========================
+   All historical analysis. Every panel is driven by one aggregate() call, so
+   the filters can never leave one chart showing a different slice than another.
+   ======================================================================== */
+
+/** Resolve the period control to a concrete date range against the anchor. */
+function opsRange(s){
+  const anchor = s.window.currentEnd;
+  const dayStart = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  const endOfDay = new Date(dayStart.getTime() + MS_DAY - 1);
+  switch(UI.opsPeriod){
+    case "7d":  return { from: new Date(dayStart.getTime() - 6 * MS_DAY), to: endOfDay };
+    case "4w":  return { from: new Date(dayStart.getTime() - 27 * MS_DAY), to: endOfDay };
+    case "thisMonth": return { from: new Date(anchor.getFullYear(), anchor.getMonth(), 1), to: endOfDay };
+    case "lastMonth": {
+      const from = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1);
+      return { from, to: new Date(anchor.getFullYear(), anchor.getMonth(), 1, 0, 0, 0, -1) };
+    }
+    case "custom": {
+      const from = UI.opsFrom ? parseLocalDate(UI.opsFrom) : null;
+      const to = UI.opsTo ? parseLocalDate(UI.opsTo) : null;
+      return { from, to: to ? new Date(to.getTime() + MS_DAY - 1) : null };
+    }
+    default: return { from: null, to: null };
+  }
+}
+
+function renderOperations(s){
+  const scopeVendors = UI.opsRetired ? s.vendors : s.liveVendors;
+  const range = opsRange(s);
+  const keys = UI.opsVendor === "ALL"
+    ? new Set(scopeVendors.map(v => v.vendorKey))
+    : new Set([UI.opsVendor]);
+
+  const agg = aggregate(s.txns, {
+    vendorKeys: keys, from: range.from, to: range.to, granularity: UI.opsGranularity
+  });
+
+  const periodLabel = range.from || range.to
+    ? `${range.from ? fmtDay(dayKeyOf(range.from)) : "start"} → ${range.to ? fmtDay(dayKeyOf(range.to)) : "now"}`
+    : "All time";
+  $("#opsSub").textContent = `${periodLabel} · `
+    + `${UI.opsVendor === "ALL" ? `${scopeVendors.length} brands` : vendorName(UI.opsVendor)}`
+    + `${UI.opsRetired ? " · including retired" : ""}`;
+
+  const t = agg.totals;
+  $("#opsKpis").innerHTML = [
+    kpiCard("Transactions", num(t.transactions), `over ${num(t.days)} day${t.days === 1 ? "" : "s"}`),
+    kpiCard("Successful", num(t.successes), pct(ratio(t.successes, t.transactions)) + " of total", "green"),
+    kpiCard("Failed", num(t.failures), pct(t.failureRate) + " failure rate", t.failures ? "red" : "green"),
+    kpiCard("Rule 2 breaches", num(agg.rule2Alerts.length),
+      `${num(new Set(agg.rule2Alerts.map(a => a.vendorKey)).size)} brands affected`,
+      agg.rule2Alerts.length ? "amber" : "green"),
+    kpiCard("Brands active", num(t.vendors), UI.opsRetired ? "retired included" : "live only")
+  ].join("");
+
+  const labels = agg.series.map(b => b.key);
+  const tickLabels = agg.series.map(b => b.label);
+  lineChart($("#opsChartVolume"), labels, [
+    { label: "Successful", colour: CHART_COLOURS.success, values: agg.series.map(b => b.successes) },
+    { label: "Failed", colour: CHART_COLOURS.failure, values: agg.series.map(b => b.failures) }
+  ], { labelFormat: (_, i) => tickLabels[i], emptyMessage: "No transactions in this period" });
+
+  lineChart($("#opsChartRate"), labels, [
+    { label: "Failure rate", colour: CHART_COLOURS.failure, values: agg.series.map(b => b.failureRate) }
+  ], {
+    labelFormat: (_, i) => tickLabels[i],
+    max: Math.max(CONFIG.rule2.rateThreshold * 1.4,
+      niceCeil(Math.max(0.01, ...agg.series.map(b => b.failureRate)))),
+    yFormat: v => pct(v, 0), tipFormat: v => pct(v),
+    threshold: CONFIG.rule2.rateThreshold,
+    thresholdLabel: pct(CONFIG.rule2.rateThreshold, 0),
+    emptyMessage: "No transactions in this period"
+  });
+
+  barChart($("#opsTopBrands"), agg.byVendor.slice(0, 10).map(v => ({
+    label: vendorName(v.vendorKey), value: v.failures,
+    sub: `${pct(v.failureRate, 0)} of ${num(v.transactions)}`, colour: "var(--red)"
+  })), { emptyMessage: "No failures in this period" });
+
+  barChart($("#opsCategories"), agg.categories.slice(0, 10).map(c => ({
+    label: c.category, value: c.failures,
+    sub: `${pct(c.share, 0)} · ${c.vendorCount} brand${c.vendorCount === 1 ? "" : "s"}`
+  })), { emptyMessage: "No failures in this period" });
+
+  buildTable($("#opsVendorTable"), [
+    { key: "vendor", label: "Brand", cellClass: "vendor", sortValue: v => vendorName(v.vendorKey),
+      render: v => {
+        const rec = STATE.vendorByKey.get(v.vendorKey);
+        return `<span class="truncate" title="${esc(vendorName(v.vendorKey))}">${esc(vendorName(v.vendorKey))}</span>`
+          + (rec && !rec.live ? ` <span class="tag quiet">retired</span>` : "");
+      } },
+    { key: "txns", label: "Transactions", num: true, sortValue: v => v.transactions, render: v => num(v.transactions) },
+    { key: "fails", label: "Failures", num: true, sortValue: v => v.failures, render: v => num(v.failures) },
+    { key: "rate", label: "Failure rate", num: true, sortValue: v => v.failureRate, render: v => pct(v.failureRate) },
+    { key: "days", label: "Active days", num: true, sortValue: v => v.activeDays, render: v => num(v.activeDays) },
+    { key: "breach", label: "Breach days", num: true, title: "Days breaching the Rule 2 daily failure-rate threshold",
+      sortValue: v => v.breachDays,
+      render: v => v.breachDays ? `<strong style="color:var(--amber)">${esc(num(v.breachDays))}</strong>` : "0" },
+    { key: "worst", label: "Worst day", num: true, sortValue: v => v.worstDay ? v.worstDay.failureRate : -1,
+      render: v => v.worstDay ? `${esc(pct(v.worstDay.failureRate, 0))} <span class="hint">${esc(fmtDay(v.worstDay.day))}</span>` : "—" },
+    { key: "last", label: "Last seen", sortValue: v => v.lastTxn.getTime(), render: v => esc(fmtDate(v.lastTxn)) }
+  ], agg.byVendor, UI.opsVendorSort,
+    key => { UI.opsVendorSort = { key, dir: UI.opsVendorSort.key === key ? -UI.opsVendorSort.dir : 1 }; renderOperations(STATE); },
+    { emptyMessage: "No brands in this period" });
+
+  buildTable($("#opsRule2Table"), [
+    { key: "day", label: "Date", sortValue: a => a.day, render: a => esc(fmtDay(a.day)) },
+    { key: "vendor", label: "Brand", cellClass: "vendor", sortValue: a => vendorName(a.vendorKey),
+      render: a => `<span class="truncate" title="${esc(vendorName(a.vendorKey))}">${esc(vendorName(a.vendorKey))}</span>` },
+    { key: "txns", label: "Transactions", num: true, sortValue: a => a.transactions, render: a => num(a.transactions) },
+    { key: "fails", label: "Failures", num: true, sortValue: a => a.failures, render: a => num(a.failures) },
+    { key: "rate", label: "Failure rate", num: true, sortValue: a => a.failureRate,
+      render: a => `<strong style="color:var(--red)">${esc(pct(a.failureRate))}</strong>` }
+  ], agg.rule2Alerts, UI.opsRule2Sort,
+    key => { UI.opsRule2Sort = { key, dir: UI.opsRule2Sort.key === key ? -UI.opsRule2Sort.dir : 1 }; renderOperations(STATE); },
+    { emptyMessage: "No vendor-day breached the threshold in this period" });
+}
+
+function dayKeyOf(d){
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/* ============================ TAB 4 — REASONS =========================== */
+function renderReason(s){
+  const totalFailures = s.liveAgg.totals.failures;
+  const categories = s.liveAgg.categories;
+  const unmapped = s.liveAgg.unmapped;
+
+  $("#reasonSub").textContent =
+    `${categories.length} categories across ${num(totalFailures)} failures · live brands only`;
+
+  buildTable($("#categoryTable"), [
+    { key: "cat", label: "Category", sortValue: c => c.category, render: c => esc(c.category) },
+    { key: "failures", label: "Failures", num: true, sortValue: c => c.failures, render: c => num(c.failures) },
+    { key: "share", label: "Share", num: true, sortValue: c => c.share, render: c => pct(c.share) },
+    { key: "bar", label: "", sortable: false, render: c => {
+        const w = (100 * c.failures / Math.max(1, categories[0].failures)).toFixed(1);
+        return `<div class="minibar" style="min-width:80px"><span style="width:${w}%"></span></div>`; } },
+    { key: "vendors", label: "Brands", num: true, sortValue: c => c.vendorCount, render: c => num(c.vendorCount) },
+    { key: "last", label: "Last seen", sortValue: c => c.lastSeen.getTime(), render: c => esc(fmtDate(c.lastSeen)) }
+  ], categories, UI.categorySort,
+    key => { UI.categorySort = { key, dir: UI.categorySort.key === key ? -UI.categorySort.dir : 1 }; renderReason(STATE); },
+    {
+      rowClass: () => "clickable",
+      rowAttrs: c => `data-cat="${esc(c.category)}"`,
+      expanded: c => UI.openCategory === c.category,
+      renderDetail: c => `<h3 style="font-size:12.5px;margin-bottom:10px">Raw reasons in “${esc(c.category)}”</h3>`
+        + c.topReasons.map(([text, n]) =>
+            `<div class="stat-line"><span class="k reason-text">${esc(truncate(text, CONFIG.display.maxReasonChars))}</span><span class="v">${esc(num(n))}</span></div>`).join("")
+        + (c.reasons.size > c.topReasons.length
+            ? `<div class="hint" style="margin-top:10px">${esc(num(c.reasons.size - c.topReasons.length))} further distinct texts not shown</div>` : ""),
+      emptyMessage: "No failures to categorise"
+    });
+
+  $$("#categoryTable tbody tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => {
+      UI.openCategory = UI.openCategory === tr.dataset.cat ? null : tr.dataset.cat;
+      renderReason(STATE);
+    });
+  });
+
+  // This list is how the keyword map stays current, so it keeps its own panel
+  // rather than being folded into the category table.
+  const unmappedTotal = unmapped.reduce((a, u) => a + u.count, 0);
+  $("#unmappedHint").innerHTML = unmapped.length
+    ? `<strong>${esc(num(unmappedTotal))}</strong> failures · ${esc(num(unmapped.length))} distinct texts · `
+      + `each is a candidate keyword for <code>REASON_MAP</code>`
+    : `every reason matched a keyword`;
+
+  buildTable($("#unmappedTable"), [
+    { key: "count", label: "Count", num: true, sortValue: u => u.count, render: u => num(u.count) },
+    { key: "vendors", label: "Brands", num: true, sortValue: u => u.vendorCount, render: u => num(u.vendorCount) },
+    { key: "reason", label: "Raw reason text", sortable: false,
+      render: u => `<div class="reason-text">${esc(truncate(u.reason, CONFIG.display.maxReasonChars))}</div>` }
+  ], unmapped.slice(0, CONFIG.display.topUnmapped), null, null,
+    { emptyMessage: "No unmapped failure reasons" });
+}
+
+/* ========================= TAB 5 — VENDOR DETAIL ======================== */
+function renderVendorPicker(s){
+  const select = $("#vendorPick");
+  const list = s.vendors;
+  if(!list.length){ select.innerHTML = ""; return; }
+  if(!UI.vendor || !list.some(v => v.vendorKey === UI.vendor)){
+    UI.vendor = (s.liveVendors[0] || list[0]).vendorKey;
+  }
+  const opt = v => `<option value="${esc(v.vendorKey)}"${v.vendorKey === UI.vendor ? " selected" : ""}>`
+    + `${esc(v.displayName)}${v.live ? "" : " (retired)"}</option>`;
+  const live = [...s.liveVendors].sort((a, b) => a.displayName.localeCompare(b.displayName));
+  const retired = list.filter(v => !v.live).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  select.innerHTML =
+    `<optgroup label="Live brands">${live.map(opt).join("")}</optgroup>`
+    + (retired.length ? `<optgroup label="Retired">${retired.map(opt).join("")}</optgroup>` : "");
+}
+
+function renderVendor(s){
+  const v = s.vendors.find(x => x.vendorKey === UI.vendor);
+  const host = $("#vendorDetail");
+  if(!v){ host.innerHTML = `<div class="card"><div class="card-body">${emptyChart("No vendor selected")}</div></div>`; return; }
+
+  const agg = aggregate(s.txns, { vendorKeys: new Set([v.vendorKey]), granularity: "day" });
+  const labels = agg.series.map(b => b.key);
+  const act = v.activity;
+
+  const maxHour = act ? Math.max(1, ...act.hourHistogram) : 1;
+  const hourGrid = act ? `
+    <div class="hour-grid">${act.hourHistogram.map((n, h) => {
+      const alpha = n === 0 ? 0.05 : 0.15 + 0.85 * (n / maxHour);
+      const isNow = h === act.currentHour;
+      return `<div class="hour-cell" title="${h}:00 — ${esc(num(n))} transactions"
+        style="background:color-mix(in srgb, var(--blue) ${(alpha * 100).toFixed(0)}%, transparent);
+               ${isNow ? "outline:2px solid var(--red);outline-offset:1px" : ""}"></div>`;
+    }).join("")}</div>
+    <div class="hour-axis">${Array.from({ length: 24 }, (_, h) => h % 3 === 0 ? h : "").map(l => `<span>${l}</span>`).join("")}</div>
+    <div class="hint" style="margin-top:10px">Outlined column is the current hour
+      (${String(act.currentHour).padStart(2, "0")}:00, ${esc(act.currentDayName)}), classified
+      <strong>${esc(act.hourClass)}</strong>.</div>` : "";
+
+  host.innerHTML = `
+    <div class="grid three-col">
+      ${kpiCard("Status", v.overall,
+        `${v.failure ? "failure " + v.failure.light.toLowerCase() : "no signal"} · ${act ? "activity " + act.light.toLowerCase() : "no profile"}`,
+        v.overall === "RED" ? "red" : v.overall === "YELLOW" ? "amber" : v.overall === "GREEN" ? "green" : null)}
+      ${kpiCard("Transactions", num(v.totalVolume),
+        `${num(v.totalFailures)} failures · ${pct(ratio(v.totalFailures, v.totalVolume))}`)}
+      ${kpiCard("Last seen", act ? fmtDuration(act.minutesSinceLast) + " ago" : fmtDate(v.lastTxn),
+        act ? esc(fmtDate(act.lastTxn)) : (v.live ? "" : "retired brand"))}
+    </div>
+    <div class="card"><div class="card-body">${vendorDetailPanel(v, false)}</div></div>
+    <div class="grid two-col">
+      <div class="card"><div class="card-head"><h3>Daily volume</h3></div>
+        <div class="card-body" id="vdVolume"></div></div>
+      <div class="card"><div class="card-head"><h3>Daily failure rate</h3></div>
+        <div class="card-body" id="vdRate"></div></div>
+    </div>
+    <div class="grid two-col">
+      <div class="card"><div class="card-head"><h3>Activity by hour</h3></div>
+        <div class="card-body">${hourGrid || emptyChart("No cadence profile — fewer than " + CONFIG.vendor.hubMinTxns + " transactions")}</div></div>
+      <div class="card"><div class="card-head"><h3>Failure categories</h3></div>
+        <div class="card-body" id="vdCats"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Recent transactions</h3><div class="spacer"></div>
+        <span class="hint">most recent ${CONFIG.display.recentTransactions}, raw and unmodified</span></div>
+      <div class="card-body flush"><div class="table-wrap scroll-y"><table id="vdRecent"></table></div></div>
+    </div>`;
+
+  lineChart($("#vdVolume"), labels, [
+    { label: "Successful", colour: CHART_COLOURS.success, values: agg.series.map(b => b.successes) },
+    { label: "Failed", colour: CHART_COLOURS.failure, values: agg.series.map(b => b.failures) }
+  ], { emptyMessage: "No transactions" });
+
+  lineChart($("#vdRate"), labels, [
+    { label: "Failure rate", colour: CHART_COLOURS.failure, values: agg.series.map(b => b.failureRate) }
+  ], { max: 1, yFormat: x => pct(x, 0), tipFormat: x => pct(x),
+       threshold: CONFIG.rule2.rateThreshold, thresholdLabel: pct(CONFIG.rule2.rateThreshold, 0),
+       emptyMessage: "No transactions" });
+
+  barChart($("#vdCats"), agg.categories.slice(0, 8)
+    .map(c => ({ label: c.category, value: c.failures, sub: pct(c.share, 0) })),
+    { emptyMessage: "No failures recorded for this brand" });
+
+  const recent = v.rows.slice(-CONFIG.display.recentTransactions).reverse();
+  buildTable($("#vdRecent"), [
+    { key: "date", label: "Timestamp", sortable: false, cellClass: "nowrap", render: t => esc(fmtDate(t.date)) },
+    { key: "status", label: "Status", sortable: false,
+      render: t => t.isFailure ? `<span class="light light-RED"><span class="glyph">●</span>FAILURE</span>`
+                               : `<span class="light light-GREEN"><span class="glyph">✓</span>SUCCESS</span>` },
+    { key: "po", label: "PO", sortable: false, cellClass: "mono nowrap", render: t => esc(t.po || "—") },
+    { key: "cat", label: "Category", sortable: false, render: t => t.isFailure ? esc(t.category) : "—" },
+    { key: "reason", label: "Raw reason", sortable: false,
+      render: t => `<span class="truncate" style="max-width:520px" title="${esc(t.reason)}">${esc(truncate(t.reason, 200))}</span>` }
+  ], recent, null, null, { emptyMessage: "No transactions" });
+}
+
 function vendorDetailPanel(v, compact){
   const sig = v.failure, act = v.activity;
   const alerts = v.alerts.length
@@ -2003,304 +2682,6 @@ function vendorDetailPanel(v, compact){
       ${stats.map(([k2, v2]) => `<div class="stat-line"><span class="k">${esc(k2)}</span><span class="v">${v2}</span></div>`).join("")}
     </div>
   </div>`;
-}
-
-/* ======================== TAB 3 — FAILURE MONITOR ======================= */
-function renderFailure(s){
-  const withSignal = s.vendors.filter(v => v.failure);
-  const count = predicate => withSignal.filter(predicate).length;
-  $("#failureKpis").innerHTML = [
-    kpiCard("Failure spikes", num(count(v => v.failure.signals.spike)),
-      `≥${CONFIG.spike.minCurrentVolume} txns and +${pp(CONFIG.spike.absoluteDelta)}pp or ${CONFIG.spike.relativeRatio}× baseline`,
-      count(v => v.failure.signals.spike) ? "red" : "green"),
-    kpiCard("Critical spikes", num(count(v => v.failure.signals.critical)),
-      `≥${pct(CONFIG.critical.minRate, 0)} rate with ≥${CONFIG.critical.minFailures} failures &mdash; Red on its own`,
-      count(v => v.failure.signals.critical) ? "red" : "green"),
-    kpiCard("Failure clusters", num(count(v => v.failure.signals.cluster)),
-      `${CONFIG.cluster.minConsecutive}+ back-to-back or ${CONFIG.cluster.minInWindow}+ in ${CONFIG.cluster.windowMinutes} min`,
-      count(v => v.failure.signals.cluster) ? "amber" : "green"),
-    kpiCard("Volume anomalies", num(count(v => v.failure.signals.volumeAnomaly)),
-      `≥${CONFIG.volume.sigmaThreshold}σ from hourly baseline`,
-      count(v => v.failure.signals.volumeAnomaly) ? "amber" : "green"),
-    kpiCard("Active streaks", num(count(v => v.failure.streakActive)), `${CONFIG.rule1.minStreak}+ failures, unbroken`,
-      count(v => v.failure.streakActive) ? "amber" : "green"),
-    kpiCard("Rule 2 alerts", num(s.kpis.rule2Alerts),
-      `${num(s.kpis.rule2VendorsAffected)} vendors over ${num(s.kpis.daysMonitored)} days`,
-      s.kpis.rule2Alerts ? "amber" : "green")
-  ].join("");
-
-  buildTable($("#signalTable"), [
-    { key: "light", label: "Light", sortValue: v => STATUS_RANK[v.failure.light], render: v => lightBadge(v.failure.light) },
-    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
-      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
-    { key: "score", label: "Score", num: true, title: "3×spike + 2×cluster + 1×volume anomaly",
-      sortValue: v => v.failure.alertScore, render: v => num(v.failure.alertScore) },
-    { key: "curVol", label: "Cur vol", num: true, sortValue: v => v.failure.currentVolume, render: v => num(v.failure.currentVolume) },
-    { key: "curFail", label: "Cur fail", num: true, sortValue: v => v.failure.currentFailures, render: v => num(v.failure.currentFailures) },
-    { key: "curRate", label: "Cur rate", num: true, sortValue: v => v.failure.currentRate, render: v => pct(v.failure.currentRate) },
-    { key: "baseVol", label: "Base vol", num: true, sortValue: v => v.failure.baselineVolume, render: v => num(v.failure.baselineVolume) },
-    { key: "baseRate", label: "Base rate", num: true, sortValue: v => v.failure.baselineRate, render: v => pct(v.failure.baselineRate) },
-    { key: "consec", label: "Max run", num: true, sortValue: v => v.failure.maxConsecutive, render: v => num(v.failure.maxConsecutive) },
-    { key: "in30", label: "Max/30m", num: true, sortValue: v => v.failure.maxIn30Min, render: v => num(v.failure.maxIn30Min) },
-    { key: "exp", label: "Expected", num: true, title: "Expected volume for a window this long (scaled)",
-      sortValue: v => v.failure.expectedVolumeScaled, render: v => v.failure.expectedVolumeScaled.toFixed(1) },
-    { key: "sigma", label: "σ dev", num: true, sortValue: v => v.failure.sigmaDeviationScaled,
-      render: v => v.failure.sigmaDeviationScaled.toFixed(2) },
-    { key: "streak", label: "Streak", num: true, sortValue: v => v.failure.currentStreak, render: v => num(v.failure.currentStreak) },
-    { key: "signals", label: "Signals", sortable: false, render: v => signalPills(v.failure) },
-    { key: "reason", label: "Current failure reasons", sortable: false,
-      render: v => v.failure.distinctReasons.length
-        ? `<span class="truncate" style="max-width:380px" title="${esc(v.failure.distinctReasons.join(" | "))}">${esc(v.failure.distinctReasons.join(" | "))}</span>`
-        : `<span style="color:var(--text-faint)">—</span>` }
-  ], withSignal, UI.signalSort,
-    key => { UI.signalSort = { key, dir: UI.signalSort.key === key ? -UI.signalSort.dir : 1 }; renderFailure(STATE); },
-    { rowClass: v => "row-" + v.failure.light });
-
-  const streaks = s.vendors.filter(v => v.streak.status !== "-");
-  buildTable($("#streakTable"), [
-    { key: "status", label: "Status", sortValue: v => v.streak.status,
-      render: v => v.streak.status === "Active"
-        ? `<span class="light light-RED"><span class="glyph">●</span>ACTIVE</span>`
-        : `<span class="light light-GREEN"><span class="glyph">✓</span>RESOLVED</span>` },
-    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
-      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
-    { key: "cur", label: "Current", num: true, sortValue: v => v.streak.currentStreak, render: v => num(v.streak.currentStreak) },
-    { key: "max", label: "Max", num: true, sortValue: v => v.streak.maxStreak, render: v => num(v.streak.maxStreak) },
-    { key: "cat", label: "Top failure category", sortable: false,
-      render: v => v.topCategory ? esc(v.topCategory.label) : "—" }
-  ], streaks, UI.streakSort,
-    key => { UI.streakSort = { key, dir: UI.streakSort.key === key ? -UI.streakSort.dir : 1 }; renderFailure(STATE); },
-    { rowClass: v => v.streak.status === "Active" ? "row-RED" : "",
-      emptyMessage: "No vendor has recorded a 2+ failure streak" });
-
-  const q = UI.rule2Search.trim().toLowerCase();
-  const alerts = s.rule2Alerts.filter(a => !q || a.displayName.toLowerCase().indexOf(q) !== -1);
-  buildTable($("#rule2Table"), [
-    { key: "day", label: "Date", sortValue: a => a.day, render: a => esc(fmtDay(a.day)) },
-    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: a => a.displayName,
-      render: a => `<span class="truncate" title="${esc(a.displayName)}">${esc(a.displayName)}</span>` },
-    { key: "txns", label: "Txns", num: true, sortValue: a => a.transactions, render: a => num(a.transactions) },
-    { key: "fails", label: "Failures", num: true, sortValue: a => a.failures, render: a => num(a.failures) },
-    { key: "rate", label: "Rate", num: true, sortValue: a => a.failureRate,
-      render: a => `<strong style="color:var(--red)">${esc(pct(a.failureRate))}</strong>` }
-  ], alerts, UI.rule2Sort,
-    key => { UI.rule2Sort = { key, dir: UI.rule2Sort.key === key ? -UI.rule2Sort.dir : 1 }; renderFailure(STATE); },
-    { emptyMessage: "No vendor-day breached the Rule 2 threshold" });
-}
-
-/* ======================== TAB 4 — ACTIVITY MONITOR ====================== */
-function renderActivity(s){
-  const k = s.kpis;
-  $("#activityKpis").innerHTML = [
-    kpiCard("Red", num(k.activityRed), "overdue beyond dynamic threshold", k.activityRed ? "red" : "green"),
-    kpiCard("Yellow", num(k.activityYellow), `≥${pct(CONFIG.activity.yellowRatio, 0)} of threshold`, k.activityYellow ? "amber" : "green"),
-    kpiCard("Green", num(k.activityGreen), "within expected range", "green"),
-    kpiCard("Grey", num(k.activityGrey), "quiet hour &mdash; monitoring suppressed"),
-    kpiCard("Dormant", num(k.dormantVendors), "silent beyond any historical gap", k.dormantVendors ? "red" : "green")
-  ].join("");
-
-  const q = UI.activitySearch.trim().toLowerCase();
-  const rows = s.vendors.filter(v => v.activity)
-    .filter(v => !q || v.displayName.toLowerCase().indexOf(q) !== -1);
-
-  buildTable($("#activityTable"), [
-    { key: "light", label: "Activity", sortValue: v => STATUS_RANK[v.activity.light], render: v => lightBadge(v.activity.light) },
-    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
-      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>`
-        + (v.activity.dormant ? ` <span class="sig on-red">DORMANT</span>` : "") },
-    { key: "last", label: "Last transaction", sortValue: v => v.activity.lastTxn.getTime(),
-      render: v => esc(fmtDate(v.activity.lastTxn)) },
-    { key: "mins", label: "Since", num: true, sortValue: v => v.activity.minutesSinceLast,
-      render: v => `<span title="${esc(num(v.activity.minutesSinceLast))} min">${esc(fmtDuration(v.activity.minutesSinceLast))}</span>` },
-    { key: "median", label: "Median gap", num: true, title: "Median interval between this vendor's transactions",
-      sortValue: v => v.activity.medianIntervalMin, render: v => v.activity.medianIntervalMin.toFixed(1) + " min" },
-    { key: "p90", label: "p90 gap", num: true, sortValue: v => v.activity.p90IntervalMin,
-      render: v => v.activity.p90IntervalMin.toFixed(0) + " min" },
-    { key: "base", label: "Base thr", num: true, title: "clamp(round(p90 gap), band lo, band hi)",
-      sortValue: v => v.activity.baseThresholdMin, render: v => num(v.activity.baseThresholdMin) },
-    { key: "thr", label: "Dynamic thr", num: true, title: "Base threshold × hour-class multiplier",
-      sortValue: v => v.activity.dynamicThresholdMin == null ? -1 : v.activity.dynamicThresholdMin,
-      render: v => v.activity.dynamicThresholdMin == null
-        ? `<span style="color:var(--text-faint)">suppressed</span>` : num(v.activity.dynamicThresholdMin) + " min" },
-    { key: "freq", label: "Frequency", sortValue: v => v.activity.frequencyClass,
-      render: v => `<span class="tag">${esc(v.activity.frequencyClass.replace("_FREQUENCY", ""))}</span>` },
-    { key: "hourClass", label: "Hour class", sortValue: v => v.activity.hourClass, render: v => hourClassTag(v.activity.hourClass) },
-    { key: "mode", label: "Mode", sortValue: v => v.activity.monitoringMode, render: v => esc(v.activity.monitoringMode) },
-    { key: "hist", label: "Hist. txns", num: true, title: "Transactions this vendor has ever recorded in this weekday+hour slot",
-      sortValue: v => v.activity.histCount, render: v => `${num(v.activity.histCount)} / ${num(v.activity.dowMax)}` },
-    { key: "curVol", label: "Cur vol", num: true, sortValue: v => v.failure ? v.failure.currentVolume : -1,
-      render: v => v.failure ? num(v.failure.currentVolume) : "—" },
-    { key: "expVol", label: "Expected", num: true, sortValue: v => v.failure ? v.failure.expectedVolumeScaled : -1,
-      render: v => v.failure ? v.failure.expectedVolumeScaled.toFixed(1) : "—" },
-    { key: "sigma", label: "σ dev", num: true, sortValue: v => v.failure ? v.failure.sigmaDeviationScaled : -1,
-      render: v => v.failure ? v.failure.sigmaDeviationScaled.toFixed(2) : "—" },
-    { key: "dir", label: "Direction", sortValue: v => v.failure ? v.failure.volumeDirection : "",
-      render: v => v.failure ? `<span class="tag">${esc(v.failure.volumeDirection.replace(/_/g, " "))}</span>` : "—" },
-    { key: "why", label: "Assessment", sortable: false,
-      render: v => {
-        const a = v.alerts.find(x => x.dimension === "ACTIVITY");
-        return a ? `<span class="truncate" style="max-width:420px;color:var(--text-dim)" title="${esc(a.message)}">${esc(a.message)}</span>`
-                 : `<span style="color:var(--text-faint)">within expected range</span>`;
-      } }
-  ], rows, UI.activitySort,
-    key => { UI.activitySort = { key, dir: UI.activitySort.key === key ? -UI.activitySort.dir : 1 }; renderActivity(STATE); },
-    { rowClass: v => "row-" + v.activity.light,
-      emptyMessage: `No vendor has the ${CONFIG.vendor.hubMinTxns}+ transactions needed for a cadence profile` });
-}
-
-/* ========================= TAB 5 — REASON ANALYSIS ====================== */
-function renderReason(s){
-  const totalFailures = s.kpis.analysedFailures;
-  $("#reasonSub").textContent =
-    `${s.categories.length} categories over ${num(totalFailures)} failures`;
-
-  buildTable($("#categoryTable"), [
-    { key: "cat", label: "Category", sortValue: c => c.category,
-      render: c => `<strong>${esc(c.category)}</strong>` },
-    { key: "failures", label: "Failures", num: true, sortValue: c => c.failures, render: c => num(c.failures) },
-    { key: "share", label: "Share", num: true, sortValue: c => c.share, render: c => pct(c.share) },
-    { key: "bar", label: "", sortable: false, render: c => {
-        const w = (100 * c.failures / Math.max(1, s.categories[0].failures)).toFixed(1);
-        return `<div class="minibar" style="min-width:90px"><span style="width:${w}%"></span></div>`; } },
-    { key: "vendors", label: "Vendors", num: true, sortValue: c => c.vendorCount, render: c => num(c.vendorCount) },
-    { key: "first", label: "First seen", sortValue: c => c.firstSeen.getTime(), render: c => esc(fmtDate(c.firstSeen)) },
-    { key: "last", label: "Last seen", sortValue: c => c.lastSeen.getTime(), render: c => esc(fmtDate(c.lastSeen)) }
-  ], s.categories, UI.categorySort,
-    key => { UI.categorySort = { key, dir: UI.categorySort.key === key ? -UI.categorySort.dir : 1 }; renderReason(STATE); },
-    {
-      rowClass: () => "clickable",
-      rowAttrs: c => `data-cat="${esc(c.category)}"`,
-      expanded: c => UI.openCategory === c.category,
-      renderDetail: c => `<h3 style="font-size:12.5px;margin-bottom:8px">Raw reasons in “${esc(c.category)}”</h3>`
-        + c.topReasons.map(([text, n]) =>
-            `<div class="stat-line"><span class="k reason-text">${esc(truncate(text, CONFIG.display.maxReasonChars))}</span><span class="v">${esc(num(n))}</span></div>`).join("")
-        + (c.reasons.size > c.topReasons.length
-            ? `<div class="kpi-sub" style="margin-top:8px">${esc(num(c.reasons.size - c.topReasons.length))} further distinct texts not shown</div>` : ""),
-      emptyMessage: "No failures to categorise"
-    });
-
-  $$("#categoryTable tbody tr.clickable").forEach(tr => {
-    tr.addEventListener("click", () => {
-      UI.openCategory = UI.openCategory === tr.dataset.cat ? null : tr.dataset.cat;
-      renderReason(STATE);
-    });
-  });
-
-  const unmappedTotal = s.unmapped.reduce((a, u) => a + u.count, 0);
-  $("#unmappedNote").innerHTML = s.unmapped.length
-    ? `<strong>${esc(num(unmappedTotal))} failures</strong> across
-       <strong>${esc(num(s.unmapped.length))} distinct texts</strong> match no keyword and fall through to
-       “Unspecified” (${esc(pct(ratio(unmappedTotal, totalFailures)))} of all failures). Literal “N/A”
-       reasons are excluded from this list. Each line here is a candidate keyword for
-       <code>REASON_MAP</code> &mdash; adding one reclassifies every matching failure on the next load.`
-    : `Every failure reason matched a keyword. Nothing to add to <code>REASON_MAP</code>.`;
-
-  buildTable($("#unmappedTable"), [
-    { key: "count", label: "Count", num: true, sortValue: u => u.count, render: u => num(u.count) },
-    { key: "vendors", label: "Vendors", num: true, sortValue: u => u.vendorCount, render: u => num(u.vendorCount) },
-    { key: "last", label: "Last seen", sortValue: u => u.lastSeen.getTime(), render: u => esc(fmtDate(u.lastSeen)) },
-    { key: "reason", label: "Raw reason text", sortable: false,
-      render: u => `<div class="reason-text">${esc(truncate(u.reason, CONFIG.display.maxReasonChars))}</div>` }
-  ], s.unmapped.slice(0, CONFIG.display.topUnmapped), null, null,
-    { emptyMessage: "No unmapped failure reasons" });
-}
-
-/* ========================== TAB 6 — VENDOR DETAIL ======================= */
-function renderVendorPicker(s){
-  const select = $("#vendorPick");
-  if(!s.vendors.length){ select.innerHTML = ""; return; }
-  if(!UI.vendor || !s.vendors.some(v => v.vendorKey === UI.vendor)) UI.vendor = s.vendors[0].vendorKey;
-  select.innerHTML = [...s.vendors]
-    .sort((a, b) => a.displayName.localeCompare(b.displayName))
-    .map(v => `<option value="${esc(v.vendorKey)}"${v.vendorKey === UI.vendor ? " selected" : ""}>`
-      + `${esc(v.displayName)} — ${v.overall}</option>`).join("");
-}
-
-function renderVendor(s){
-  const v = s.vendors.find(x => x.vendorKey === UI.vendor);
-  const host = $("#vendorDetail");
-  if(!v){ host.innerHTML = emptyChart("No vendor selected"); return; }
-
-  // Daily series for this vendor only.
-  const perDay = new Map();
-  for(const t of v.rows){
-    let d = perDay.get(t.dayKey);
-    if(!d){ d = { day: t.dayKey, transactions: 0, failures: 0 }; perDay.set(t.dayKey, d); }
-    d.transactions++; if(t.isFailure) d.failures++;
-  }
-  const daily = [...perDay.values()].sort((a, b) => a.day.localeCompare(b.day));
-  const days = daily.map(d => d.day);
-
-  const act = v.activity;
-  const maxHour = act ? Math.max(1, ...act.hourHistogram) : 1;
-  const hourGrid = act ? `
-    <div class="hour-grid">${act.hourHistogram.map((n, h) => {
-      const alpha = n === 0 ? 0.06 : 0.15 + 0.85 * (n / maxHour);
-      const isNow = h === act.currentHour;
-      return `<div class="hour-cell" title="${h}:00 — ${esc(num(n))} transactions"
-        style="background:color-mix(in srgb, var(--blue) ${(alpha * 100).toFixed(0)}%, transparent);
-               ${isNow ? "outline:2px solid var(--red);outline-offset:1px" : ""}"></div>`;
-    }).join("")}</div>
-    <div class="hour-axis">${Array.from({ length: 24 }, (_, h) => h % 3 === 0 ? h : "").map(l => `<span>${l}</span>`).join("")}</div>
-    <div class="kpi-sub" style="margin-top:7px">Transactions by hour of day across all history.
-      The outlined column is the current hour (${String(act.currentHour).padStart(2, "0")}:00,
-      ${esc(act.currentDayName)}), classified <strong>${esc(act.hourClass)}</strong>.</div>` : "";
-
-  host.innerHTML = `
-    <div class="grid three-col" style="margin-bottom:16px">
-      ${kpiCard("Overall", v.overall, `${v.failure ? "failure " + v.failure.light : "no signal"} · ${act ? "activity " + act.light : "no profile"}`,
-        v.overall === "RED" ? "red" : v.overall === "YELLOW" ? "amber" : v.overall === "GREEN" ? "green" : null)}
-      ${kpiCard("Lifetime transactions", num(v.totalVolume), `${num(v.totalFailures)} failures · ${pct(ratio(v.totalFailures, v.totalVolume))}`)}
-      ${kpiCard("Last transaction", act ? fmtDuration(act.minutesSinceLast) + " ago" : "—",
-        act ? esc(fmtDate(act.lastTxn)) : "")}
-    </div>
-    <div style="margin-bottom:16px">${vendorDetailPanel(v, false)}</div>
-    <div class="grid two-col">
-      <div class="card"><div class="card-head"><h3>Daily volume</h3></div>
-        <div class="card-body" id="vdVolume"></div></div>
-      <div class="card"><div class="card-head"><h3>Daily failure rate</h3></div>
-        <div class="card-body" id="vdRate"></div></div>
-    </div>
-    <div class="grid two-col" style="margin-top:16px">
-      <div class="card"><div class="card-head"><h3>Activity by hour of day</h3></div>
-        <div class="card-body">${hourGrid || emptyChart("No cadence profile — fewer than " + CONFIG.vendor.hubMinTxns + " transactions")}</div></div>
-      <div class="card"><div class="card-head"><h3>Top failure categories</h3></div>
-        <div class="card-body" id="vdCats"></div></div>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <div class="card-head"><h3>Recent transactions</h3>
-        <span class="card-sub">most recent ${CONFIG.display.recentTransactions}, raw and unmodified</span></div>
-      <div class="card-body flush"><div class="table-wrap scroll-y"><table id="vdRecent"></table></div></div>
-    </div>`;
-
-  lineChart($("#vdVolume"), days, [
-    { label: "Successful", colour: CHART_COLOURS.success, values: daily.map(d => d.transactions - d.failures) },
-    { label: "Failed", colour: CHART_COLOURS.failure, values: daily.map(d => d.failures) }
-  ], { emptyMessage: "No transactions" });
-
-  lineChart($("#vdRate"), days, [
-    { label: "Failure rate", colour: CHART_COLOURS.failure, values: daily.map(d => ratio(d.failures, d.transactions)) }
-  ], { max: 1, yFormat: v2 => pct(v2, 0), tipFormat: v2 => pct(v2),
-       threshold: CONFIG.rule2.rateThreshold, thresholdLabel: pct(CONFIG.rule2.rateThreshold, 0),
-       emptyMessage: "No transactions" });
-
-  const cats = new Map();
-  for(const t of v.rows) if(t.isFailure) cats.set(t.category, (cats.get(t.category) || 0) + 1);
-  barChart($("#vdCats"), [...cats.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
-    .map(([label, value]) => ({ label, value, sub: pct(ratio(value, v.totalFailures)) })),
-    { emptyMessage: "No failures recorded for this vendor" });
-
-  const recent = v.rows.slice(-CONFIG.display.recentTransactions).reverse();
-  buildTable($("#vdRecent"), [
-    { key: "date", label: "Timestamp", sortable: false, render: t => esc(fmtDate(t.date)) },
-    { key: "status", label: "Status", sortable: false,
-      render: t => t.isFailure ? `<span class="light light-RED"><span class="glyph">●</span>FAILURE</span>`
-                               : `<span class="light light-GREEN"><span class="glyph">✓</span>SUCCESS</span>` },
-    { key: "po", label: "PO", sortable: false, cellClass: "mono", render: t => esc(t.po || "—") },
-    { key: "cat", label: "Category", sortable: false, render: t => t.isFailure ? esc(t.category) : "—" },
-    { key: "reason", label: "Raw reason", sortable: false,
-      render: t => `<span class="truncate" style="max-width:520px" title="${esc(t.reason)}">${esc(truncate(t.reason, 200))}</span>` }
-  ], recent, null, null, { emptyMessage: "No transactions" });
 }
 
 /* ========================= DATA QUALITY PANEL =========================== */
@@ -2415,17 +2796,27 @@ function render(){
     + `Fresh ≤${CONFIG.freshness.freshMinutes} min, Delayed ≤${CONFIG.freshness.delayedMinutes} min, `
     + `Stale beyond. This indicator does not affect any calculation.`;
 
+  // The vendor scope is always stated: a fixed cutoff that silently excluded
+  // half the estate would be worse than no filter at all.
+  const sc = s.scope;
+  $("#scopeStrip").innerHTML = sc.fellBack
+    ? `<span class="warn">No brand has transacted since ${esc(fmtDay(dayKeyOf(sc.liveSince)))}</span>
+       — showing all ${esc(num(sc.monitoredCount))} brands instead of an empty dashboard.
+       Update <code>CONFIG.vendorScope.liveSince</code> for this dataset.`
+    : `Live brands since ${esc(fmtDay(dayKeyOf(sc.liveSince)))} ·
+       <strong>${esc(num(sc.liveCount))}</strong> of ${esc(num(sc.monitoredCount))} monitored
+       ${sc.retiredCount ? `· ${esc(num(sc.retiredCount))} retired, available on Operations` : ""}`;
+
+  // Both badges count brands, so the two tabs are directly comparable: Today is
+  // brands with any alert, Live is brands whose traffic light is not green.
+  const todayCount = new Set(s.todayAlerts.map(a => a.vendorKey)).size;
+  $("#cntToday").outerHTML = `<span class="count${todayCount ? " alarm" : ""}" id="cntToday">${num(todayCount)}</span>`;
   const attention = s.kpis.attentionVendors;
   $("#cntLive").outerHTML = `<span class="count${attention ? " alarm" : ""}" id="cntLive">${num(attention)}</span>`;
-  const failCount = s.kpis.redVendors + s.kpis.yellowVendors;
-  $("#cntFailure").outerHTML = `<span class="count${failCount ? " alarm" : ""}" id="cntFailure">${num(failCount)}</span>`;
-  const actCount = s.kpis.activityRed + s.kpis.activityYellow;
-  $("#cntActivity").outerHTML = `<span class="count${actCount ? " alarm" : ""}" id="cntActivity">${num(actCount)}</span>`;
 
-  renderOverview(s);
+  renderToday(s);
   renderLive(s);
-  renderFailure(s);
-  renderActivity(s);
+  renderOperations(s);
   renderReason(s);
   renderVendorPicker(s);
   renderVendor(s);
@@ -2503,13 +2894,19 @@ function loadRows(rawRows, label){
       return false;
     }
     STATE = next;
+    // Reset every filter: a selection from the previous dataset could otherwise
+    // silently hide rows in the new one.
     UI.liveOpen.clear();
     UI.openCategory = null;
     UI.vendor = null;
-    UI.liveSearch = ""; UI.activitySearch = ""; UI.rule2Search = "";
-    UI.liveStatus = "ALL";
-    $("#liveSearch").value = ""; $("#activitySearch").value = ""; $("#rule2Search").value = "";
-    $("#liveStatus").value = "ALL";
+    UI.liveSearch = ""; UI.liveStatus = "ALL";
+    UI.opsVendor = "ALL"; UI.opsPeriod = "all"; UI.opsGranularity = "day";
+    UI.opsRetired = false; UI.opsFrom = ""; UI.opsTo = "";
+    $("#liveSearch").value = ""; $("#liveStatus").value = "ALL";
+    $("#opsPeriod").value = "all"; $("#opsGranularity").value = "day";
+    $("#opsRetired").checked = false; $("#opsRange").hidden = true;
+    $("#opsFrom").value = ""; $("#opsTo").value = "";
+    renderOpsVendorOptions(STATE);
     render();
     return true;
   } catch(err){
@@ -2558,11 +2955,47 @@ function wireEvents(){
 
   $("#liveStatus").addEventListener("change", e => { UI.liveStatus = e.target.value; renderLive(STATE); });
   $("#liveSearch").addEventListener("input", e => { UI.liveSearch = e.target.value; renderLive(STATE); });
-  $("#activitySearch").addEventListener("input", e => { UI.activitySearch = e.target.value; renderActivity(STATE); });
-  $("#rule2Search").addEventListener("input", e => { UI.rule2Search = e.target.value; renderFailure(STATE); });
   $("#vendorPick").addEventListener("change", e => { UI.vendor = e.target.value; renderVendor(STATE); });
 
+  // Operations filters. Each one re-runs the same aggregate(), so every panel
+  // on the page moves together and none can show a stale slice.
+  $("#opsVendor").addEventListener("change", e => { UI.opsVendor = e.target.value; renderOperations(STATE); });
+  $("#opsGranularity").addEventListener("change", e => { UI.opsGranularity = e.target.value; renderOperations(STATE); });
+  $("#opsRetired").addEventListener("change", e => {
+    UI.opsRetired = e.target.checked;
+    // The brand list itself changes with the toggle, so rebuild it before
+    // re-rendering — otherwise a retired selection could survive being hidden.
+    renderOpsVendorOptions(STATE);
+    renderOperations(STATE);
+  });
+  $("#opsPeriod").addEventListener("change", e => {
+    UI.opsPeriod = e.target.value;
+    $("#opsRange").hidden = UI.opsPeriod !== "custom";
+    renderOperations(STATE);
+  });
+  $("#opsFrom").addEventListener("change", e => { UI.opsFrom = e.target.value; renderOperations(STATE); });
+  $("#opsTo").addEventListener("change", e => { UI.opsTo = e.target.value; renderOperations(STATE); });
+  $("#opsReset").addEventListener("click", () => {
+    UI.opsVendor = "ALL"; UI.opsPeriod = "all"; UI.opsGranularity = "day";
+    UI.opsRetired = false; UI.opsFrom = ""; UI.opsTo = "";
+    $("#opsPeriod").value = "all"; $("#opsGranularity").value = "day";
+    $("#opsRetired").checked = false; $("#opsRange").hidden = true;
+    $("#opsFrom").value = ""; $("#opsTo").value = "";
+    renderOpsVendorOptions(STATE);
+    renderOperations(STATE);
+  });
+
   window.addEventListener("scroll", hideTooltip, { passive: true });
+}
+
+/** Brand options for the Operations filter, scoped by the retired toggle. */
+function renderOpsVendorOptions(s){
+  const list = (UI.opsRetired ? s.vendors : s.liveVendors)
+    .slice().sort((a, b) => a.displayName.localeCompare(b.displayName));
+  if(UI.opsVendor !== "ALL" && !list.some(v => v.vendorKey === UI.opsVendor)) UI.opsVendor = "ALL";
+  $("#opsVendor").innerHTML = `<option value="ALL">All brands</option>`
+    + list.map(v => `<option value="${esc(v.vendorKey)}"${v.vendorKey === UI.opsVendor ? " selected" : ""}>`
+        + `${esc(v.displayName)}${v.live ? "" : " (retired)"}</option>`).join("");
 }
 
 /* ============================== SELF TEST ==============================
@@ -2585,6 +3018,24 @@ function selfTestPayload(){
       baselineStart: iso(s.window.baselineStart)
     },
     kpis: s.kpis,
+    scope: {
+      liveSince: iso(s.scope.liveSince),
+      liveCount: s.scope.liveCount,
+      monitoredCount: s.scope.monitoredCount,
+      retiredCount: s.scope.retiredCount,
+      fellBack: s.scope.fellBack,
+      liveKeys: [...s.liveKeys].sort()
+    },
+    todayPage: {
+      dayKey: s.today.dayKey,
+      transactions: s.today.agg.totals.transactions,
+      failures: s.today.agg.totals.failures,
+      failureRate: s.today.agg.totals.failureRate,
+      rule2Alerts: s.today.agg.rule2Alerts.length,
+      activeVendors: s.today.activeVendors,
+      alerts: s.todayAlerts.length,
+      priorSlices: s.today.priorSlices.map(p => p.transactions)
+    },
     quality: {
       rawRows: s.ledger.rawRows, analysable: s.ledger.analysable,
       excludedBlankRow: s.ledger.excludedBlankRow,
@@ -2592,12 +3043,14 @@ function selfTestPayload(){
       excludedBadDate: s.ledger.excludedBadDate
     },
     signals: {}, activity: {}, streaks: {}, registry: {},
-    categories: s.categories.map(c => ({
+    // Reason analysis is live-scoped on the page, so the oracle checks the same
+    // scope. Engine parity (signals/activity/streaks/registry) stays unscoped.
+    categories: s.liveAgg.categories.map(c => ({
       category: c.category, failures: c.failures, share: c.share,
       vendors: c.vendorCount, firstSeen: iso(c.firstSeen), lastSeen: iso(c.lastSeen)
     })),
-    unmapped: Object.fromEntries(s.unmapped.map(u => [u.reason, u.count])),
-    rule2Alerts: s.rule2Alerts.length
+    unmapped: Object.fromEntries(s.liveAgg.unmapped.map(u => [u.reason, u.count])),
+    rule2Alerts: s.liveAgg.rule2Alerts.length
   };
   for(const [key, g] of s.signals){
     out.signals[key] = {
@@ -2648,8 +3101,9 @@ function selfTestPayload(){
   applyTheme(theme);
 
   wireEvents();
-  showTab("overview");
+  showTab("today");
   STATE = computeAll(rehydrate(EMBEDDED_DATA));
+  renderOpsVendorOptions(STATE);
   render();
 
   if(/[?&]selftest=1/.test(location.search)){

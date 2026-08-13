@@ -29,7 +29,7 @@ const fs = require("fs");
 
   // Every tab must render without throwing — a chart or table that only breaks
   // on click is still broken.
-  const tabs = ["overview", "live", "failure", "activity", "reason", "vendor"];
+  const tabs = ["today", "live", "operations", "reason", "vendor"];
   for (const t of tabs) {
     await page.click(`.tab[data-tab="${t}"]`);
     await page.waitForTimeout(120);
@@ -39,16 +39,18 @@ const fs = require("fs");
   await page.click("#btnQualityClose");
 
   const counts = await page.evaluate(() => ({
-    kpiCards: document.querySelectorAll("#kpiRow .kpi").length,
+    todayKpis: document.querySelectorAll("#todayKpis .kpi").length,
+    todayAlerts: document.querySelectorAll("#todayAlerts .alert-item").length,
     liveRows: document.querySelectorAll("#liveTable tbody tr").length,
-    signalRows: document.querySelectorAll("#signalTable tbody tr").length,
-    activityRows: document.querySelectorAll("#activityTable tbody tr").length,
+    opsKpis: document.querySelectorAll("#opsKpis .kpi").length,
+    opsVendorRows: document.querySelectorAll("#opsVendorTable tbody tr").length,
+    opsRule2Rows: document.querySelectorAll("#opsRule2Table tbody tr").length,
     categoryRows: document.querySelectorAll("#categoryTable tbody tr").length,
     unmappedRows: document.querySelectorAll("#unmappedTable tbody tr").length,
-    rule2Rows: document.querySelectorAll("#rule2Table tbody tr").length,
     charts: document.querySelectorAll("svg.chart").length,
     asOf: document.querySelector("#asOf").textContent,
-    freshness: document.querySelector("#freshText").textContent
+    freshness: document.querySelector("#freshText").textContent,
+    scope: document.querySelector("#scopeStrip").textContent.replace(/\s+/g, " ").trim()
   }));
 
   await browser.close();
