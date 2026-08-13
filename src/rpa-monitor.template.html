@@ -1,0 +1,2669 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RPA Vendor Monitor</title>
+<style>
+/* ==========================================================================
+   Tokens. Light is the base; dark overrides only the values, so no colour is
+   ever defined solely inside a media query.
+   ========================================================================== */
+:root{
+  --bg:#f1f5f9; --surface:#ffffff; --surface-2:#f8fafc; --surface-3:#eef2f7;
+  --border:#e2e8f0; --border-strong:#cbd5e1;
+  --text:#0f172a; --text-dim:#475569; --text-faint:#94a3b8;
+  --red:#dc2626; --red-bg:#fef2f2; --red-border:#fecaca;
+  --amber:#d97706; --amber-bg:#fffbeb; --amber-border:#fde68a;
+  --green:#16a34a; --green-bg:#f0fdf4; --green-border:#bbf7d0;
+  --grey:#64748b; --grey-bg:#f8fafc; --grey-border:#e2e8f0;
+  --blue:#2563eb; --blue-bg:#eff6ff; --blue-border:#bfdbfe;
+  --shadow:0 1px 2px rgba(15,23,42,.06), 0 4px 12px rgba(15,23,42,.05);
+  --shadow-lg:0 8px 32px rgba(15,23,42,.14);
+  --radius:12px; --radius-sm:8px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+:root[data-theme="dark"]{
+  --bg:#0b1120; --surface:#111827; --surface-2:#0f172a; --surface-3:#1e293b;
+  --border:#1e293b; --border-strong:#334155;
+  --text:#e2e8f0; --text-dim:#94a3b8; --text-faint:#64748b;
+  --red:#f87171; --red-bg:#2a1215; --red-border:#7f1d1d;
+  --amber:#fbbf24; --amber-bg:#2a2010; --amber-border:#78350f;
+  --green:#4ade80; --green-bg:#0f2418; --green-border:#14532d;
+  --grey:#94a3b8; --grey-bg:#151d2c; --grey-border:#293548;
+  --blue:#60a5fa; --blue-bg:#12203a; --blue-border:#1e3a8a;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
+  --shadow-lg:0 8px 32px rgba(0,0,0,.5);
+}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0; font-weight:650; letter-spacing:-.01em}
+a{color:var(--blue)}
+button{font:inherit; font-variant-numeric:tabular-nums}
+
+/* ================================ top bar ================================ */
+.topbar{
+  position:sticky; top:0; z-index:60; background:var(--surface);
+  border-bottom:1px solid var(--border); box-shadow:var(--shadow);
+}
+.topbar-inner{
+  max-width:1680px; margin:0 auto; padding:10px 20px;
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+}
+.brand{display:flex; align-items:center; gap:10px; margin-right:4px}
+.brand-mark{
+  width:30px; height:30px; border-radius:8px; flex:none;
+  background:linear-gradient(135deg,var(--blue),#7c3aed);
+  display:grid; place-items:center; color:#fff; font-weight:700; font-size:13px;
+}
+.brand-name{font-size:15px; font-weight:680; letter-spacing:-.02em; white-space:nowrap}
+.asof{
+  display:flex; flex-direction:column; gap:1px; padding-left:16px;
+  border-left:1px solid var(--border); line-height:1.25;
+}
+.asof-label{font-size:10px; text-transform:uppercase; letter-spacing:.07em; color:var(--text-faint); font-weight:600}
+.asof-value{font-size:13px; font-weight:620; font-variant-numeric:tabular-nums}
+.spacer{flex:1 1 auto}
+.btn{
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 13px; border-radius:var(--radius-sm);
+  border:1px solid var(--border-strong); background:var(--surface);
+  color:var(--text); cursor:pointer; font-size:13px; font-weight:550;
+  transition:background .12s,border-color .12s;
+}
+.btn:hover{background:var(--surface-3); border-color:var(--text-faint)}
+.btn:focus-visible{outline:2px solid var(--blue); outline-offset:2px}
+.btn-primary{background:var(--blue); border-color:var(--blue); color:#fff}
+.btn-primary:hover{filter:brightness(1.08); background:var(--blue)}
+
+/* freshness pill */
+.pill{
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  padding:5px 11px; border-radius:999px; font-size:12px; font-weight:620;
+  border:1px solid transparent;
+}
+.pill .dot{width:7px; height:7px; border-radius:50%; background:currentColor; flex:none}
+.pill.fresh{color:var(--green); background:var(--green-bg); border-color:var(--green-border)}
+.pill.delayed{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border)}
+.pill.stale{color:var(--red); background:var(--red-bg); border-color:var(--red-border)}
+
+/* ================================= tabs ================================== */
+.tabs{
+  position:sticky; top:53px; z-index:50; background:var(--surface);
+  border-bottom:1px solid var(--border); overflow-x:auto; scrollbar-width:thin;
+}
+.tabs-inner{max-width:1680px; margin:0 auto; padding:0 20px; display:flex; gap:2px}
+.tab{
+  appearance:none; border:0; background:none; color:var(--text-dim);
+  padding:11px 14px; cursor:pointer; font-size:13.5px; font-weight:560;
+  border-bottom:2px solid transparent; white-space:nowrap;
+}
+.tab:hover{color:var(--text)}
+.tab[aria-selected="true"]{color:var(--blue); border-bottom-color:var(--blue)}
+.tab .count{
+  display:inline-block; margin-left:6px; padding:1px 6px; border-radius:999px;
+  background:var(--surface-3); color:var(--text-dim); font-size:11px; font-weight:650;
+}
+.tab .count.alarm{background:var(--red-bg); color:var(--red)}
+
+main{max-width:1680px; margin:0 auto; padding:20px}
+.panel[hidden]{display:none}
+section+section{margin-top:20px}
+
+/* ================================ cards ================================== */
+.card{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden;
+}
+.card-head{
+  padding:13px 16px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+}
+.card-head h2{font-size:14px}
+.card-head h3{font-size:13px}
+.card-sub{font-size:12px; color:var(--text-dim); font-weight:450}
+.card-body{padding:16px}
+.card-body.flush{padding:0}
+
+.grid{display:grid; gap:14px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
+.two-col{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}
+.three-col{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+
+.kpi{
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); padding:14px 15px; box-shadow:var(--shadow);
+}
+.kpi-label{
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--text-faint); font-weight:660; margin-bottom:7px;
+}
+.kpi-value{font-size:27px; font-weight:680; letter-spacing:-.025em; line-height:1.05}
+.kpi-sub{font-size:11.5px; color:var(--text-dim); margin-top:5px; line-height:1.35}
+.kpi.is-red .kpi-value{color:var(--red)}
+.kpi.is-amber .kpi-value{color:var(--amber)}
+.kpi.is-green .kpi-value{color:var(--green)}
+.kpi.is-blue .kpi-value{color:var(--blue)}
+
+/* =============================== status ================================= */
+.light{
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  padding:3px 9px; border-radius:999px; font-size:11px; font-weight:680;
+  letter-spacing:.03em; border:1px solid;
+}
+.light .glyph{font-size:10px; line-height:1}
+.light-RED{color:var(--red); background:var(--red-bg); border-color:var(--red-border)}
+.light-YELLOW{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border)}
+.light-GREEN{color:var(--green); background:var(--green-bg); border-color:var(--green-border)}
+.light-GREY{color:var(--grey); background:var(--grey-bg); border-color:var(--grey-border)}
+
+.sig{
+  display:inline-block; padding:2px 7px; margin:1px 3px 1px 0; border-radius:5px;
+  font-size:10.5px; font-weight:650; border:1px solid;
+  color:var(--text-dim); background:var(--surface-3); border-color:var(--border);
+}
+.sig.on-red{color:var(--red); background:var(--red-bg); border-color:var(--red-border)}
+.sig.on-amber{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border)}
+.sig.on-blue{color:var(--blue); background:var(--blue-bg); border-color:var(--blue-border)}
+
+.tag{
+  display:inline-block; padding:1.5px 7px; border-radius:5px; font-size:10.5px;
+  font-weight:620; background:var(--surface-3); color:var(--text-dim);
+  border:1px solid var(--border);
+}
+.tag.peak{color:var(--red); background:var(--red-bg); border-color:var(--red-border)}
+.tag.active{color:var(--blue); background:var(--blue-bg); border-color:var(--blue-border)}
+.tag.watch{color:var(--amber); background:var(--amber-bg); border-color:var(--amber-border)}
+.tag.quiet{color:var(--grey); background:var(--grey-bg); border-color:var(--grey-border)}
+
+/* =============================== tables ================================= */
+.table-wrap{overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch}
+table{border-collapse:separate; border-spacing:0; width:100%; font-size:12.5px}
+thead th{
+  position:sticky; top:0; z-index:10; background:var(--surface-2);
+  border-bottom:1px solid var(--border-strong);
+  padding:9px 11px; text-align:left; white-space:nowrap;
+  font-size:10.5px; text-transform:uppercase; letter-spacing:.055em;
+  font-weight:680; color:var(--text-dim);
+}
+thead th.sortable{cursor:pointer; user-select:none}
+thead th.sortable:hover{color:var(--text); background:var(--surface-3)}
+thead th .arrow{opacity:.4; font-size:9px; margin-left:3px}
+thead th[aria-sort] .arrow{opacity:1; color:var(--blue)}
+tbody td{padding:8px 11px; border-bottom:1px solid var(--border); vertical-align:middle}
+tbody tr:nth-child(even) td{background:var(--surface-2)}
+tbody tr:hover td{background:var(--surface-3)}
+tbody tr.clickable{cursor:pointer}
+td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
+td.mono{font-family:var(--mono); font-size:11.5px}
+td.nowrap{white-space:nowrap}
+td.vendor{font-weight:620; max-width:230px}
+.truncate{display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+tr.row-RED td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+tr.row-YELLOW td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+tr.row-GREY td:first-child{box-shadow:inset 3px 0 0 var(--grey)}
+tr.detail-row td{background:var(--surface-3)!important; padding:0}
+/* The vendor table is deliberately wider than the viewport. Without this the
+   expanded panel inherits that width and its right-hand column — the metric
+   values — sits off-screen. Sticking it to the left edge keeps the whole panel
+   readable no matter how far the table is scrolled. */
+.detail-inner{
+  padding:14px 16px; border-left:3px solid var(--blue);
+  position:sticky; left:0; width:min(1580px, calc(100vw - 74px));
+  box-sizing:border-box;
+}
+@media (max-width:720px){ .detail-inner{width:calc(100vw - 30px)} }
+
+/* ============================== explanation ============================= */
+.explain{
+  font-size:12.5px; line-height:1.55; color:var(--text-dim);
+  padding:10px 12px; border-radius:var(--radius-sm);
+  background:var(--surface-2); border:1px solid var(--border);
+}
+.explain strong{color:var(--text); font-weight:640}
+.explain.sev-RED{background:var(--red-bg); border-color:var(--red-border)}
+.explain.sev-YELLOW{background:var(--amber-bg); border-color:var(--amber-border)}
+.explain.sev-GREY{background:var(--grey-bg); border-color:var(--grey-border)}
+.explain+.explain{margin-top:8px}
+
+.alert-item{
+  padding:11px 13px; border-radius:var(--radius-sm); border:1px solid var(--border);
+  background:var(--surface-2); display:flex; gap:11px; align-items:flex-start;
+}
+.alert-item+.alert-item{margin-top:9px}
+.alert-item.sev-RED{background:var(--red-bg); border-color:var(--red-border)}
+.alert-item.sev-YELLOW{background:var(--amber-bg); border-color:var(--amber-border)}
+.alert-item .body{flex:1; min-width:0}
+.alert-item .title{font-weight:660; font-size:13px; margin-bottom:3px}
+.alert-item .msg{font-size:12.5px; line-height:1.5; color:var(--text-dim)}
+
+/* ================================ charts ================================ */
+.chart{width:100%; height:auto; display:block; overflow:visible}
+.chart text{font-size:10px; fill:var(--text-faint); font-family:inherit}
+.chart .axis-line{stroke:var(--border-strong); stroke-width:1}
+.chart .grid-line{stroke:var(--border); stroke-width:1; stroke-dasharray:2 3}
+.chart .thresh{stroke:var(--red); stroke-width:1.5; stroke-dasharray:5 4}
+.chart .hit{fill:transparent; cursor:crosshair}
+.legend{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--text-dim); padding:0 4px 8px}
+.legend .key{display:inline-flex; align-items:center; gap:5px}
+.legend .swatch{width:9px; height:9px; border-radius:2px; flex:none}
+.tooltip{
+  position:fixed; z-index:200; pointer-events:none; opacity:0;
+  transition:opacity .1s; background:var(--surface); color:var(--text);
+  border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-lg); padding:8px 10px; font-size:11.5px; line-height:1.45;
+  max-width:280px;
+}
+.tooltip .tt-title{font-weight:660; margin-bottom:3px}
+.tooltip .tt-row{display:flex; justify-content:space-between; gap:14px}
+.tooltip .tt-row .v{font-variant-numeric:tabular-nums; font-weight:600}
+
+/* bar inside a table cell */
+.minibar{position:relative; min-width:110px; height:16px; background:var(--surface-3); border-radius:3px; overflow:hidden}
+.minibar span{position:absolute; inset:0 auto 0 0; background:var(--blue); opacity:.75}
+
+/* ============================ misc + controls =========================== */
+.controls{display:flex; gap:9px; align-items:center; flex-wrap:wrap}
+select,input[type=text],input[type=date],input[type=search]{
+  padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border-strong);
+  background:var(--surface); color:var(--text); font:inherit; font-size:12.5px; max-width:100%;
+}
+select:focus,input:focus{outline:2px solid var(--blue); outline-offset:-1px; border-color:var(--blue)}
+label.field{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-dim); font-weight:560}
+
+.empty{padding:34px 20px; text-align:center; color:var(--text-faint); font-size:13px}
+.empty .big{font-size:26px; margin-bottom:8px; opacity:.5}
+.note{
+  font-size:12px; line-height:1.55; color:var(--text-dim); padding:10px 12px;
+  border-radius:var(--radius-sm); background:var(--blue-bg);
+  border:1px solid var(--blue-border);
+}
+.note.warn{background:var(--amber-bg); border-color:var(--amber-border)}
+.note strong{color:var(--text)}
+.stat-line{display:flex; justify-content:space-between; gap:16px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12.5px}
+.stat-line:last-child{border-bottom:0}
+.stat-line .k{color:var(--text-dim)}
+.stat-line .v{font-weight:640; font-variant-numeric:tabular-nums}
+.reason-text{font-size:12px; line-height:1.55; color:var(--text-dim); word-break:break-word}
+.scroll-y{max-height:340px; overflow-y:auto}
+
+/* modal */
+.modal-backdrop{
+  position:fixed; inset:0; z-index:100; background:rgba(15,23,42,.55);
+  display:grid; place-items:center; padding:20px;
+}
+.modal-backdrop[hidden]{display:none}
+.modal{
+  background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow-lg);
+  max-width:920px; width:100%; max-height:85vh; display:flex; flex-direction:column;
+  border:1px solid var(--border);
+}
+.modal-head{padding:14px 17px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px}
+.modal-body{padding:17px; overflow:auto}
+
+.hour-grid{display:grid; grid-template-columns:repeat(24,1fr); gap:2px}
+.hour-cell{aspect-ratio:1; border-radius:2px; background:var(--surface-3); position:relative}
+.hour-axis{display:grid; grid-template-columns:repeat(24,1fr); gap:2px; margin-top:3px; font-size:8.5px; color:var(--text-faint); text-align:center}
+
+.sr-only{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0}
+
+@media (max-width:720px){
+  main{padding:13px}
+  .topbar-inner{padding:9px 13px; gap:11px}
+  .tabs-inner{padding:0 13px}
+  .asof{padding-left:11px}
+  .kpi-value{font-size:23px}
+}
+@media print{
+  .topbar,.tabs,.btn{display:none}
+  .card{break-inside:avoid; box-shadow:none}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark">RPA</div>
+      <div class="brand-name">RPA Vendor Monitor</div>
+    </div>
+    <div class="asof">
+      <span class="asof-label">Data as of</span>
+      <span class="asof-value" id="asOf">—</span>
+    </div>
+    <span class="pill" id="freshPill"><span class="dot"></span><span id="freshText">—</span></span>
+    <div class="spacer"></div>
+    <button class="btn" id="btnQuality" type="button">Data quality <span id="qualityCount"></span></button>
+    <button class="btn" id="btnLoad" type="button">Load data…</button>
+    <button class="btn" id="btnExport" type="button">Export CSV</button>
+    <button class="btn" id="btnTheme" type="button" aria-label="Toggle colour theme">Dark</button>
+    <input type="file" id="fileInput" accept=".csv,.json,.txt" hidden>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-inner" role="tablist">
+    <button class="tab" role="tab" data-tab="overview"  aria-selected="true">Executive Overview</button>
+    <button class="tab" role="tab" data-tab="live"      aria-selected="false">Live Vendor Monitor <span class="count" id="cntLive"></span></button>
+    <button class="tab" role="tab" data-tab="failure"   aria-selected="false">Failure Monitor <span class="count" id="cntFailure"></span></button>
+    <button class="tab" role="tab" data-tab="activity"  aria-selected="false">Activity Monitor <span class="count" id="cntActivity"></span></button>
+    <button class="tab" role="tab" data-tab="reason"    aria-selected="false">Reason Analysis</button>
+    <button class="tab" role="tab" data-tab="vendor"    aria-selected="false">Vendor Detail</button>
+  </div>
+</nav>
+
+<main>
+  <!-- ============================ OVERVIEW ============================ -->
+  <section class="panel" id="panel-overview">
+    <div class="grid kpis" id="kpiRow"></div>
+    <section class="grid two-col">
+      <div class="card">
+        <div class="card-head"><h2>Daily transaction volume</h2><span class="card-sub">successes vs failures</span></div>
+        <div class="card-body" id="chartVolume"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Daily failure rate</h2><span class="card-sub">with 20% Rule 2 threshold</span></div>
+        <div class="card-body" id="chartRate"></div>
+      </div>
+    </section>
+    <section class="grid two-col">
+      <div class="card">
+        <div class="card-head"><h2>Vendors requiring attention</h2><span class="card-sub" id="critSub"></span></div>
+        <div class="card-body scroll-y" id="criticalAlerts" style="max-height:620px"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Top failure categories</h2></div>
+        <div class="card-body" id="chartCategories"></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============================== LIVE ============================== -->
+  <section class="panel" id="panel-live" hidden>
+    <div class="card">
+      <div class="card-head">
+        <h2>Live vendor monitor</h2>
+        <span class="card-sub" id="liveSub"></span>
+        <div class="spacer"></div>
+        <div class="controls">
+          <label class="field">Status
+            <select id="liveStatus">
+              <option value="ALL">All</option>
+              <option value="ATTENTION">Needs attention</option>
+              <option value="RED">Red</option>
+              <option value="YELLOW">Yellow</option>
+              <option value="GREEN">Green</option>
+              <option value="GREY">Grey</option>
+            </select>
+          </label>
+          <input type="search" id="liveSearch" placeholder="Filter vendor…">
+        </div>
+      </div>
+      <div class="card-body" style="padding:0 16px 12px"><div class="note" id="liveNote"></div></div>
+      <div class="card-body flush"><div class="table-wrap"><table id="liveTable"></table></div></div>
+    </div>
+  </section>
+
+  <!-- ============================= FAILURE ============================= -->
+  <section class="panel" id="panel-failure" hidden>
+    <div class="grid kpis" id="failureKpis"></div>
+    <section class="card">
+      <div class="card-head"><h2>Signal detail</h2><span class="card-sub">current 2-hour window vs 7-day baseline, per vendor</span></div>
+      <div class="card-body flush"><div class="table-wrap"><table id="signalTable"></table></div></div>
+    </section>
+    <section class="grid two-col">
+      <div class="card">
+        <div class="card-head"><h2>Consecutive failure streaks</h2><span class="card-sub">Rule 1</span></div>
+        <div class="card-body flush"><div class="table-wrap scroll-y"><table id="streakTable"></table></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Daily failure-rate alerts</h2><span class="card-sub">Rule 2 · ≥5 transactions and &gt;20% failures</span>
+          <div class="spacer"></div>
+          <div class="controls"><input type="search" id="rule2Search" placeholder="Filter vendor…"></div>
+        </div>
+        <div class="card-body flush"><div class="table-wrap scroll-y"><table id="rule2Table"></table></div></div>
+      </div>
+    </section>
+  </section>
+
+  <!-- ============================ ACTIVITY ============================= -->
+  <section class="panel" id="panel-activity" hidden>
+    <div class="grid kpis" id="activityKpis"></div>
+    <section class="card">
+      <div class="card-head">
+        <h2>Activity monitor</h2>
+        <span class="card-sub">each vendor judged against its own historical cadence</span>
+        <div class="spacer"></div>
+        <div class="controls"><input type="search" id="activitySearch" placeholder="Filter vendor…"></div>
+      </div>
+      <div class="card-body flush"><div class="table-wrap"><table id="activityTable"></table></div></div>
+    </section>
+  </section>
+
+  <!-- ============================= REASON ============================== -->
+  <section class="panel" id="panel-reason" hidden>
+    <div class="grid two-col">
+      <div class="card">
+        <div class="card-head"><h2>Failure categories</h2><span class="card-sub" id="reasonSub"></span></div>
+        <div class="card-body flush"><div class="table-wrap"><table id="categoryTable"></table></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Unmapped reasons</h2><span class="card-sub">raw texts still landing in “Unspecified”</span></div>
+        <div class="card-body" style="padding:12px 16px 0"><div class="note warn" id="unmappedNote"></div></div>
+        <div class="card-body flush"><div class="table-wrap scroll-y"><table id="unmappedTable"></table></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================= VENDOR ============================== -->
+  <section class="panel" id="panel-vendor" hidden>
+    <div class="card">
+      <div class="card-head">
+        <h2>Vendor detail</h2>
+        <div class="spacer"></div>
+        <div class="controls">
+          <label class="field">Vendor <select id="vendorPick"></select></label>
+        </div>
+      </div>
+      <div class="card-body" id="vendorDetail"></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="qualityModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="qualityTitle">
+    <div class="modal-head">
+      <h2 id="qualityTitle">Data quality</h2>
+      <div class="spacer"></div>
+      <button class="btn" id="btnQualityClose" type="button">Close</button>
+    </div>
+    <div class="modal-body" id="qualityBody"></div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   RPA VENDOR MONITOR
+   ..........................................................................
+   Every figure on this page is computed in this file from raw transaction
+   rows. Nothing is read back from Excel: no formulas, no helper sheets, no
+   pre-calculated KPIs. Replace the data and every number, chart, status and
+   explanation is recomputed from scratch.
+
+   Pipeline (strictly one-directional):
+     L1 ingest -> L2 validate -> L3 normalise -> L4 categorise -> L5 registry
+     -> L6 failure rules -> L7 activity profile -> L8 signals -> L9 status
+     -> L10 explain -> L11 render -> L12 interact
+
+   Logic is a port of the workbook's 'Signal Helper', 'Hub Calc' and
+   'Rule Monitor' sheets. Three deliberate deviations are marked D1/D2/D3 and
+   documented in README.md.
+   ========================================================================== */
+
+/* ==========================================================================
+   CONFIG — every tunable number in the system lives here and nowhere else.
+   ========================================================================== */
+const CONFIG = Object.freeze({
+  window: {
+    currentHours: 2,          // CurrentStart = CurrentEnd - 2h
+    baselineDays: 7,          // BaselineStart = CurrentStart - 7d
+    fallbackMinVolume: 30,    // <30 baseline txns -> judge against full history
+    baselineHoursDefault: 168,// 7 days of hourly buckets
+    baselineHoursMax: 1000    // Excel grid limit, kept for parity
+  },
+  rule1: { minStreak: 2 },                        // 2+ failures in a row
+  rule2: { minTxns: 5, rateThreshold: 0.20 },     // >=5 txns AND >20% failures
+  spike: {
+    minCurrentVolume: 5,      // below this there is not enough traffic to judge
+    absoluteDelta: 0.15,      // +15 percentage points over baseline
+    relativeRatio: 1.5,       // or 1.5x the baseline rate...
+    relativeMinRate: 0.10     // ...provided the current rate is non-trivial
+  },
+  critical: { minRate: 0.40, minFailures: 3 },    // bad in absolute terms
+  cluster: { minConsecutive: 4, minInWindow: 5, windowMinutes: 30 },
+  volume:  { sigmaThreshold: 2.5 },
+  score:   { spike: 3, cluster: 2, volume: 1, redMin: 4, yellowMin: 2 },
+  vendor: {
+    hubMinTxns: 20,           // below this the cadence profile is too thin
+    hubMaxNameLen: 120,       // guards against error text landing in Vendor
+    signalMaxNameLen: 100,
+    signalMinTotalVolume: 5,  // vendors under this are excluded from KPI tiles
+    excludeSubstrings: ["VENDORBACKLOG", "<HTML"]
+  },
+  frequency: {
+    highMaxMedianMin: 2,      // median gap <=2 min  -> HIGH_FREQUENCY
+    mediumMaxMedianMin: 30,   // median gap <=30 min -> MEDIUM_FREQUENCY
+    bounds: {                 // base threshold = clamp(round(p90 gap), lo, hi)
+      HIGH_FREQUENCY:   [10, 15],
+      MEDIUM_FREQUENCY: [30, 60],
+      LOW_FREQUENCY:    [180, 240]
+    }
+  },
+  hourClass: {
+    peakRatio: 0.70,          // >=70% of the vendor's busiest hour that weekday
+    activeRatio: 0.30,
+    watchMinCount: 2,         // otherwise 2+ historical txns -> WATCH, else QUIET
+    multiplier: { PEAK: 1.0, ACTIVE: 1.5, WATCH: 3.0, QUIET: null },
+    mode:       { PEAK: "Strict", ACTIVE: "Normal", WATCH: "Relaxed", QUIET: "Suppressed" }
+  },
+  activity: {
+    yellowRatio: 0.75,        // >=75% of threshold -> approaching
+    watchCanEscalate: true,   // D2: a WATCH vendor may reach RED
+    dormancy: {               // D1: silence far beyond normal is an outage
+      enabled: true,
+      hardCeilingMinutes: 7 * 24 * 60,
+      historicalGapMultiple: 3
+    }
+  },
+  freshness: { freshMinutes: 60, delayedMinutes: 240 },
+  display:   { recentTransactions: 60, topUnmapped: 200, maxReasonChars: 400 }
+});
+
+/* Ordered keyword -> category. FIRST MATCH WINS, so order is significant.
+   Port of the workbook's 'Reason Map' table. Extend by adding a row; put more
+   specific keywords above more general ones. */
+const REASON_MAP = [
+  ["start and end date are missing",                "Missing start/end date"],
+  ["Contract End Date is different",                "Contract end date mismatch"],
+  ["contract start date is starting later",         "Contract start date too late"],
+  ["needs to be reconfirmed",                       "SO needs reconfirmation"],
+  ["back to back order is in status PENDING",       "Back-to-back order pending"],
+  ["Operation canceled",                            "Operation canceled"],
+  ["could not be found",                            "Order email not found"],
+  ["Posting of journal has been failed",            "Journal posting failed"],
+  ["not recognized as a valid DateTime",            "Invalid date format"],
+  ["exceeds quantity on journal",                   "Quantity exceeds journal"],
+  ["No inventory transactions with status Ordered", "No ordered inventory"],
+  ["fulfillment email",                             "Missing fulfillment email"],
+  ["is in status pending",                          "PO status pending"],
+  ["hardware item",                                 "Hardware-only PO"],
+  ["Hard item",                                     "Hardware-only PO"],
+  ["Multi Year Deal",                               "Excluded - Multi Year Deal"],
+  ["not set as a direct delivery",                  "Not direct delivery"],
+  ["dispatch date",                                 "Dispatch date issue"],
+  ["delivery confirmation mail",                    "Delivery confirmation needed"],
+  ["mismatch between",                              "Data mismatch"],
+  ["Abbyy",                                         "Attachment/PDF extraction"],
+  ["valid attachments",                             "Attachment/PDF extraction"],
+  ["LogonFailedException",                          "System/technical error"],
+  ["server is unavailable",                         "System/technical error"],
+  ["Exception has been thrown",                     "System/technical error"],
+  ["Index was outside",                             "System/technical error"],
+  ["Conversion from string",                        "System/technical error"],
+  ["Cannot edit a record",                          "System/technical error"],
+  ["target of an invocation",                       "System/technical error"],
+  ["negative quantity",                             "Negative quantity on PO"],
+  ["no standard lines to receive",                  "No standard lines to receive"],
+  ["no Sales Order marked",                         "No linked sales order"],
+  ["SOD record",                                    "SOD record not found"],
+  ["greater than 50",                               "Quantity limit exceeded"],
+  ["already exists",                                "File already exists"],
+  ["quantities are different",                      "Data mismatch"],
+  ["is absent from the original PO",                "Line missing from PO"],
+  ["not completely received",                       "Partial receipt"],
+  ["PO details not found",                          "PO not found in database"],
+  ["N/A",                                           "Unspecified"]
+];
+const DEFAULT_CATEGORY = "Unspecified";
+const REASON_MAP_LC = REASON_MAP.map(([k, c]) => [k.toLowerCase(), c]);
+
+const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/* Dictionary-encoded Sheet1 payload, injected at build time by tools/build.py.
+   Shape: { vendors:[…], reasons:[…], rows:[[isFailure, vendorIx, reasonIx, po, isoDate], …] } */
+const EMBEDDED_DATA = __DATA_PAYLOAD__;
+
+/* ==========================================================================
+   SMALL UTILITIES
+   ========================================================================== */
+const MS_MIN = 60000, MS_HOUR = 3600000, MS_DAY = 86400000;
+
+/** Safe division: a 0/0 rate is 0, never NaN. Every ratio in this file goes
+ *  through here or an explicit guard. */
+function ratio(numerator, denominator){
+  return denominator > 0 ? numerator / denominator : 0;
+}
+function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+
+/** numpy's default linear-interpolation percentile, so the JS profile matches
+ *  the reference engine exactly. `sorted` must already be ascending. */
+function percentile(sorted, p){
+  const n = sorted.length;
+  if(n === 0) return 0;
+  if(n === 1) return sorted[0];
+  const k = (n - 1) * p, lo = Math.floor(k), hi = Math.ceil(k);
+  if(lo === hi) return sorted[k];
+  return sorted[lo] * (hi - k) + sorted[hi] * (k - lo);
+}
+/** Sample standard deviation (ddof=1). Undefined for n<2 -> 0, which makes the
+ *  volume-anomaly test inert rather than throwing. */
+function stdevSample(values){
+  const n = values.length;
+  if(n < 2) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  return Math.sqrt(values.reduce((a, v) => a + (v - mean) ** 2, 0) / (n - 1));
+}
+function mean(values){ return values.length ? values.reduce((a,b)=>a+b,0) / values.length : 0; }
+
+const fmtInt = new Intl.NumberFormat("en-GB");
+function num(v){ return fmtInt.format(Math.round(v || 0)); }
+function pct(v, dp){ return (100 * (v || 0)).toFixed(dp === undefined ? 1 : dp) + "%"; }
+function pp(v){ return (100 * (v || 0)).toFixed(1); }
+function fmtDate(d){
+  if(!(d instanceof Date) || isNaN(d)) return "—";
+  const hh = String(d.getHours()).padStart(2, "0"), mm = String(d.getMinutes()).padStart(2, "0");
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`;
+}
+function fmtDay(key){
+  const [y, m, d] = key.split("-").map(Number);
+  return `${d} ${MONTHS[m - 1]}`;
+}
+/** Minutes as a human duration. Operators think in "3d 4h", not "4,624 min". */
+function fmtDuration(minutes){
+  if(minutes == null || !isFinite(minutes)) return "—";
+  const m = Math.round(minutes);
+  if(m < 60) return m + " min";
+  if(m < 1440) return `${Math.floor(m / 60)}h ${m % 60}m`;
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
+  return `${d}d ${h}h`;
+}
+/** Escape everything bound into HTML. Vendor and Reason fields in this dataset
+ *  genuinely contain raw HTML email bodies, so this is load-bearing. */
+function esc(value){
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function truncate(text, max){
+  const s = String(text == null ? "" : text);
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
+/* ==========================================================================
+   L1 — INGESTION
+   Three entry points, one output shape: {Status, Vendor, Reason, PO, Date}.
+   ========================================================================== */
+
+/** Expand the dictionary-encoded embedded payload back into raw records.
+ *  Deliberately produces the same shape a CSV/JSON upload produces, so both
+ *  travel the identical validate -> normalise path and cannot diverge. The
+ *  payload carries EVERY source row, including malformed ones, so the page's
+ *  own validation produces the data-quality ledger rather than trusting one
+ *  baked in at build time. */
+function rehydrate(payload){
+  if(!payload || !Array.isArray(payload.rows)) return [];
+  const { statuses, vendors, reasons, rows } = payload;
+  return rows.map(([sIx, vIx, rIx, po, dateStr]) => ({
+    Status: statuses[sIx],
+    Vendor: vendors[vIx],
+    Reason: reasons[rIx],
+    PO: po,
+    Date: dateStr
+  }));
+}
+
+/** RFC-4180 CSV/DSV parser: quoted fields, embedded delimiters, embedded
+ *  newlines and "" escapes. Reason texts here contain commas, quotes and HTML,
+ *  so a naive split() would corrupt the data silently. */
+function parseDelimited(text){
+  const clean = text.replace(/^﻿/, "");
+  const head = clean.slice(0, clean.indexOf("\n") === -1 ? clean.length : clean.indexOf("\n"));
+  // Pick the delimiter that appears most often outside quotes in the header.
+  const delim = [",", ";", "\t"]
+    .map(d => [d, head.split(d).length])
+    .sort((a, b) => b[1] - a[1])[0][0];
+
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for(let i = 0; i < clean.length; i++){
+    const ch = clean[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(clean[i + 1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += ch;
+      continue;
+    }
+    if(ch === '"'){ inQuotes = true; }
+    else if(ch === delim){ row.push(field); field = ""; }
+    else if(ch === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+    else if(ch !== "\r"){ field += ch; }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  if(!rows.length) return [];
+
+  const header = rows[0].map(h => String(h).trim());
+  const find = name => header.findIndex(h => h.toLowerCase() === name.toLowerCase());
+  const ix = { Status: find("Status"), Vendor: find("Vendor"), Reason: find("Reason"),
+               PO: find("PO"), Date: find("Date") };
+  const missing = Object.keys(ix).filter(k => ix[k] === -1 && k !== "Reason" && k !== "PO");
+  if(missing.length) throw new Error("missing required column(s): " + missing.join(", "));
+
+  return rows.slice(1).map(r => ({
+    Status: ix.Status > -1 ? r[ix.Status] : "",
+    Vendor: ix.Vendor > -1 ? r[ix.Vendor] : "",
+    Reason: ix.Reason > -1 ? r[ix.Reason] : "",
+    PO:     ix.PO     > -1 ? r[ix.PO]     : "",
+    Date:   ix.Date   > -1 ? r[ix.Date]   : ""
+  }));
+}
+
+function parseUploaded(text, filename){
+  const trimmed = text.trim();
+  if(/\.json$/i.test(filename || "") || trimmed.startsWith("[") || trimmed.startsWith("{")){
+    const data = JSON.parse(trimmed);
+    const rows = Array.isArray(data) ? data
+               : Array.isArray(data.rows) && data.vendors ? rehydrate(data)
+               : Array.isArray(data.rows) ? data.rows
+               : Array.isArray(data.data) ? data.data : null;
+    if(!rows) throw new Error("JSON must be an array of records, or {rows:[…]}");
+    // Accept any casing of the five field names.
+    return rows.map(r => {
+      const get = name => {
+        const key = Object.keys(r).find(k => k.toLowerCase() === name.toLowerCase());
+        return key === undefined ? "" : r[key];
+      };
+      return { Status:get("Status"), Vendor:get("Vendor"), Reason:get("Reason"),
+               PO:get("PO"), Date:get("Date") };
+    });
+  }
+  return parseDelimited(text);
+}
+
+/* ==========================================================================
+   L2 — VALIDATION
+   Nothing is discarded silently: every rejected row lands in the ledger with a
+   row number and a reason, and the dashboard surfaces the reconciliation.
+   ========================================================================== */
+
+/** Parse a timestamp as LOCAL time.
+ *  `new Date("2026-06-10")` is UTC per spec while `new Date("2026-06-10T15:00")`
+ *  is local — mixing the two shifts calendar days and shifts the weekday/hour
+ *  grid with them. Parsing the parts by hand removes that whole class of bug. */
+function parseLocalDate(value){
+  if(value instanceof Date) return isNaN(value) ? null : value;
+  if(typeof value === "number" && isFinite(value)){
+    // Excel serial day number (epoch 1899-12-30), as produced by some exports.
+    if(value > 20000 && value < 80000){
+      const ms = Math.round((value - 25569) * MS_DAY);
+      const utc = new Date(ms);
+      return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(),
+                      utc.getUTCHours(), utc.getUTCMinutes(), utc.getUTCSeconds(),
+                      utc.getUTCMilliseconds());
+    }
+    return null;
+  }
+  const s = String(value == null ? "" : value).trim();
+  if(!s) return null;
+
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,6}))?)?/);
+  if(m){
+    const d = new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0),
+                       m[7] ? Math.round(+("0." + m[7]) * 1000) : 0);
+    return isNaN(d) ? null : d;
+  }
+  // DD/MM/YYYY — the convention throughout this dataset's own reason texts.
+  m = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if(m){
+    const d = new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+    return isNaN(d) ? null : d;
+  }
+  const fallback = new Date(s);
+  return isNaN(fallback) ? null : fallback;
+}
+
+const VERDICT = {
+  OK: "OK",
+  BLANK_ROW: "EXCLUDED_BLANK_ROW",
+  NO_VENDOR: "EXCLUDED_NO_VENDOR",
+  BAD_DATE: "EXCLUDED_BAD_DATE"
+};
+const VERDICT_LABEL = {
+  EXCLUDED_BLANK_ROW: "Empty row",
+  EXCLUDED_NO_VENDOR: "Vendor is blank",
+  EXCLUDED_BAD_DATE:  "Date could not be parsed"
+};
+
+function validate(rawRows){
+  const ledger = {
+    rawRows: rawRows.length, analysable: 0,
+    excludedBlankRow: 0, excludedNoVendor: 0, excludedBadDate: 0,
+    realTransactions: 0, realFailures: 0,
+    quarantine: [], oddStatus: {}
+  };
+  const accepted = [];
+
+  rawRows.forEach((r, i) => {
+    const rowNumber = i + 2;                       // +1 for header, +1 for 1-based
+    const status = String(r.Status == null ? "" : r.Status).trim();
+    const vendor = String(r.Vendor == null ? "" : r.Vendor).trim();
+    const reason = r.Reason == null ? "" : String(r.Reason);
+    const po     = String(r.PO == null ? "" : r.PO).trim();
+    const date   = parseLocalDate(r.Date);
+
+    const isBlank = !status && !vendor && !reason.trim() && !po && !r.Date;
+    let verdict = VERDICT.OK;
+    if(isBlank)      verdict = VERDICT.BLANK_ROW;
+    else if(!date)   verdict = VERDICT.BAD_DATE;
+    else if(!vendor) verdict = VERDICT.NO_VENDOR;
+
+    if(verdict !== VERDICT.BLANK_ROW){
+      ledger.realTransactions++;
+      const lower = status.toLowerCase();
+      if(lower === "failure") ledger.realFailures++;
+      else if(lower !== "success") ledger.oddStatus[status] = (ledger.oddStatus[status] || 0) + 1;
+    }
+
+    if(verdict === VERDICT.OK){
+      ledger.analysable++;
+      accepted.push({ rowNumber, status, vendor, reason, po, date });
+      return;
+    }
+    if(verdict === VERDICT.BLANK_ROW){ ledger.excludedBlankRow++; return; }
+    if(verdict === VERDICT.BAD_DATE)  ledger.excludedBadDate++;
+    if(verdict === VERDICT.NO_VENDOR) ledger.excludedNoVendor++;
+    ledger.quarantine.push({ rowNumber, verdict, status, vendor,
+                             reason: truncate(reason, 300), po,
+                             date: String(r.Date == null ? "" : r.Date) });
+  });
+
+  return { accepted, ledger };
+}
+
+/* ==========================================================================
+   L3 — NORMALISATION
+   ========================================================================== */
+function normalise(accepted){
+  const txns = accepted.map((r, seq) => {
+    const d = r.date;
+    return {
+      seq,
+      rowNumber: r.rowNumber,
+      originalVendor: r.vendor,                       // preserved for display
+      vendorKey: r.vendor.toUpperCase(),              // the only join key
+      status: r.status,
+      isFailure: r.status.toLowerCase() === "failure",
+      reason: r.reason,
+      category: "",                                   // filled by L4
+      po: r.po,
+      date: d,
+      time: d.getTime(),
+      dayKey: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      hour: d.getHours(),
+      dow: d.getDay() + 1                             // Excel WEEKDAY(...,1): Sun=1..Sat=7
+    };
+  });
+  // Chronological. The tie-break on seq matters: 2,735 rows in this dataset
+  // share a timestamp with another row, and streak direction depends on order.
+  txns.sort((a, b) => a.time - b.time || a.seq - b.seq);
+  return txns;
+}
+
+/* ==========================================================================
+   L4 — REASON CATEGORISATION
+   Case-insensitive substring scan, first match wins.
+   ========================================================================== */
+function categorize(reason){
+  const text = String(reason == null ? "" : reason).toLowerCase();
+  if(!text.trim()) return DEFAULT_CATEGORY;
+  for(let i = 0; i < REASON_MAP_LC.length; i++){
+    if(text.indexOf(REASON_MAP_LC[i][0]) !== -1) return REASON_MAP_LC[i][1];
+  }
+  return DEFAULT_CATEGORY;
+}
+function applyCategories(txns){
+  for(const t of txns) t.category = t.isFailure ? categorize(t.reason) : "";
+  return txns;
+}
+
+/* ==========================================================================
+   L5 — VENDOR REGISTRY
+   The workbook keys its two engines differently (signals on UPPER(Vendor),
+   activity and the rules on the raw string), so "Citrix" and "CITRIX" are one
+   vendor to one engine and two to another. One registry, one key, applied
+   everywhere — otherwise a single table cannot show both lights on one row.
+   ========================================================================== */
+function buildRegistry(txns){
+  const byKey = new Map();
+  for(const t of txns){
+    let e = byKey.get(t.vendorKey);
+    if(!e){
+      e = { vendorKey: t.vendorKey, rows: [], spellings: new Map() };
+      byKey.set(t.vendorKey, e);
+    }
+    e.rows.push(t);
+    e.spellings.set(t.originalVendor, (e.spellings.get(t.originalVendor) || 0) + 1);
+  }
+
+  const registry = new Map();
+  for(const [key, e] of byKey){
+    const junk = !key
+      || key.length > CONFIG.vendor.hubMaxNameLen
+      || CONFIG.vendor.excludeSubstrings.some(bad => key.indexOf(bad) !== -1);
+    // Most frequent original spelling wins; ties resolved alphabetically so the
+    // display name is stable across reloads.
+    const display = [...e.spellings.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+
+    registry.set(key, {
+      vendorKey: key,
+      displayName: display,
+      spellings: [...e.spellings.entries()].sort((a, b) => b[1] - a[1]),
+      rows: e.rows,
+      tier: junk ? "EXCLUDED_JUNK"
+          : e.rows.length >= CONFIG.vendor.hubMinTxns ? "FULL" : "SIGNAL_ONLY",
+      signalEligible: !junk && key.length <= CONFIG.vendor.signalMaxNameLen,
+      internal: key.startsWith("ARROW ECS")
+    });
+  }
+  return registry;
+}
+
+/* ==========================================================================
+   L6 — FAILURE RULES (Rule 1 streaks, Rule 2 vendor-days, daily overview)
+   ========================================================================== */
+
+/** Rule 1: a Failure extends the streak, a Success resets it. */
+function rule1(rows){
+  let run = 0, best = 0;
+  for(const t of rows){
+    run = t.isFailure ? run + 1 : 0;
+    if(run > best) best = run;
+  }
+  const current = run;
+  return {
+    currentStreak: current,
+    maxStreak: best,
+    status: current >= CONFIG.rule1.minStreak ? "Active"
+          : best    >= CONFIG.rule1.minStreak ? "Resolved" : "-"
+  };
+}
+
+/** Rule 2: per vendor per calendar day, alert when >=5 transactions AND >20%
+ *  failed. Fewer than 5 transactions never alerts, even at 100% failure. */
+function rule2VendorDays(registry){
+  const out = [];
+  for(const [key, entry] of registry){
+    if(entry.tier === "EXCLUDED_JUNK") continue;
+    const perDay = new Map();
+    for(const t of entry.rows){
+      let slot = perDay.get(t.dayKey);
+      if(!slot){ slot = { transactions: 0, failures: 0 }; perDay.set(t.dayKey, slot); }
+      slot.transactions++;
+      if(t.isFailure) slot.failures++;
+    }
+    for(const [day, slot] of perDay){
+      const rate = ratio(slot.failures, slot.transactions);
+      out.push({
+        vendorKey: key, displayName: entry.displayName, day,
+        transactions: slot.transactions, failures: slot.failures, failureRate: rate,
+        alert: slot.transactions >= CONFIG.rule2.minTxns && rate > CONFIG.rule2.rateThreshold
+      });
+    }
+  }
+  out.sort((a, b) => a.day < b.day ? 1 : a.day > b.day ? -1 : b.failureRate - a.failureRate);
+  return out;
+}
+
+/** Top failure category for a set of rows, formatted "Category (n)". */
+function topCategory(rows){
+  const counts = new Map();
+  for(const t of rows){
+    if(!t.isFailure) continue;
+    counts.set(t.category, (counts.get(t.category) || 0) + 1);
+  }
+  if(!counts.size) return null;
+  const [cat, n] = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  return { category: cat, count: n, label: `${cat} (${n})` };
+}
+
+function dailyOverview(txns, alertsByDay){
+  const perDay = new Map();
+  for(const t of txns){
+    let slot = perDay.get(t.dayKey);
+    if(!slot){ slot = { day: t.dayKey, transactions: 0, failures: 0 }; perDay.set(t.dayKey, slot); }
+    slot.transactions++;
+    if(t.isFailure) slot.failures++;
+  }
+  return [...perDay.values()]
+    .map(d => ({ ...d,
+      successes: d.transactions - d.failures,
+      failureRate: ratio(d.failures, d.transactions),
+      rule2Alerts: alertsByDay.get(d.day) || 0 }))
+    .sort((a, b) => a.day.localeCompare(b.day));
+}
+
+/* ==========================================================================
+   L7 — ACTIVITY PROFILING ('Hub Calc')
+   Each vendor is judged against its own rhythm, per weekday and per hour, so a
+   vendor that is historically idle at 03:00 on a Sunday is suppressed rather
+   than alerted.
+   ========================================================================== */
+function computeActivity(registry, now){
+  const curHour = now.getHours();
+  const curDow = now.getDay() + 1;
+  const dayName = DAY_NAMES[curDow - 1];
+  const results = new Map();
+
+  for(const [key, entry] of registry){
+    if(entry.tier !== "FULL") continue;
+    const rows = entry.rows;                       // already chronological
+
+    // --- cadence ---------------------------------------------------------
+    const gaps = [];
+    for(let i = 1; i < rows.length; i++) gaps.push((rows[i].time - rows[i - 1].time) / MS_MIN);
+    gaps.sort((a, b) => a - b);
+    const medianGap = percentile(gaps, 0.50);
+    const p75 = percentile(gaps, 0.75);
+    const p90 = percentile(gaps, 0.90);
+    const maxGap = gaps.length ? gaps[gaps.length - 1] : 0;
+
+    const frequencyClass =
+        medianGap <= CONFIG.frequency.highMaxMedianMin   ? "HIGH_FREQUENCY"
+      : medianGap <= CONFIG.frequency.mediumMaxMedianMin ? "MEDIUM_FREQUENCY"
+      : "LOW_FREQUENCY";
+    const [lo, hi] = CONFIG.frequency.bounds[frequencyClass];
+    const baseThreshold = clamp(Math.round(p90), lo, hi);
+
+    // --- weekday x hour grid ---------------------------------------------
+    const grid = new Map();                        // "dow:hour" -> count
+    const hourHistogram = new Array(24).fill(0);
+    const dowHourGrid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    for(const t of rows){
+      const gk = t.dow + ":" + t.hour;
+      grid.set(gk, (grid.get(gk) || 0) + 1);
+      hourHistogram[t.hour]++;
+      dowHourGrid[t.dow - 1][t.hour]++;
+    }
+    const histCount = grid.get(curDow + ":" + curHour) || 0;
+    // Denominator is the busiest bucket ON THIS WEEKDAY, not overall.
+    let dowMax = 0;
+    for(let h = 0; h < 24; h++) dowMax = Math.max(dowMax, grid.get(curDow + ":" + h) || 0);
+    const hourVsMax = ratio(histCount, dowMax);
+
+    const hourClass =
+        hourVsMax  >= CONFIG.hourClass.peakRatio     ? "PEAK"
+      : hourVsMax  >= CONFIG.hourClass.activeRatio   ? "ACTIVE"
+      : histCount  >= CONFIG.hourClass.watchMinCount ? "WATCH"
+      : "QUIET";
+    const monitoringMode = CONFIG.hourClass.mode[hourClass];
+    const multiplier = CONFIG.hourClass.multiplier[hourClass];
+    const dynamicThreshold = multiplier == null ? null : Math.round(baseThreshold * multiplier);
+
+    const lastTxn = rows[rows.length - 1].date;
+    const firstTxn = rows[0].date;
+    const minutesSinceLast = (now.getTime() - lastTxn.getTime()) / MS_MIN;
+
+    // --- D1: dormancy override -------------------------------------------
+    // Quiet-hour suppression is right for a 90-minute gap at 03:00 and wrong for
+    // a six-day outage. Silence beyond anything this vendor has ever shown is an
+    // outage, so it is evaluated BEFORE the QUIET check rather than inside it.
+    const dormancyLimit = Math.max(
+      CONFIG.activity.dormancy.hardCeilingMinutes,
+      maxGap * CONFIG.activity.dormancy.historicalGapMultiple);
+    const dormant = CONFIG.activity.dormancy.enabled && minutesSinceLast > dormancyLimit;
+
+    let light;
+    if(dormant) light = "RED";
+    else if(hourClass === "QUIET") light = "GREY";
+    else if(dynamicThreshold == null) light = "GREEN";
+    else if(minutesSinceLast > dynamicThreshold &&
+            (hourClass === "PEAK" || hourClass === "ACTIVE" || CONFIG.activity.watchCanEscalate)){
+      // D2: the workbook gates RED on PEAK/ACTIVE, capping a WATCH vendor at
+      // YELLOW however overdue it becomes. WATCH already carries a 3x threshold,
+      // so breaching that relaxed bar is itself meaningful.
+      light = "RED";
+    }
+    else if(minutesSinceLast >= CONFIG.activity.yellowRatio * dynamicThreshold) light = "YELLOW";
+    else light = "GREEN";
+
+    results.set(key, {
+      light, lastTxn, firstTxn, minutesSinceLast,
+      frequencyClass, medianIntervalMin: medianGap, p75IntervalMin: p75, p90IntervalMin: p90,
+      historicalMaxGapMin: maxGap, baseThresholdMin: baseThreshold,
+      dynamicThresholdMin: dynamicThreshold, hourClass, monitoringMode,
+      histCount, dowMax, hourVsMax, dormant, dormancyLimitMin: dormancyLimit,
+      activeDays: new Set(rows.map(t => t.dayKey)).size,
+      hourHistogram, dowHourGrid, currentDow: curDow, currentHour: curHour, currentDayName: dayName
+    });
+  }
+  return results;
+}
+
+/* ==========================================================================
+   L8 — SIGNAL ENGINE ('Signal Helper')
+   Current 2-hour window vs 7-day baseline, anchored to MAX(Date) — never the
+   wall clock, so the same data always yields the same answer.
+   ========================================================================== */
+function maxConsecutiveFailures(rows){
+  let run = 0, best = 0;
+  for(const t of rows){ run = t.isFailure ? run + 1 : 0; if(run > best) best = run; }
+  return best;
+}
+
+/** Most failures inside any rolling 30-minute window. A true rolling window
+ *  (every failure is a candidate start), not fixed clock blocks. */
+function maxFailuresInRollingWindow(rows){
+  const times = rows.filter(t => t.isFailure).map(t => t.time);
+  if(!times.length) return 0;
+  const span = CONFIG.cluster.windowMinutes * MS_MIN;
+  let best = 0, j = 0;
+  for(let i = 0; i < times.length; i++){
+    if(j < i) j = i;
+    while(j < times.length && times[j] <= times[i] + span) j++;
+    if(j - i > best) best = j - i;
+  }
+  return best;
+}
+
+function currentStreak(rows){
+  let run = 0;
+  for(let i = rows.length - 1; i >= 0 && rows[i].isFailure; i--) run++;
+  return run;
+}
+
+/** Transactions per hourly bucket going back `hours` from CurrentStart.
+ *  Bucket r covers (CurrentStart - r hours, CurrentStart - (r-1) hours]. */
+function hourlyBuckets(rows, currentStart, hours){
+  const n = clamp(Math.trunc(hours), 0, CONFIG.window.baselineHoursMax);
+  if(n <= 0) return [];
+  const buckets = new Array(n).fill(0);
+  for(const t of rows){
+    const r = Math.ceil((currentStart - t.time) / MS_HOUR);
+    if(r >= 1 && r <= n) buckets[r - 1]++;
+  }
+  return buckets;
+}
+
+function computeSignals(registry, currentEnd){
+  const currentStart = currentEnd - CONFIG.window.currentHours * MS_HOUR;
+  const baselineStart = currentStart - CONFIG.window.baselineDays * MS_DAY;
+  const results = new Map();
+
+  for(const [key, entry] of registry){
+    if(!entry.signalEligible) continue;
+    const rows = entry.rows;
+    const cur  = rows.filter(t => t.time > currentStart  && t.time <= currentEnd);
+    const base = rows.filter(t => t.time > baselineStart && t.time <= currentStart);
+    const hist = rows.filter(t => t.time <= currentStart);
+
+    const currentVolume = cur.length;
+    const currentFailures = cur.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0);
+    const currentRate = ratio(currentFailures, currentVolume);
+
+    // A thin 7-day baseline is judged against the vendor's whole history.
+    const usedFallbackBaseline = base.length < CONFIG.window.fallbackMinVolume;
+    const ref = usedFallbackBaseline ? hist : base;
+    const baselineVolume = ref.length;
+    const baselineFailures = ref.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0);
+    const baselineRate = ratio(baselineFailures, baselineVolume);
+
+    const maxConsecutive = maxConsecutiveFailures(cur);
+    const maxIn30Min = maxFailuresInRollingWindow(cur);
+
+    // 1. FAILURE SPIKE — enough traffic to judge, and failures clearly up.
+    const spike = currentVolume >= CONFIG.spike.minCurrentVolume
+      && ((currentRate - baselineRate >= CONFIG.spike.absoluteDelta)
+       || (baselineRate > 0
+           && currentRate / baselineRate >= CONFIG.spike.relativeRatio
+           && currentRate >= CONFIG.spike.relativeMinRate));
+    // 2. CRITICAL SPIKE — bad in absolute terms, independent of any baseline.
+    const critical = currentRate >= CONFIG.critical.minRate
+                  && currentFailures >= CONFIG.critical.minFailures;
+    // 3. CLUSTER — failures bunched together means something is actively broken.
+    const cluster = maxConsecutive >= CONFIG.cluster.minConsecutive
+                 || maxIn30Min >= CONFIG.cluster.minInWindow;
+
+    // 4. VOLUME ANOMALY — traffic itself abnormal against hourly history.
+    let baselineHours;
+    if(usedFallbackBaseline){
+      const elapsed = (currentStart - rows[0].time) / MS_HOUR;
+      baselineHours = clamp(Math.ceil(elapsed), 0, CONFIG.window.baselineHoursMax);
+    } else {
+      baselineHours = CONFIG.window.baselineHoursDefault;
+    }
+    const buckets = hourlyBuckets(rows, currentStart, baselineHours);
+    const expectedVolume = mean(buckets);
+    const sigma = stdevSample(buckets);
+    const sigmaDeviation = sigma > 0 ? Math.abs(currentVolume - expectedVolume) / sigma : 0;
+    const volumeAnomaly = sigma > 0 && sigmaDeviation >= CONFIG.volume.sigmaThreshold;
+
+    // D3: the workbook compares a 2-hour count against a 1-HOUR bucket mean.
+    // The original stays as the scored signal for parity; the window-scaled
+    // figures are reported alongside so the comparison shown is a fair one.
+    const scale = CONFIG.window.currentHours;
+    const expectedVolumeScaled = expectedVolume * scale;
+    const sigmaScaled = sigma * Math.sqrt(scale);
+    const sigmaDeviationScaled = sigmaScaled > 0
+      ? Math.abs(currentVolume - expectedVolumeScaled) / sigmaScaled : 0;
+    const volumeDirection =
+        sigma <= 0 ? "INSUFFICIENT_HISTORY"
+      : sigmaDeviationScaled < CONFIG.volume.sigmaThreshold ? "NORMAL"
+      : currentVolume < expectedVolumeScaled ? "LOW_ACTIVITY" : "HIGH_ACTIVITY";
+
+    const alertScore = CONFIG.score.spike * (spike ? 1 : 0)
+                     + CONFIG.score.cluster * (cluster ? 1 : 0)
+                     + CONFIG.score.volume * (volumeAnomaly ? 1 : 0);
+    // A vendor can be RED at score 0 when Critical Spike is the only condition.
+    // That is intended and must never be suppressed.
+    const light = (critical || (spike && cluster) || alertScore >= CONFIG.score.redMin) ? "RED"
+                : alertScore >= CONFIG.score.yellowMin ? "YELLOW" : "GREEN";
+
+    const seen = new Set(), distinctReasons = [];
+    for(const t of cur){
+      if(!t.isFailure) continue;
+      const txt = String(t.reason).trim();
+      if(!txt || txt.toUpperCase() === "N/A" || seen.has(txt)) continue;
+      seen.add(txt); distinctReasons.push(txt);
+    }
+
+    const streak = currentStreak(rows);
+    results.set(key, {
+      light, alertScore,
+      signals: { spike, critical, cluster, volumeAnomaly },
+      currentVolume, currentFailures, currentRate,
+      baselineVolume, baselineFailures, baselineRate, usedFallbackBaseline, baselineHours,
+      maxConsecutive, maxIn30Min,
+      expectedVolume, sigma, sigmaDeviation,
+      expectedVolumeScaled, sigmaScaled, sigmaDeviationScaled, volumeDirection,
+      currentStreak: streak, streakActive: streak >= CONFIG.rule1.minStreak,
+      totalVolume: rows.length,
+      totalFailures: rows.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0),
+      distinctReasons, currentRows: cur
+    });
+  }
+  return results;
+}
+
+/* ==========================================================================
+   L9 — STATUS ASSIGNMENT
+   Failure health and activity health stay separately visible. The combined
+   status never hides which dimension caused it.
+   ========================================================================== */
+function combineStatus(failureLight, activityLight){
+  if(failureLight === "RED" || activityLight === "RED") return "RED";
+  if(failureLight === "YELLOW" || activityLight === "YELLOW") return "YELLOW";
+  // GREY is not GREEN: it means no meaningful activity assessment can be made.
+  // It only surfaces as the overall status when failure health is clean.
+  if(activityLight === "GREY" && failureLight === "GREEN") return "GREY";
+  if(!activityLight && failureLight === "GREEN") return "GREEN";
+  return failureLight || activityLight || "GREY";
+}
+const STATUS_RANK = { RED: 0, YELLOW: 1, GREY: 2, GREEN: 3 };
+
+/* ==========================================================================
+   L10 — ALERT EXPLANATION
+   Every non-healthy status produces prose generated from its own metrics.
+   There is no generic fallback text: a signal with no template is a bug, and
+   `explain()` throws in that case rather than emitting "vendor has an alert".
+   ========================================================================== */
+const EXPLAIN = {
+  CRITICAL_SPIKE: (v, m) =>
+    `${v} is Red because its current failure rate is ${pct(m.currentRate)}. It recorded `
+    + `${num(m.currentFailures)} failure${m.currentFailures === 1 ? "" : "s"} from `
+    + `${num(m.currentVolume)} transaction${m.currentVolume === 1 ? "" : "s"} in the current `
+    + `${CONFIG.window.currentHours}-hour window, at or above the ${pct(CONFIG.critical.minRate, 0)} `
+    + `critical threshold with at least ${CONFIG.critical.minFailures} failures. Its baseline `
+    + `failure rate is ${pct(m.baselineRate)}`
+    + (m.cluster ? `, and the current failure sequence contains a cluster of failures` : "")
+    + `.`,
+
+  FAILURE_SPIKE: (v, m) =>
+    `${v} shows a failure spike: ${pct(m.currentRate)} of its ${num(m.currentVolume)} current `
+    + `transactions failed, against a baseline of ${pct(m.baselineRate)}`
+    + (m.usedFallbackBaseline ? ` (taken from its full history — fewer than `
+        + `${CONFIG.window.fallbackMinVolume} transactions in the 7-day baseline)` : "")
+    + `. That is ${pp(m.currentRate - m.baselineRate)} percentage points higher`
+    + (m.baselineRate > 0 ? `, or ${(m.currentRate / m.baselineRate).toFixed(1)}× the baseline rate` : "")
+    + `.`,
+
+  FAILURE_CLUSTER: (v, m) =>
+    `${v} has failures bunched together rather than scattered: `
+    + `${num(m.maxConsecutive)} back-to-back failure${m.maxConsecutive === 1 ? "" : "s"} and up to `
+    + `${num(m.maxIn30Min)} failure${m.maxIn30Min === 1 ? "" : "s"} inside a single rolling `
+    + `${CONFIG.cluster.windowMinutes}-minute window. Clustering of this shape usually means `
+    + `something is actively broken rather than failing intermittently.`,
+
+  VOLUME_ANOMALY: (v, m) =>
+    `${v} moved an unusual amount of traffic: ${num(m.currentVolume)} transactions against an `
+    + `expected ${m.expectedVolumeScaled.toFixed(1)} for a window this long, a deviation of `
+    + `${m.sigmaDeviationScaled.toFixed(1)}σ (threshold ${CONFIG.volume.sigmaThreshold}σ). `
+    + `Direction: ${m.volumeDirection.replace("_", " ").toLowerCase()}.`,
+
+  STREAK: (v, m) =>
+    `${v} is on an open run of ${num(m.currentStreak)} consecutive failures with no success `
+    + `since. Its longest recorded streak is ${num(m.maxStreak)}.`,
+
+  RULE2_DAILY_RATE: (v, m) =>
+    `${v} breached the daily failure-rate rule on ${fmtDay(m.day)}: ${num(m.failures)} of `
+    + `${num(m.transactions)} transactions failed (${pct(m.failureRate)}), above the `
+    + `${pct(CONFIG.rule2.rateThreshold, 0)} threshold on at least ${CONFIG.rule2.minTxns} transactions.`,
+
+  DORMANT: (v, m) =>
+    `${v} is Red for low activity. Its last transaction was ${num(m.minutesSinceLast)} minutes ago `
+    + `(${fmtDuration(m.minutesSinceLast)}), far beyond anything in its history — its longest `
+    + `previous gap was ${fmtDuration(m.historicalMaxGapMin)}. The current weekday and hour are `
+    + `${m.hourClass} for this vendor, but a silence this long is treated as an outage rather than `
+    + `a quiet period, so inactivity monitoring is not suppressed.`,
+
+  INACTIVITY: (v, m) =>
+    `${v} is ${m.light === "RED" ? "Red" : "approaching its threshold"} for low activity. Its last `
+    + `transaction was ${num(m.minutesSinceLast)} minutes ago. The current dynamic threshold is `
+    + `${num(m.dynamicThresholdMin)} minutes, and the present vendor-hour is classified as `
+    + `${m.hourClass} (${m.monitoringMode.toLowerCase()} monitoring, ${m.currentDayName} `
+    + `${String(m.currentHour).padStart(2, "0")}:00). Transactions would normally be expected `
+    + `during this period.`,
+
+  QUIET_SUPPRESSED: (v, m) =>
+    `${v} is Grey because the current weekday and hour (${m.currentDayName} `
+    + `${String(m.currentHour).padStart(2, "0")}:00) are historically quiet for this vendor — `
+    + `${m.histCount === 0 ? "no transactions have ever been recorded" : "only " + num(m.histCount)
+       + " transaction" + (m.histCount === 1 ? " has" : "s have") + " ever been recorded"} in this `
+    + `slot. Inactivity monitoring is currently suppressed.`,
+
+  HEALTHY: (v, m) =>
+    `${v} is healthy: ${pct(m.currentRate)} failure rate over ${num(m.currentVolume)} current `
+    + `transactions, last seen ${fmtDuration(m.minutesSinceLast)} ago.`
+};
+
+function makeAlert(vendorKey, displayName, dimension, signal, severity, metrics){
+  const template = EXPLAIN[signal];
+  if(!template) throw new Error("no explanation template for signal " + signal);
+  return {
+    id: vendorKey + "::" + signal,
+    vendorKey, dimension, signal, severity, metrics,
+    message: template(displayName, metrics)
+  };
+}
+
+/** Build every alert for one vendor, worst first. The first entry becomes the
+ *  primary alert shown in the vendor table. */
+function buildAlerts(entry, sig, act, streak, rule2Count){
+  const name = entry.displayName, key = entry.vendorKey;
+  const alerts = [];
+
+  if(sig){
+    const m = { ...sig, ...sig.signals, maxStreak: streak ? streak.maxStreak : 0 };
+    if(sig.signals.critical) alerts.push(makeAlert(key, name, "FAILURE", "CRITICAL_SPIKE", "RED", m));
+    if(sig.signals.spike)    alerts.push(makeAlert(key, name, "FAILURE", "FAILURE_SPIKE",
+                                                   sig.light === "RED" ? "RED" : "YELLOW", m));
+    if(sig.signals.cluster)  alerts.push(makeAlert(key, name, "FAILURE", "FAILURE_CLUSTER",
+                                                   sig.light === "RED" ? "RED" : "YELLOW", m));
+    if(sig.signals.volumeAnomaly) alerts.push(makeAlert(key, name, "FAILURE", "VOLUME_ANOMALY", "YELLOW", m));
+    if(sig.streakActive)     alerts.push(makeAlert(key, name, "FAILURE", "STREAK", "YELLOW", m));
+  }
+  if(act){
+    const m = { ...act };
+    if(act.dormant)              alerts.push(makeAlert(key, name, "ACTIVITY", "DORMANT", "RED", m));
+    else if(act.light === "RED"  ) alerts.push(makeAlert(key, name, "ACTIVITY", "INACTIVITY", "RED", m));
+    else if(act.light === "YELLOW") alerts.push(makeAlert(key, name, "ACTIVITY", "INACTIVITY", "YELLOW", m));
+    else if(act.light === "GREY"  ) alerts.push(makeAlert(key, name, "ACTIVITY", "QUIET_SUPPRESSED", "GREY", m));
+  }
+  const order = { RED: 0, YELLOW: 1, GREY: 2, INFO: 3 };
+  alerts.sort((a, b) => order[a.severity] - order[b.severity]);
+  return alerts;
+}
+
+/* ==========================================================================
+   FRESHNESS — a separate operational control.
+   Anchoring every calculation to MAX(Date) is what makes results reproducible,
+   but it also means a total feed outage is invisible: the anchor simply stops
+   moving. This compares the anchor against the wall clock and NEVER feeds back
+   into the signal windows.
+   ========================================================================== */
+function assessFreshness(currentEnd, nowWallClock){
+  const ageMinutes = (nowWallClock - currentEnd) / MS_MIN;
+  const state = ageMinutes <= CONFIG.freshness.freshMinutes ? "Fresh"
+              : ageMinutes <= CONFIG.freshness.delayedMinutes ? "Delayed" : "Stale";
+  return { ageMinutes, state, checkedAt: new Date(nowWallClock) };
+}
+
+/* ==========================================================================
+   computeAll — the single entry point. Everything downstream reads `state`,
+   so loading a replacement dataset cannot leave a stale value behind.
+   ========================================================================== */
+function computeAll(rawRows){
+  const { accepted, ledger } = validate(rawRows);
+  if(!accepted.length){
+    return { empty: true, ledger, txns: [], vendors: [], registry: new Map(),
+             categories: [], unmapped: [], daily: [], rule2: [], rule2Alerts: [],
+             kpis: {}, window: null, freshness: null };
+  }
+
+  const txns = applyCategories(normalise(accepted));
+  const registry = buildRegistry(txns);
+
+  const currentEnd = txns[txns.length - 1].time;   // = MAX(Date), the anchor
+  const currentStart = currentEnd - CONFIG.window.currentHours * MS_HOUR;
+  const baselineStart = currentStart - CONFIG.window.baselineDays * MS_DAY;
+  const anchor = new Date(currentEnd);
+
+  const signals = computeSignals(registry, currentEnd);
+  const activity = computeActivity(registry, anchor);
+  const rule2 = rule2VendorDays(registry);
+  const rule2Alerts = rule2.filter(r => r.alert);
+
+  const alertsByDay = new Map();
+  for(const a of rule2Alerts) alertsByDay.set(a.day, (alertsByDay.get(a.day) || 0) + 1);
+  const daily = dailyOverview(txns, alertsByDay);
+
+  const rule2ByVendor = new Map();
+  for(const a of rule2Alerts) rule2ByVendor.set(a.vendorKey, (rule2ByVendor.get(a.vendorKey) || 0) + 1);
+
+  // --- assemble one row per monitored vendor ----------------------------
+  const vendors = [];
+  for(const [key, entry] of registry){
+    if(entry.tier === "EXCLUDED_JUNK") continue;
+    const sig = signals.get(key) || null;
+    const act = activity.get(key) || null;
+    const streak = rule1(entry.rows);
+    const failureLight = sig ? sig.light : "GREEN";
+    const activityLight = act ? act.light : "GREY";
+    const alerts = buildAlerts(entry, sig, act, streak, rule2ByVendor.get(key) || 0);
+
+    vendors.push({
+      vendorKey: key,
+      displayName: entry.displayName,
+      spellings: entry.spellings,
+      tier: entry.tier,
+      signalEligible: entry.signalEligible,
+      internal: entry.internal,
+      totalVolume: entry.rows.length,
+      totalFailures: entry.rows.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0),
+      overall: combineStatus(failureLight, activityLight),
+      failure: sig,
+      activity: act,
+      streak,
+      rule2Alerts: rule2ByVendor.get(key) || 0,
+      topCategory: topCategory(entry.rows),
+      alerts,
+      primaryAlert: alerts[0] || null,
+      rows: entry.rows
+    });
+  }
+  vendors.sort((a, b) =>
+       STATUS_RANK[a.overall] - STATUS_RANK[b.overall]
+    || (b.failure ? b.failure.alertScore : 0) - (a.failure ? a.failure.alertScore : 0)
+    || a.displayName.localeCompare(b.displayName));
+
+  // --- reason analysis ---------------------------------------------------
+  const totalFailures = txns.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0);
+  const catMap = new Map(), unmappedMap = new Map();
+  for(const t of txns){
+    if(!t.isFailure) continue;
+    let c = catMap.get(t.category);
+    if(!c){
+      c = { category: t.category, failures: 0, vendors: new Set(),
+            firstSeen: t.date, lastSeen: t.date, reasons: new Map() };
+      catMap.set(t.category, c);
+    }
+    c.failures++;
+    c.vendors.add(t.vendorKey);
+    if(t.date < c.firstSeen) c.firstSeen = t.date;
+    if(t.date > c.lastSeen)  c.lastSeen = t.date;
+    c.reasons.set(t.reason, (c.reasons.get(t.reason) || 0) + 1);
+
+    if(t.category === DEFAULT_CATEGORY){
+      const txt = String(t.reason).trim();
+      if(txt && txt.toUpperCase() !== "N/A"){
+        let u = unmappedMap.get(txt);
+        if(!u){ u = { reason: txt, count: 0, vendors: new Set(), lastSeen: t.date }; unmappedMap.set(txt, u); }
+        u.count++; u.vendors.add(t.vendorKey);
+        if(t.date > u.lastSeen) u.lastSeen = t.date;
+      }
+    }
+  }
+  const categories = [...catMap.values()]
+    .map(c => ({ ...c, share: ratio(c.failures, totalFailures),
+                 vendorCount: c.vendors.size,
+                 topReasons: [...c.reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12) }))
+    .sort((a, b) => b.failures - a.failures);
+  const unmapped = [...unmappedMap.values()]
+    .map(u => ({ ...u, vendorCount: u.vendors.size }))
+    .sort((a, b) => b.count - a.count);
+
+  // --- KPI tiles ---------------------------------------------------------
+  // Red/Yellow counts keep the workbook's total_volume >= 5 filter so the
+  // headline figures stay comparable with the source model.
+  const eligible = vendors.filter(v => v.failure && v.totalVolume >= CONFIG.vendor.signalMinTotalVolume);
+  const kpis = {
+    analysedTransactions: txns.length,
+    analysedSuccesses: txns.length - totalFailures,
+    analysedFailures: totalFailures,
+    analysedFailureRate: ratio(totalFailures, txns.length),
+    redVendors: eligible.filter(v => v.failure.light === "RED").length,
+    yellowVendors: eligible.filter(v => v.failure.light === "YELLOW").length,
+    streakActiveVendors: eligible.filter(v => v.failure.streakActive).length,
+    lowActivityVendors: vendors.filter(v => v.activity && (v.activity.light === "RED" || v.activity.light === "YELLOW")).length,
+    dormantVendors: vendors.filter(v => v.activity && v.activity.dormant).length,
+    activityRed: vendors.filter(v => v.activity && v.activity.light === "RED").length,
+    activityYellow: vendors.filter(v => v.activity && v.activity.light === "YELLOW").length,
+    activityGreen: vendors.filter(v => v.activity && v.activity.light === "GREEN").length,
+    activityGrey: vendors.filter(v => v.activity && v.activity.light === "GREY").length,
+    rule2Alerts: rule2Alerts.length,
+    rule2VendorsAffected: new Set(rule2Alerts.map(a => a.vendorKey)).size,
+    daysMonitored: new Set(txns.map(t => t.dayKey)).size,
+    monitoredVendors: vendors.length,
+    excludedVendors: [...registry.values()].filter(e => e.tier === "EXCLUDED_JUNK").length,
+    attentionVendors: vendors.filter(v => v.overall === "RED" || v.overall === "YELLOW").length
+  };
+
+  return {
+    empty: false, txns, registry, vendors, signals, activity,
+    daily, rule2, rule2Alerts, categories, unmapped, ledger, kpis,
+    window: { currentEnd: anchor, currentStart: new Date(currentStart),
+              baselineStart: new Date(baselineStart) },
+    freshness: assessFreshness(currentEnd, Date.now())
+  };
+}
+
+/* ==========================================================================
+   L11 — RENDER
+   Pure computation lives above this line; every DOM write lives below it.
+   ========================================================================== */
+const $  = (sel, root) => (root || document).querySelector(sel);
+const $$ = (sel, root) => [...(root || document).querySelectorAll(sel)];
+
+let STATE = null;
+const UI = {
+  tab: "overview",
+  liveStatus: "ALL", liveSearch: "", liveSort: { key: null, dir: 1 }, liveOpen: new Set(),
+  signalSort: { key: null, dir: 1 },
+  activitySearch: "", activitySort: { key: null, dir: 1 },
+  rule2Search: "", rule2Sort: { key: null, dir: 1 },
+  streakSort: { key: null, dir: 1 },
+  categorySort: { key: null, dir: 1 }, openCategory: null,
+  vendor: null
+};
+
+/* ------------------------------ tooltip -------------------------------- */
+const tooltipEl = $("#tooltip");
+function showTooltip(evt, html){
+  tooltipEl.innerHTML = html;
+  tooltipEl.style.opacity = "1";
+  const pad = 14, rect = tooltipEl.getBoundingClientRect();
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if(x + rect.width > window.innerWidth - 8)  x = evt.clientX - rect.width - pad;
+  if(y + rect.height > window.innerHeight - 8) y = evt.clientY - rect.height - pad;
+  tooltipEl.style.left = Math.max(8, x) + "px";
+  tooltipEl.style.top  = Math.max(8, y) + "px";
+}
+function hideTooltip(){ tooltipEl.style.opacity = "0"; }
+
+/* ------------------------------- charts --------------------------------
+   Hand-rolled inline SVG. No chart library, no canvas: the whole file has to
+   work offline from a double-click, and these shapes are simple enough that a
+   dependency would cost more than it saves.
+   ----------------------------------------------------------------------- */
+const CHART_COLOURS = { success: "var(--blue)", failure: "var(--red)", accent: "var(--blue)" };
+
+function emptyChart(message){
+  return `<div class="empty"><div class="big">◔</div>${esc(message)}</div>`;
+}
+
+/** Nice round axis ceiling so gridlines land on readable numbers. */
+function niceCeil(value){
+  if(value <= 0) return 1;
+  const exp = Math.floor(Math.log10(value)), base = Math.pow(10, exp);
+  const n = value / base;
+  const step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+  return step * base;
+}
+
+/**
+ * Multi-series line chart over a daily index.
+ * series: [{ key, label, colour, values:[] }]
+ */
+function lineChart(el, days, series, opts){
+  opts = opts || {};
+  if(!days.length){ el.innerHTML = emptyChart(opts.emptyMessage || "No data in range"); return; }
+  const W = 760, H = 240, P = { t: 12, r: 14, b: 30, l: 46 };
+  const iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const maxVal = opts.max != null ? opts.max
+    : niceCeil(Math.max(1, ...series.flatMap(s => s.values.filter(v => isFinite(v)))));
+  const x = i => P.l + (days.length === 1 ? iw / 2 : (i / (days.length - 1)) * iw);
+  const y = v => P.t + ih - (clamp(v, 0, maxVal) / maxVal) * ih;
+
+  const ticks = 4;
+  let grid = "";
+  for(let i = 0; i <= ticks; i++){
+    const v = (maxVal / ticks) * i, gy = y(v);
+    grid += `<line class="grid-line" x1="${P.l}" y1="${gy}" x2="${W - P.r}" y2="${gy}"/>`
+         +  `<text x="${P.l - 7}" y="${gy + 3.5}" text-anchor="end">${esc(opts.yFormat ? opts.yFormat(v) : num(v))}</text>`;
+  }
+  // X labels: at most 7, always including first and last.
+  let xLabels = "";
+  const stride = Math.max(1, Math.ceil(days.length / 7));
+  days.forEach((d, i) => {
+    if(i % stride !== 0 && i !== days.length - 1) return;
+    xLabels += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle">${esc(fmtDay(d))}</text>`;
+  });
+
+  let paths = "";
+  for(const s of series){
+    const pts = s.values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    paths += `<polyline points="${pts}" fill="none" stroke="${s.colour}" stroke-width="2"
+               stroke-linejoin="round" stroke-linecap="round"/>`;
+    if(days.length === 1){
+      paths += `<circle cx="${x(0)}" cy="${y(s.values[0])}" r="3.5" fill="${s.colour}"/>`;
+    }
+  }
+
+  let threshold = "";
+  if(opts.threshold != null && opts.threshold <= maxVal){
+    const ty = y(opts.threshold);
+    threshold = `<line class="thresh" x1="${P.l}" y1="${ty}" x2="${W - P.r}" y2="${ty}"/>`
+      + `<text x="${W - P.r}" y="${ty - 5}" text-anchor="end" fill="var(--red)"
+              style="font-weight:650">${esc(opts.thresholdLabel || "")}</text>`;
+  }
+
+  // Invisible hit columns drive a cursor-following tooltip.
+  const colW = iw / Math.max(1, days.length);
+  let hits = "";
+  days.forEach((d, i) => {
+    hits += `<rect class="hit" x="${(x(i) - colW / 2).toFixed(1)}" y="${P.t}"
+             width="${colW.toFixed(1)}" height="${ih}" data-i="${i}"/>`;
+  });
+
+  el.innerHTML =
+    `<div class="legend">${series.map(s =>
+      `<span class="key"><span class="swatch" style="background:${s.colour}"></span>${esc(s.label)}</span>`).join("")
+      + (opts.threshold != null ? `<span class="key"><span class="swatch" style="background:var(--red)"></span>${esc(opts.thresholdLabel || "threshold")}</span>` : "")}</div>`
+    + `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" style="height:240px">`
+    + grid
+    + `<line class="axis-line" x1="${P.l}" y1="${P.t + ih}" x2="${W - P.r}" y2="${P.t + ih}"/>`
+    + threshold + paths + xLabels + hits
+    + `</svg>`;
+
+  const svg = $("svg", el);
+  svg.addEventListener("mousemove", e => {
+    const target = e.target.closest(".hit");
+    if(!target) return hideTooltip();
+    const i = +target.dataset.i;
+    showTooltip(e, `<div class="tt-title">${esc(fmtDay(days[i]))}</div>`
+      + series.map(s => `<div class="tt-row"><span>${esc(s.label)}</span>`
+        + `<span class="v">${esc(opts.tipFormat ? opts.tipFormat(s.values[i]) : num(s.values[i]))}</span></div>`).join(""));
+  });
+  svg.addEventListener("mouseleave", hideTooltip);
+}
+
+/** Horizontal bars — used for failure categories. */
+function barChart(el, items, opts){
+  opts = opts || {};
+  if(!items.length){ el.innerHTML = emptyChart(opts.emptyMessage || "Nothing to show"); return; }
+  const max = Math.max(...items.map(i => i.value), 1);
+  el.innerHTML = items.map(item => {
+    const w = (100 * item.value / max).toFixed(1);
+    return `<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:3px">
+        <span class="truncate" style="font-weight:560" title="${esc(item.label)}">${esc(item.label)}</span>
+        <span style="color:var(--text-dim);font-variant-numeric:tabular-nums;white-space:nowrap">
+          ${esc(num(item.value))}${item.sub ? ` · ${esc(item.sub)}` : ""}</span>
+      </div>
+      <div class="minibar"><span style="width:${w}%;background:${item.colour || CHART_COLOURS.accent}"></span></div>
+    </div>`;
+  }).join("");
+}
+
+/* ------------------------------- tables --------------------------------
+   One table builder for every table on the page: columns declare how to read a
+   value, how to render it, and how to sort it, so sorting can never disagree
+   with what is displayed.
+   ----------------------------------------------------------------------- */
+function buildTable(tableEl, columns, rows, sortState, onSort, opts){
+  opts = opts || {};
+  if(!rows.length){
+    tableEl.innerHTML = `<tbody><tr><td>${emptyChart(opts.emptyMessage || "No rows match the current filter")}</td></tr></tbody>`;
+    return;
+  }
+  let sorted = rows;
+  if(sortState && sortState.key){
+    const col = columns.find(c => c.key === sortState.key);
+    if(col){
+      const get = col.sortValue || col.value;
+      sorted = [...rows].sort((a, b) => {
+        const av = get(a), bv = get(b);
+        if(av == null && bv == null) return 0;
+        if(av == null) return 1;
+        if(bv == null) return -1;
+        const cmp = typeof av === "string" ? av.localeCompare(bv) : (av - bv);
+        return cmp * sortState.dir;
+      });
+    }
+  }
+  const head = columns.map(c => {
+    const isSorted = sortState && sortState.key === c.key;
+    const aria = isSorted ? ` aria-sort="${sortState.dir === 1 ? "ascending" : "descending"}"` : "";
+    return `<th class="${c.num ? "num " : ""}${c.sortable === false ? "" : "sortable"}"
+      ${c.sortable === false ? "" : `data-sort="${esc(c.key)}"`}${aria}
+      ${c.title ? `title="${esc(c.title)}"` : ""}>${esc(c.label)}`
+      + (c.sortable === false ? "" : `<span class="arrow">${isSorted ? (sortState.dir === 1 ? "▲" : "▼") : "▲"}</span>`)
+      + `</th>`;
+  }).join("");
+
+  const body = sorted.map((row, i) => {
+    const cls = opts.rowClass ? opts.rowClass(row) : "";
+    const attrs = opts.rowAttrs ? opts.rowAttrs(row) : "";
+    let html = `<tr class="${cls}" ${attrs}>`
+      + columns.map(c => `<td class="${c.num ? "num " : ""}${c.cellClass || ""}">${c.render(row, i)}</td>`).join("")
+      + `</tr>`;
+    if(opts.expanded && opts.expanded(row)){
+      html += `<tr class="detail-row"><td colspan="${columns.length}">
+                 <div class="detail-inner">${opts.renderDetail(row)}</div></td></tr>`;
+    }
+    return html;
+  }).join("");
+
+  tableEl.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  if(onSort){
+    $$("th.sortable", tableEl).forEach(th => {
+      th.addEventListener("click", () => onSort(th.dataset.sort));
+    });
+  }
+}
+
+function lightBadge(light){
+  if(!light) return `<span class="light light-GREY"><span class="glyph">○</span>N/A</span>`;
+  const glyph = { RED: "●", YELLOW: "▲", GREEN: "✓", GREY: "○" }[light] || "○";
+  return `<span class="light light-${light}"><span class="glyph">${glyph}</span>${light}</span>`;
+}
+function signalPills(sig){
+  if(!sig) return `<span class="sig">no signal data</span>`;
+  const s = sig.signals;
+  const pills = [];
+  if(s.critical) pills.push(`<span class="sig on-red">CRITICAL SPIKE</span>`);
+  if(s.spike)    pills.push(`<span class="sig on-red">FAILURE SPIKE</span>`);
+  if(s.cluster)  pills.push(`<span class="sig on-amber">CLUSTER</span>`);
+  if(s.volumeAnomaly) pills.push(`<span class="sig on-amber">VOLUME ANOMALY</span>`);
+  if(sig.streakActive) pills.push(`<span class="sig on-amber">STREAK ${sig.currentStreak}</span>`);
+  if(sig.usedFallbackBaseline) pills.push(`<span class="sig on-blue" title="Fewer than ${CONFIG.window.fallbackMinVolume} transactions in the 7-day baseline, so the vendor's full history is used instead">FALLBACK BASELINE</span>`);
+  return pills.length ? pills.join("") : `<span class="sig">none</span>`;
+}
+function hourClassTag(cls){
+  return cls ? `<span class="tag ${cls.toLowerCase()}">${esc(cls)}</span>` : "—";
+}
+function explainBlock(alert){
+  if(!alert) return "";
+  return `<div class="explain sev-${alert.severity}">${esc(alert.message)}</div>`;
+}
+
+/* ============================ TAB 1 — OVERVIEW ========================== */
+function kpiCard(label, value, sub, tone){
+  return `<div class="kpi${tone ? " is-" + tone : ""}">
+    <div class="kpi-label">${esc(label)}</div>
+    <div class="kpi-value">${esc(value)}</div>
+    ${sub ? `<div class="kpi-sub">${sub}</div>` : ""}
+  </div>`;
+}
+
+function renderOverview(s){
+  const k = s.kpis, L = s.ledger;
+  const excluded = L.excludedNoVendor + L.excludedBadDate;
+  $("#kpiRow").innerHTML = [
+    kpiCard("Total transactions", num(k.analysedTransactions),
+      excluded ? `${num(excluded)} row${excluded === 1 ? "" : "s"} excluded &mdash; see Data quality` : "all rows analysed"),
+    kpiCard("Successful", num(k.analysedSuccesses), pct(ratio(k.analysedSuccesses, k.analysedTransactions)) + " of total", "green"),
+    kpiCard("Failed", num(k.analysedFailures), `across ${num(k.daysMonitored)} days`, "red"),
+    kpiCard("Overall failure rate", pct(k.analysedFailureRate), `${num(k.rule2Alerts)} vendor-day breaches`,
+      k.analysedFailureRate > 0.2 ? "red" : k.analysedFailureRate > 0.1 ? "amber" : "green"),
+    kpiCard("Red vendors", num(k.redVendors), "failure signals in current window", k.redVendors ? "red" : "green"),
+    kpiCard("Yellow vendors", num(k.yellowVendors), "elevated but not critical", k.yellowVendors ? "amber" : "green"),
+    kpiCard("Active failure streaks", num(k.streakActiveVendors), `${CONFIG.rule1.minStreak}+ failures back-to-back, unbroken`,
+      k.streakActiveVendors ? "amber" : "green"),
+    kpiCard("Low-activity alerts", num(k.lowActivityVendors),
+      k.dormantVendors ? `${num(k.dormantVendors)} dormant beyond any historical gap` : "vendors overdue vs their own baseline",
+      k.lowActivityVendors ? "red" : "green")
+  ].join("");
+
+  const days = s.daily.map(d => d.day);
+  lineChart($("#chartVolume"), days, [
+    { label: "Successful", colour: CHART_COLOURS.success, values: s.daily.map(d => d.successes) },
+    { label: "Failed",     colour: CHART_COLOURS.failure, values: s.daily.map(d => d.failures) }
+  ], { emptyMessage: "No daily volume to plot" });
+
+  lineChart($("#chartRate"), days, [
+    { label: "Failure rate", colour: CHART_COLOURS.failure, values: s.daily.map(d => d.failureRate) }
+  ], {
+    max: Math.max(CONFIG.rule2.rateThreshold * 1.4, niceCeil(Math.max(0.01, ...s.daily.map(d => d.failureRate)))),
+    yFormat: v => pct(v, 0), tipFormat: v => pct(v),
+    threshold: CONFIG.rule2.rateThreshold,
+    thresholdLabel: pct(CONFIG.rule2.rateThreshold, 0) + " Rule 2 threshold",
+    emptyMessage: "No daily failure rates to plot"
+  });
+
+  const attention = s.vendors.filter(v => v.overall === "RED" || v.overall === "YELLOW");
+  $("#critSub").textContent = attention.length
+    ? `${attention.length} of ${s.vendors.length} monitored vendors`
+    : `all ${s.vendors.length} monitored vendors healthy`;
+  $("#criticalAlerts").innerHTML = attention.length
+    ? attention.slice(0, 20).map(v => `
+        <div class="alert-item sev-${v.overall}">
+          <div>${lightBadge(v.overall)}</div>
+          <div class="body">
+            <div class="title">${esc(v.displayName)}</div>
+            <div class="msg">${esc(v.primaryAlert ? v.primaryAlert.message : "")}</div>
+          </div>
+        </div>`).join("")
+    : emptyChart("No vendor currently requires attention");
+
+  barChart($("#chartCategories"), s.categories.slice(0, 10).map(c => ({
+    label: c.category, value: c.failures,
+    sub: `${pct(c.share)} · ${c.vendorCount} vendor${c.vendorCount === 1 ? "" : "s"}`
+  })), { emptyMessage: "No failures recorded" });
+}
+
+/* ========================= TAB 2 — LIVE MONITOR ========================= */
+function liveRows(s){
+  const q = UI.liveSearch.trim().toLowerCase();
+  return s.vendors.filter(v => {
+    if(q && v.displayName.toLowerCase().indexOf(q) === -1 && v.vendorKey.toLowerCase().indexOf(q) === -1) return false;
+    if(UI.liveStatus === "ALL") return true;
+    if(UI.liveStatus === "ATTENTION") return v.overall === "RED" || v.overall === "YELLOW";
+    return v.overall === UI.liveStatus;
+  });
+}
+
+function renderLive(s){
+  const rows = liveRows(s);
+  const w = s.window;
+  $("#liveSub").textContent =
+    `${rows.length} of ${s.vendors.length} vendors · current window ${fmtDate(w.currentStart)} → ${fmtDate(w.currentEnd)}`;
+
+  // The anchor is MAX(Date), so at a quiet hour almost every vendor legitimately
+  // has zero current volume. Say so, rather than leaving a wall of zeros to be
+  // misread as an outage.
+  const active = s.vendors.filter(v => v.failure && v.failure.currentVolume > 0).length;
+  $("#liveNote").innerHTML = active === 0
+    ? `<strong>No transactions at all</strong> in the current ${CONFIG.window.currentHours}-hour window
+       (${esc(fmtDate(w.currentStart))} → ${esc(fmtDate(w.currentEnd))}). Failure signals need current
+       traffic to fire, so failure status is driven by history here. Activity status is unaffected.`
+    : `<strong>${esc(num(active))} of ${esc(num(s.vendors.length))} vendors</strong> transacted in the
+       current ${CONFIG.window.currentHours}-hour window (${esc(fmtDate(w.currentStart))} →
+       ${esc(fmtDate(w.currentEnd))}). Vendors with no current traffic cannot raise a failure spike;
+       their activity status still applies.`;
+
+  const columns = [
+    { key: "overall", label: "Overall", sortValue: v => STATUS_RANK[v.overall], render: v => lightBadge(v.overall) },
+    { key: "failure", label: "Failure", sortValue: v => STATUS_RANK[v.failure ? v.failure.light : "GREY"],
+      render: v => lightBadge(v.failure ? v.failure.light : null) },
+    { key: "activityLight", label: "Activity", sortValue: v => STATUS_RANK[v.activity ? v.activity.light : "GREY"],
+      render: v => lightBadge(v.activity ? v.activity.light : null) },
+    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
+      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
+    { key: "last", label: "Last transaction", sortValue: v => v.activity ? v.activity.lastTxn.getTime() : (v.rows.length ? v.rows[v.rows.length-1].time : 0),
+      render: v => esc(fmtDate(v.activity ? v.activity.lastTxn : (v.rows.length ? v.rows[v.rows.length-1].date : null))) },
+    { key: "mins", label: "Since", num: true, title: "Minutes since the vendor's last transaction",
+      sortValue: v => v.activity ? v.activity.minutesSinceLast : -1,
+      render: v => v.activity ? `<span title="${esc(num(v.activity.minutesSinceLast))} min">${esc(fmtDuration(v.activity.minutesSinceLast))}</span>` : "—" },
+    { key: "thr", label: "Threshold", num: true, title: "Dynamic inactivity threshold for this vendor-hour",
+      sortValue: v => v.activity && v.activity.dynamicThresholdMin != null ? v.activity.dynamicThresholdMin : -1,
+      render: v => v.activity && v.activity.dynamicThresholdMin != null ? num(v.activity.dynamicThresholdMin) + " min"
+        : `<span style="color:var(--text-faint)">suppressed</span>` },
+    { key: "hourClass", label: "Hour class", sortValue: v => v.activity ? v.activity.hourClass : "",
+      render: v => v.activity ? hourClassTag(v.activity.hourClass) : "—" },
+    { key: "freq", label: "Frequency", sortValue: v => v.activity ? v.activity.frequencyClass : "",
+      render: v => v.activity ? `<span class="tag">${esc(v.activity.frequencyClass.replace("_FREQUENCY", ""))}</span>` : "—" },
+    { key: "curVol", label: "Cur vol", num: true, sortValue: v => v.failure ? v.failure.currentVolume : -1,
+      render: v => v.failure ? num(v.failure.currentVolume) : "—" },
+    { key: "curFail", label: "Cur fail", num: true, sortValue: v => v.failure ? v.failure.currentFailures : -1,
+      render: v => v.failure ? num(v.failure.currentFailures) : "—" },
+    { key: "curRate", label: "Cur rate", num: true, sortValue: v => v.failure ? v.failure.currentRate : -1,
+      render: v => v.failure ? pct(v.failure.currentRate) : "—" },
+    { key: "baseRate", label: "Baseline", num: true, sortValue: v => v.failure ? v.failure.baselineRate : -1,
+      render: v => v.failure ? pct(v.failure.baselineRate) : "—" },
+    { key: "streak", label: "Streak", num: true, sortValue: v => v.streak.currentStreak,
+      render: v => v.streak.currentStreak >= CONFIG.rule1.minStreak
+        ? `<strong style="color:var(--red)">${esc(num(v.streak.currentStreak))}</strong>`
+        : num(v.streak.currentStreak) },
+    { key: "signals", label: "Active signals", sortable: false, render: v => signalPills(v.failure) },
+    { key: "why", label: "Why", sortable: false,
+      render: v => v.primaryAlert
+        ? `<span class="truncate" style="max-width:420px;color:var(--text-dim)" title="${esc(v.primaryAlert.message)}">${esc(v.primaryAlert.message)}</span>`
+        : `<span style="color:var(--text-faint)">healthy</span>` }
+  ];
+
+  buildTable($("#liveTable"), columns, rows, UI.liveSort,
+    key => { UI.liveSort = { key, dir: UI.liveSort.key === key ? -UI.liveSort.dir : 1 }; renderLive(STATE); },
+    {
+      rowClass: v => "clickable row-" + v.overall,
+      rowAttrs: v => `data-vendor="${esc(v.vendorKey)}"`,
+      expanded: v => UI.liveOpen.has(v.vendorKey),
+      renderDetail: v => vendorDetailPanel(v, true)
+    });
+
+  $$("#liveTable tbody tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => {
+      const key = tr.dataset.vendor;
+      if(UI.liveOpen.has(key)) UI.liveOpen.delete(key); else UI.liveOpen.add(key);
+      renderLive(STATE);
+    });
+  });
+}
+
+/** Shared by the inline expander and the Vendor Detail tab. */
+function vendorDetailPanel(v, compact){
+  const sig = v.failure, act = v.activity;
+  const alerts = v.alerts.length
+    ? v.alerts.map(a => explainBlock(a)).join("")
+    : `<div class="explain">${esc(EXPLAIN.HEALTHY(v.displayName, {
+         currentRate: sig ? sig.currentRate : 0,
+         currentVolume: sig ? sig.currentVolume : 0,
+         minutesSinceLast: act ? act.minutesSinceLast : 0 }))}</div>`;
+
+  const stats = [];
+  if(sig){
+    stats.push(["Current window volume", num(sig.currentVolume)]);
+    stats.push(["Current failures", num(sig.currentFailures)]);
+    stats.push(["Current failure rate", pct(sig.currentRate)]);
+    stats.push(["Baseline failure rate", pct(sig.baselineRate)
+      + ` <span style="color:var(--text-faint);font-weight:450">(${num(sig.baselineVolume)} txns${sig.usedFallbackBaseline ? ", fallback" : ""})</span>`]);
+    stats.push(["Alert score", num(sig.alertScore)]);
+    stats.push(["Current / max streak", `${num(sig.currentStreak)} / ${num(v.streak.maxStreak)}`]);
+    stats.push(["Longest run in window", num(sig.maxConsecutive)]);
+    stats.push(["Max in 30-min window", num(sig.maxIn30Min)]);
+    stats.push(["Expected volume (scaled)", sig.expectedVolumeScaled.toFixed(2)]);
+    stats.push(["Sigma / deviation", `${sig.sigmaScaled.toFixed(2)} / ${sig.sigmaDeviationScaled.toFixed(2)}σ`]);
+    stats.push(["Volume direction", sig.volumeDirection.replace(/_/g, " ")]);
+  }
+  if(act){
+    stats.push(["Last transaction", fmtDate(act.lastTxn)]);
+    stats.push(["Time since last", fmtDuration(act.minutesSinceLast)]);
+    stats.push(["Dynamic threshold", act.dynamicThresholdMin == null ? "suppressed (quiet hour)" : num(act.dynamicThresholdMin) + " min"]);
+    stats.push(["Vendor-hour class", `${act.hourClass} — ${act.monitoringMode}`]);
+    stats.push(["Frequency class", act.frequencyClass.replace(/_/g, " ")]);
+    stats.push(["Median / p75 / p90 gap", `${act.medianIntervalMin.toFixed(1)} / ${act.p75IntervalMin.toFixed(1)} / ${act.p90IntervalMin.toFixed(1)} min`]);
+    stats.push(["Longest historical gap", fmtDuration(act.historicalMaxGapMin)]);
+    stats.push(["Active days", num(act.activeDays)]);
+  }
+  stats.push(["Lifetime transactions", num(v.totalVolume)]);
+  stats.push(["Lifetime failures", `${num(v.totalFailures)} (${pct(ratio(v.totalFailures, v.totalVolume))})`]);
+  if(v.rule2Alerts) stats.push(["Rule 2 breach days", num(v.rule2Alerts)]);
+  if(v.topCategory) stats.push(["Top failure category", esc(v.topCategory.label)]);
+  if(v.spellings.length > 1){
+    stats.push(["Name variants merged", v.spellings.map(([n, c]) => `${esc(n)} (${c})`).join(", ")]);
+  }
+
+  const reasons = sig && sig.distinctReasons.length
+    ? `<div class="card-head" style="padding:0 0 8px;border:0"><h3>Failure reasons in the current window</h3></div>`
+      + sig.distinctReasons.map(r => `<div class="reason-text" style="margin-bottom:6px">• ${esc(truncate(r, CONFIG.display.maxReasonChars))}</div>`).join("")
+    : "";
+
+  return `<div class="grid ${compact ? "two-col" : "two-col"}">
+    <div><h3 style="font-size:12.5px;margin-bottom:8px">Why this status</h3>${alerts}${reasons}</div>
+    <div><h3 style="font-size:12.5px;margin-bottom:8px">Supporting metrics</h3>
+      ${stats.map(([k2, v2]) => `<div class="stat-line"><span class="k">${esc(k2)}</span><span class="v">${v2}</span></div>`).join("")}
+    </div>
+  </div>`;
+}
+
+/* ======================== TAB 3 — FAILURE MONITOR ======================= */
+function renderFailure(s){
+  const withSignal = s.vendors.filter(v => v.failure);
+  const count = predicate => withSignal.filter(predicate).length;
+  $("#failureKpis").innerHTML = [
+    kpiCard("Failure spikes", num(count(v => v.failure.signals.spike)),
+      `≥${CONFIG.spike.minCurrentVolume} txns and +${pp(CONFIG.spike.absoluteDelta)}pp or ${CONFIG.spike.relativeRatio}× baseline`,
+      count(v => v.failure.signals.spike) ? "red" : "green"),
+    kpiCard("Critical spikes", num(count(v => v.failure.signals.critical)),
+      `≥${pct(CONFIG.critical.minRate, 0)} rate with ≥${CONFIG.critical.minFailures} failures &mdash; Red on its own`,
+      count(v => v.failure.signals.critical) ? "red" : "green"),
+    kpiCard("Failure clusters", num(count(v => v.failure.signals.cluster)),
+      `${CONFIG.cluster.minConsecutive}+ back-to-back or ${CONFIG.cluster.minInWindow}+ in ${CONFIG.cluster.windowMinutes} min`,
+      count(v => v.failure.signals.cluster) ? "amber" : "green"),
+    kpiCard("Volume anomalies", num(count(v => v.failure.signals.volumeAnomaly)),
+      `≥${CONFIG.volume.sigmaThreshold}σ from hourly baseline`,
+      count(v => v.failure.signals.volumeAnomaly) ? "amber" : "green"),
+    kpiCard("Active streaks", num(count(v => v.failure.streakActive)), `${CONFIG.rule1.minStreak}+ failures, unbroken`,
+      count(v => v.failure.streakActive) ? "amber" : "green"),
+    kpiCard("Rule 2 alerts", num(s.kpis.rule2Alerts),
+      `${num(s.kpis.rule2VendorsAffected)} vendors over ${num(s.kpis.daysMonitored)} days`,
+      s.kpis.rule2Alerts ? "amber" : "green")
+  ].join("");
+
+  buildTable($("#signalTable"), [
+    { key: "light", label: "Light", sortValue: v => STATUS_RANK[v.failure.light], render: v => lightBadge(v.failure.light) },
+    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
+      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
+    { key: "score", label: "Score", num: true, title: "3×spike + 2×cluster + 1×volume anomaly",
+      sortValue: v => v.failure.alertScore, render: v => num(v.failure.alertScore) },
+    { key: "curVol", label: "Cur vol", num: true, sortValue: v => v.failure.currentVolume, render: v => num(v.failure.currentVolume) },
+    { key: "curFail", label: "Cur fail", num: true, sortValue: v => v.failure.currentFailures, render: v => num(v.failure.currentFailures) },
+    { key: "curRate", label: "Cur rate", num: true, sortValue: v => v.failure.currentRate, render: v => pct(v.failure.currentRate) },
+    { key: "baseVol", label: "Base vol", num: true, sortValue: v => v.failure.baselineVolume, render: v => num(v.failure.baselineVolume) },
+    { key: "baseRate", label: "Base rate", num: true, sortValue: v => v.failure.baselineRate, render: v => pct(v.failure.baselineRate) },
+    { key: "consec", label: "Max run", num: true, sortValue: v => v.failure.maxConsecutive, render: v => num(v.failure.maxConsecutive) },
+    { key: "in30", label: "Max/30m", num: true, sortValue: v => v.failure.maxIn30Min, render: v => num(v.failure.maxIn30Min) },
+    { key: "exp", label: "Expected", num: true, title: "Expected volume for a window this long (scaled)",
+      sortValue: v => v.failure.expectedVolumeScaled, render: v => v.failure.expectedVolumeScaled.toFixed(1) },
+    { key: "sigma", label: "σ dev", num: true, sortValue: v => v.failure.sigmaDeviationScaled,
+      render: v => v.failure.sigmaDeviationScaled.toFixed(2) },
+    { key: "streak", label: "Streak", num: true, sortValue: v => v.failure.currentStreak, render: v => num(v.failure.currentStreak) },
+    { key: "signals", label: "Signals", sortable: false, render: v => signalPills(v.failure) },
+    { key: "reason", label: "Current failure reasons", sortable: false,
+      render: v => v.failure.distinctReasons.length
+        ? `<span class="truncate" style="max-width:380px" title="${esc(v.failure.distinctReasons.join(" | "))}">${esc(v.failure.distinctReasons.join(" | "))}</span>`
+        : `<span style="color:var(--text-faint)">—</span>` }
+  ], withSignal, UI.signalSort,
+    key => { UI.signalSort = { key, dir: UI.signalSort.key === key ? -UI.signalSort.dir : 1 }; renderFailure(STATE); },
+    { rowClass: v => "row-" + v.failure.light });
+
+  const streaks = s.vendors.filter(v => v.streak.status !== "-");
+  buildTable($("#streakTable"), [
+    { key: "status", label: "Status", sortValue: v => v.streak.status,
+      render: v => v.streak.status === "Active"
+        ? `<span class="light light-RED"><span class="glyph">●</span>ACTIVE</span>`
+        : `<span class="light light-GREEN"><span class="glyph">✓</span>RESOLVED</span>` },
+    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
+      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
+    { key: "cur", label: "Current", num: true, sortValue: v => v.streak.currentStreak, render: v => num(v.streak.currentStreak) },
+    { key: "max", label: "Max", num: true, sortValue: v => v.streak.maxStreak, render: v => num(v.streak.maxStreak) },
+    { key: "cat", label: "Top failure category", sortable: false,
+      render: v => v.topCategory ? esc(v.topCategory.label) : "—" }
+  ], streaks, UI.streakSort,
+    key => { UI.streakSort = { key, dir: UI.streakSort.key === key ? -UI.streakSort.dir : 1 }; renderFailure(STATE); },
+    { rowClass: v => v.streak.status === "Active" ? "row-RED" : "",
+      emptyMessage: "No vendor has recorded a 2+ failure streak" });
+
+  const q = UI.rule2Search.trim().toLowerCase();
+  const alerts = s.rule2Alerts.filter(a => !q || a.displayName.toLowerCase().indexOf(q) !== -1);
+  buildTable($("#rule2Table"), [
+    { key: "day", label: "Date", sortValue: a => a.day, render: a => esc(fmtDay(a.day)) },
+    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: a => a.displayName,
+      render: a => `<span class="truncate" title="${esc(a.displayName)}">${esc(a.displayName)}</span>` },
+    { key: "txns", label: "Txns", num: true, sortValue: a => a.transactions, render: a => num(a.transactions) },
+    { key: "fails", label: "Failures", num: true, sortValue: a => a.failures, render: a => num(a.failures) },
+    { key: "rate", label: "Rate", num: true, sortValue: a => a.failureRate,
+      render: a => `<strong style="color:var(--red)">${esc(pct(a.failureRate))}</strong>` }
+  ], alerts, UI.rule2Sort,
+    key => { UI.rule2Sort = { key, dir: UI.rule2Sort.key === key ? -UI.rule2Sort.dir : 1 }; renderFailure(STATE); },
+    { emptyMessage: "No vendor-day breached the Rule 2 threshold" });
+}
+
+/* ======================== TAB 4 — ACTIVITY MONITOR ====================== */
+function renderActivity(s){
+  const k = s.kpis;
+  $("#activityKpis").innerHTML = [
+    kpiCard("Red", num(k.activityRed), "overdue beyond dynamic threshold", k.activityRed ? "red" : "green"),
+    kpiCard("Yellow", num(k.activityYellow), `≥${pct(CONFIG.activity.yellowRatio, 0)} of threshold`, k.activityYellow ? "amber" : "green"),
+    kpiCard("Green", num(k.activityGreen), "within expected range", "green"),
+    kpiCard("Grey", num(k.activityGrey), "quiet hour &mdash; monitoring suppressed"),
+    kpiCard("Dormant", num(k.dormantVendors), "silent beyond any historical gap", k.dormantVendors ? "red" : "green")
+  ].join("");
+
+  const q = UI.activitySearch.trim().toLowerCase();
+  const rows = s.vendors.filter(v => v.activity)
+    .filter(v => !q || v.displayName.toLowerCase().indexOf(q) !== -1);
+
+  buildTable($("#activityTable"), [
+    { key: "light", label: "Activity", sortValue: v => STATUS_RANK[v.activity.light], render: v => lightBadge(v.activity.light) },
+    { key: "vendor", label: "Vendor", cellClass: "vendor", sortValue: v => v.displayName,
+      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>`
+        + (v.activity.dormant ? ` <span class="sig on-red">DORMANT</span>` : "") },
+    { key: "last", label: "Last transaction", sortValue: v => v.activity.lastTxn.getTime(),
+      render: v => esc(fmtDate(v.activity.lastTxn)) },
+    { key: "mins", label: "Since", num: true, sortValue: v => v.activity.minutesSinceLast,
+      render: v => `<span title="${esc(num(v.activity.minutesSinceLast))} min">${esc(fmtDuration(v.activity.minutesSinceLast))}</span>` },
+    { key: "median", label: "Median gap", num: true, title: "Median interval between this vendor's transactions",
+      sortValue: v => v.activity.medianIntervalMin, render: v => v.activity.medianIntervalMin.toFixed(1) + " min" },
+    { key: "p90", label: "p90 gap", num: true, sortValue: v => v.activity.p90IntervalMin,
+      render: v => v.activity.p90IntervalMin.toFixed(0) + " min" },
+    { key: "base", label: "Base thr", num: true, title: "clamp(round(p90 gap), band lo, band hi)",
+      sortValue: v => v.activity.baseThresholdMin, render: v => num(v.activity.baseThresholdMin) },
+    { key: "thr", label: "Dynamic thr", num: true, title: "Base threshold × hour-class multiplier",
+      sortValue: v => v.activity.dynamicThresholdMin == null ? -1 : v.activity.dynamicThresholdMin,
+      render: v => v.activity.dynamicThresholdMin == null
+        ? `<span style="color:var(--text-faint)">suppressed</span>` : num(v.activity.dynamicThresholdMin) + " min" },
+    { key: "freq", label: "Frequency", sortValue: v => v.activity.frequencyClass,
+      render: v => `<span class="tag">${esc(v.activity.frequencyClass.replace("_FREQUENCY", ""))}</span>` },
+    { key: "hourClass", label: "Hour class", sortValue: v => v.activity.hourClass, render: v => hourClassTag(v.activity.hourClass) },
+    { key: "mode", label: "Mode", sortValue: v => v.activity.monitoringMode, render: v => esc(v.activity.monitoringMode) },
+    { key: "hist", label: "Hist. txns", num: true, title: "Transactions this vendor has ever recorded in this weekday+hour slot",
+      sortValue: v => v.activity.histCount, render: v => `${num(v.activity.histCount)} / ${num(v.activity.dowMax)}` },
+    { key: "curVol", label: "Cur vol", num: true, sortValue: v => v.failure ? v.failure.currentVolume : -1,
+      render: v => v.failure ? num(v.failure.currentVolume) : "—" },
+    { key: "expVol", label: "Expected", num: true, sortValue: v => v.failure ? v.failure.expectedVolumeScaled : -1,
+      render: v => v.failure ? v.failure.expectedVolumeScaled.toFixed(1) : "—" },
+    { key: "sigma", label: "σ dev", num: true, sortValue: v => v.failure ? v.failure.sigmaDeviationScaled : -1,
+      render: v => v.failure ? v.failure.sigmaDeviationScaled.toFixed(2) : "—" },
+    { key: "dir", label: "Direction", sortValue: v => v.failure ? v.failure.volumeDirection : "",
+      render: v => v.failure ? `<span class="tag">${esc(v.failure.volumeDirection.replace(/_/g, " "))}</span>` : "—" },
+    { key: "why", label: "Assessment", sortable: false,
+      render: v => {
+        const a = v.alerts.find(x => x.dimension === "ACTIVITY");
+        return a ? `<span class="truncate" style="max-width:420px;color:var(--text-dim)" title="${esc(a.message)}">${esc(a.message)}</span>`
+                 : `<span style="color:var(--text-faint)">within expected range</span>`;
+      } }
+  ], rows, UI.activitySort,
+    key => { UI.activitySort = { key, dir: UI.activitySort.key === key ? -UI.activitySort.dir : 1 }; renderActivity(STATE); },
+    { rowClass: v => "row-" + v.activity.light,
+      emptyMessage: `No vendor has the ${CONFIG.vendor.hubMinTxns}+ transactions needed for a cadence profile` });
+}
+
+/* ========================= TAB 5 — REASON ANALYSIS ====================== */
+function renderReason(s){
+  const totalFailures = s.kpis.analysedFailures;
+  $("#reasonSub").textContent =
+    `${s.categories.length} categories over ${num(totalFailures)} failures`;
+
+  buildTable($("#categoryTable"), [
+    { key: "cat", label: "Category", sortValue: c => c.category,
+      render: c => `<strong>${esc(c.category)}</strong>` },
+    { key: "failures", label: "Failures", num: true, sortValue: c => c.failures, render: c => num(c.failures) },
+    { key: "share", label: "Share", num: true, sortValue: c => c.share, render: c => pct(c.share) },
+    { key: "bar", label: "", sortable: false, render: c => {
+        const w = (100 * c.failures / Math.max(1, s.categories[0].failures)).toFixed(1);
+        return `<div class="minibar" style="min-width:90px"><span style="width:${w}%"></span></div>`; } },
+    { key: "vendors", label: "Vendors", num: true, sortValue: c => c.vendorCount, render: c => num(c.vendorCount) },
+    { key: "first", label: "First seen", sortValue: c => c.firstSeen.getTime(), render: c => esc(fmtDate(c.firstSeen)) },
+    { key: "last", label: "Last seen", sortValue: c => c.lastSeen.getTime(), render: c => esc(fmtDate(c.lastSeen)) }
+  ], s.categories, UI.categorySort,
+    key => { UI.categorySort = { key, dir: UI.categorySort.key === key ? -UI.categorySort.dir : 1 }; renderReason(STATE); },
+    {
+      rowClass: () => "clickable",
+      rowAttrs: c => `data-cat="${esc(c.category)}"`,
+      expanded: c => UI.openCategory === c.category,
+      renderDetail: c => `<h3 style="font-size:12.5px;margin-bottom:8px">Raw reasons in “${esc(c.category)}”</h3>`
+        + c.topReasons.map(([text, n]) =>
+            `<div class="stat-line"><span class="k reason-text">${esc(truncate(text, CONFIG.display.maxReasonChars))}</span><span class="v">${esc(num(n))}</span></div>`).join("")
+        + (c.reasons.size > c.topReasons.length
+            ? `<div class="kpi-sub" style="margin-top:8px">${esc(num(c.reasons.size - c.topReasons.length))} further distinct texts not shown</div>` : ""),
+      emptyMessage: "No failures to categorise"
+    });
+
+  $$("#categoryTable tbody tr.clickable").forEach(tr => {
+    tr.addEventListener("click", () => {
+      UI.openCategory = UI.openCategory === tr.dataset.cat ? null : tr.dataset.cat;
+      renderReason(STATE);
+    });
+  });
+
+  const unmappedTotal = s.unmapped.reduce((a, u) => a + u.count, 0);
+  $("#unmappedNote").innerHTML = s.unmapped.length
+    ? `<strong>${esc(num(unmappedTotal))} failures</strong> across
+       <strong>${esc(num(s.unmapped.length))} distinct texts</strong> match no keyword and fall through to
+       “Unspecified” (${esc(pct(ratio(unmappedTotal, totalFailures)))} of all failures). Literal “N/A”
+       reasons are excluded from this list. Each line here is a candidate keyword for
+       <code>REASON_MAP</code> &mdash; adding one reclassifies every matching failure on the next load.`
+    : `Every failure reason matched a keyword. Nothing to add to <code>REASON_MAP</code>.`;
+
+  buildTable($("#unmappedTable"), [
+    { key: "count", label: "Count", num: true, sortValue: u => u.count, render: u => num(u.count) },
+    { key: "vendors", label: "Vendors", num: true, sortValue: u => u.vendorCount, render: u => num(u.vendorCount) },
+    { key: "last", label: "Last seen", sortValue: u => u.lastSeen.getTime(), render: u => esc(fmtDate(u.lastSeen)) },
+    { key: "reason", label: "Raw reason text", sortable: false,
+      render: u => `<div class="reason-text">${esc(truncate(u.reason, CONFIG.display.maxReasonChars))}</div>` }
+  ], s.unmapped.slice(0, CONFIG.display.topUnmapped), null, null,
+    { emptyMessage: "No unmapped failure reasons" });
+}
+
+/* ========================== TAB 6 — VENDOR DETAIL ======================= */
+function renderVendorPicker(s){
+  const select = $("#vendorPick");
+  if(!s.vendors.length){ select.innerHTML = ""; return; }
+  if(!UI.vendor || !s.vendors.some(v => v.vendorKey === UI.vendor)) UI.vendor = s.vendors[0].vendorKey;
+  select.innerHTML = [...s.vendors]
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+    .map(v => `<option value="${esc(v.vendorKey)}"${v.vendorKey === UI.vendor ? " selected" : ""}>`
+      + `${esc(v.displayName)} — ${v.overall}</option>`).join("");
+}
+
+function renderVendor(s){
+  const v = s.vendors.find(x => x.vendorKey === UI.vendor);
+  const host = $("#vendorDetail");
+  if(!v){ host.innerHTML = emptyChart("No vendor selected"); return; }
+
+  // Daily series for this vendor only.
+  const perDay = new Map();
+  for(const t of v.rows){
+    let d = perDay.get(t.dayKey);
+    if(!d){ d = { day: t.dayKey, transactions: 0, failures: 0 }; perDay.set(t.dayKey, d); }
+    d.transactions++; if(t.isFailure) d.failures++;
+  }
+  const daily = [...perDay.values()].sort((a, b) => a.day.localeCompare(b.day));
+  const days = daily.map(d => d.day);
+
+  const act = v.activity;
+  const maxHour = act ? Math.max(1, ...act.hourHistogram) : 1;
+  const hourGrid = act ? `
+    <div class="hour-grid">${act.hourHistogram.map((n, h) => {
+      const alpha = n === 0 ? 0.06 : 0.15 + 0.85 * (n / maxHour);
+      const isNow = h === act.currentHour;
+      return `<div class="hour-cell" title="${h}:00 — ${esc(num(n))} transactions"
+        style="background:color-mix(in srgb, var(--blue) ${(alpha * 100).toFixed(0)}%, transparent);
+               ${isNow ? "outline:2px solid var(--red);outline-offset:1px" : ""}"></div>`;
+    }).join("")}</div>
+    <div class="hour-axis">${Array.from({ length: 24 }, (_, h) => h % 3 === 0 ? h : "").map(l => `<span>${l}</span>`).join("")}</div>
+    <div class="kpi-sub" style="margin-top:7px">Transactions by hour of day across all history.
+      The outlined column is the current hour (${String(act.currentHour).padStart(2, "0")}:00,
+      ${esc(act.currentDayName)}), classified <strong>${esc(act.hourClass)}</strong>.</div>` : "";
+
+  host.innerHTML = `
+    <div class="grid three-col" style="margin-bottom:16px">
+      ${kpiCard("Overall", v.overall, `${v.failure ? "failure " + v.failure.light : "no signal"} · ${act ? "activity " + act.light : "no profile"}`,
+        v.overall === "RED" ? "red" : v.overall === "YELLOW" ? "amber" : v.overall === "GREEN" ? "green" : null)}
+      ${kpiCard("Lifetime transactions", num(v.totalVolume), `${num(v.totalFailures)} failures · ${pct(ratio(v.totalFailures, v.totalVolume))}`)}
+      ${kpiCard("Last transaction", act ? fmtDuration(act.minutesSinceLast) + " ago" : "—",
+        act ? esc(fmtDate(act.lastTxn)) : "")}
+    </div>
+    <div style="margin-bottom:16px">${vendorDetailPanel(v, false)}</div>
+    <div class="grid two-col">
+      <div class="card"><div class="card-head"><h3>Daily volume</h3></div>
+        <div class="card-body" id="vdVolume"></div></div>
+      <div class="card"><div class="card-head"><h3>Daily failure rate</h3></div>
+        <div class="card-body" id="vdRate"></div></div>
+    </div>
+    <div class="grid two-col" style="margin-top:16px">
+      <div class="card"><div class="card-head"><h3>Activity by hour of day</h3></div>
+        <div class="card-body">${hourGrid || emptyChart("No cadence profile — fewer than " + CONFIG.vendor.hubMinTxns + " transactions")}</div></div>
+      <div class="card"><div class="card-head"><h3>Top failure categories</h3></div>
+        <div class="card-body" id="vdCats"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div class="card-head"><h3>Recent transactions</h3>
+        <span class="card-sub">most recent ${CONFIG.display.recentTransactions}, raw and unmodified</span></div>
+      <div class="card-body flush"><div class="table-wrap scroll-y"><table id="vdRecent"></table></div></div>
+    </div>`;
+
+  lineChart($("#vdVolume"), days, [
+    { label: "Successful", colour: CHART_COLOURS.success, values: daily.map(d => d.transactions - d.failures) },
+    { label: "Failed", colour: CHART_COLOURS.failure, values: daily.map(d => d.failures) }
+  ], { emptyMessage: "No transactions" });
+
+  lineChart($("#vdRate"), days, [
+    { label: "Failure rate", colour: CHART_COLOURS.failure, values: daily.map(d => ratio(d.failures, d.transactions)) }
+  ], { max: 1, yFormat: v2 => pct(v2, 0), tipFormat: v2 => pct(v2),
+       threshold: CONFIG.rule2.rateThreshold, thresholdLabel: pct(CONFIG.rule2.rateThreshold, 0),
+       emptyMessage: "No transactions" });
+
+  const cats = new Map();
+  for(const t of v.rows) if(t.isFailure) cats.set(t.category, (cats.get(t.category) || 0) + 1);
+  barChart($("#vdCats"), [...cats.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+    .map(([label, value]) => ({ label, value, sub: pct(ratio(value, v.totalFailures)) })),
+    { emptyMessage: "No failures recorded for this vendor" });
+
+  const recent = v.rows.slice(-CONFIG.display.recentTransactions).reverse();
+  buildTable($("#vdRecent"), [
+    { key: "date", label: "Timestamp", sortable: false, render: t => esc(fmtDate(t.date)) },
+    { key: "status", label: "Status", sortable: false,
+      render: t => t.isFailure ? `<span class="light light-RED"><span class="glyph">●</span>FAILURE</span>`
+                               : `<span class="light light-GREEN"><span class="glyph">✓</span>SUCCESS</span>` },
+    { key: "po", label: "PO", sortable: false, cellClass: "mono", render: t => esc(t.po || "—") },
+    { key: "cat", label: "Category", sortable: false, render: t => t.isFailure ? esc(t.category) : "—" },
+    { key: "reason", label: "Raw reason", sortable: false,
+      render: t => `<span class="truncate" style="max-width:520px" title="${esc(t.reason)}">${esc(truncate(t.reason, 200))}</span>` }
+  ], recent, null, null, { emptyMessage: "No transactions" });
+}
+
+/* ========================= DATA QUALITY PANEL =========================== */
+function renderQuality(s){
+  const L = s.ledger;
+  const excluded = L.excludedNoVendor + L.excludedBadDate;
+  const junkVendors = [...s.registry.values()].filter(e => e.tier === "EXCLUDED_JUNK");
+  const junkRows = junkVendors.reduce((a, e) => a + e.rows.length, 0);
+
+  $("#qualityCount").innerHTML = excluded
+    ? `<span class="count alarm">${esc(num(excluded))}</span>` : `<span class="count">0</span>`;
+
+  const chain = [
+    ["Rows read from source", L.rawRows, "every row in the file, including empty ones"],
+    ["Empty rows", -L.excludedBlankRow, "no content in any of the five fields"],
+    ["Rows with transaction content", L.realTransactions, ""],
+    ["Excluded — vendor is blank", -L.excludedNoVendor, "cannot be attributed to a vendor"],
+    ["Excluded — date unparseable", -L.excludedBadDate, "cannot be placed on the timeline"],
+    ["Analysed by every engine", L.analysable, ""]
+  ];
+
+  $("#qualityBody").innerHTML = `
+    <div class="note" style="margin-bottom:16px">
+      Every row is accounted for. Rows the engines cannot use are listed below rather than dropped
+      silently, so the gap between the source file and the analysed figures is always explainable.
+    </div>
+    <h3 style="font-size:13px;margin-bottom:8px">Row reconciliation</h3>
+    <div style="margin-bottom:18px">
+      ${chain.map(([label, value, note]) => `
+        <div class="stat-line">
+          <span class="k">${esc(label)}${note ? ` <span style="color:var(--text-faint)">— ${esc(note)}</span>` : ""}</span>
+          <span class="v" style="${value < 0 ? "color:var(--red)" : ""}">${value < 0 ? "−" : ""}${esc(num(Math.abs(value)))}</span>
+        </div>`).join("")}
+    </div>
+
+    ${L.excludedNoVendor ? `<div class="note warn" style="margin-bottom:16px">
+      <strong>${esc(num(L.excludedNoVendor))} row${L.excludedNoVendor === 1 ? "" : "s"} carry a transaction
+      but no vendor.</strong> In the source data these are failures whose vendor name leaked into the
+      Reason text instead. They are quarantined rather than repaired: inferring a vendor from error prose
+      would be an undocumented business rule. Fixing them belongs upstream, in the system that writes this log.
+    </div>` : ""}
+
+    <h3 style="font-size:13px;margin-bottom:8px">Vendor identity</h3>
+    <div style="margin-bottom:18px">
+      <div class="stat-line"><span class="k">Monitored vendors</span><span class="v">${esc(num(s.vendors.length))}</span></div>
+      <div class="stat-line"><span class="k">With a full cadence profile (≥${CONFIG.vendor.hubMinTxns} txns)</span>
+        <span class="v">${esc(num(s.vendors.filter(v => v.tier === "FULL").length))}</span></div>
+      <div class="stat-line"><span class="k">Failure signals only (too few txns to profile)</span>
+        <span class="v">${esc(num(s.vendors.filter(v => v.tier === "SIGNAL_ONLY").length))}</span></div>
+      <div class="stat-line"><span class="k">Excluded as junk (${esc(num(junkRows))} rows)</span>
+        <span class="v">${esc(num(junkVendors.length))}</span></div>
+    </div>
+    ${junkVendors.length ? `<div class="note" style="margin-bottom:16px">
+      Vendor names longer than ${CONFIG.vendor.hubMaxNameLen} characters, or containing
+      ${CONFIG.vendor.excludeSubstrings.map(x => `<code>${esc(x)}</code>`).join(" or ")}, are error text or
+      HTML email bodies written into the Vendor column. They are excluded from every engine.
+    </div>` : ""}
+    ${s.vendors.filter(v => v.spellings.length > 1).length ? `
+      <h3 style="font-size:13px;margin-bottom:8px">Merged name variants</h3>
+      <div style="margin-bottom:18px">${s.vendors.filter(v => v.spellings.length > 1).map(v => `
+        <div class="stat-line"><span class="k">${esc(v.displayName)}</span>
+          <span class="v" style="font-weight:450">${v.spellings.map(([n, c]) => `${esc(n)} (${esc(num(c))})`).join(" + ")}</span></div>`).join("")}
+      </div>` : ""}
+
+    ${Object.keys(L.oddStatus).length ? `
+      <h3 style="font-size:13px;margin-bottom:8px">Unrecognised status values</h3>
+      <div class="note warn" style="margin-bottom:10px">These rows are kept and counted as
+        non-failures, matching the case-insensitive <code>= "Failure"</code> test, but the vocabulary
+        is unexpected.</div>
+      <div style="margin-bottom:18px">${Object.entries(L.oddStatus).map(([k, n]) =>
+        `<div class="stat-line"><span class="k">${esc(k || "(blank)")}</span><span class="v">${esc(num(n))}</span></div>`).join("")}
+      </div>` : ""}
+
+    ${L.quarantine.length ? `
+      <h3 style="font-size:13px;margin-bottom:8px">Quarantined rows (${esc(num(L.quarantine.length))})</h3>
+      <div class="table-wrap scroll-y"><table id="qTable"></table></div>` : ""}`;
+
+  if(L.quarantine.length){
+    buildTable($("#qTable"), [
+      // Row numbers are identifiers, not quantities — no thousands separator.
+      { key: "row", label: "Row", num: true, sortable: false, render: r => String(r.rowNumber) },
+      { key: "why", label: "Excluded because", sortable: false, render: r => esc(VERDICT_LABEL[r.verdict] || r.verdict) },
+      { key: "status", label: "Status", sortable: false, render: r => esc(r.status || "—") },
+      { key: "po", label: "PO", sortable: false, cellClass: "mono nowrap", render: r => esc(r.po || "—") },
+      { key: "date", label: "Date", sortable: false, cellClass: "nowrap", render: r => esc(r.date || "—") },
+      { key: "reason", label: "Reason text", sortable: false,
+        render: r => `<span class="truncate" style="max-width:340px" title="${esc(r.reason)}">${esc(truncate(r.reason, 200))}</span>` }
+    ], L.quarantine, null, null, {});
+  }
+}
+
+/* ============================== ROOT RENDER ============================= */
+function render(){
+  const s = STATE;
+  if(!s || s.empty){
+    $("#asOf").textContent = "no data";
+    $("#freshText").textContent = "No data";
+    $("main").innerHTML = `<div class="card"><div class="card-body">${emptyChart(
+      "No usable transactions. Load a CSV or JSON file with Status, Vendor, Reason, PO and Date columns.")}</div></div>`;
+    return;
+  }
+
+  $("#asOf").textContent = fmtDate(s.window.currentEnd);
+
+  // Freshness is an operational indicator only — it never moves the analysis
+  // window, which stays anchored to MAX(Date) for reproducibility.
+  const f = s.freshness;
+  const pill = $("#freshPill");
+  pill.className = "pill " + f.state.toLowerCase();
+  $("#freshText").textContent = `${f.state} · data ${fmtDuration(f.ageMinutes)} old`;
+  pill.title = `Newest transaction ${fmtDate(s.window.currentEnd)}; page opened ${fmtDate(f.checkedAt)}. `
+    + `Fresh ≤${CONFIG.freshness.freshMinutes} min, Delayed ≤${CONFIG.freshness.delayedMinutes} min, `
+    + `Stale beyond. This indicator does not affect any calculation.`;
+
+  const attention = s.kpis.attentionVendors;
+  $("#cntLive").outerHTML = `<span class="count${attention ? " alarm" : ""}" id="cntLive">${num(attention)}</span>`;
+  const failCount = s.kpis.redVendors + s.kpis.yellowVendors;
+  $("#cntFailure").outerHTML = `<span class="count${failCount ? " alarm" : ""}" id="cntFailure">${num(failCount)}</span>`;
+  const actCount = s.kpis.activityRed + s.kpis.activityYellow;
+  $("#cntActivity").outerHTML = `<span class="count${actCount ? " alarm" : ""}" id="cntActivity">${num(actCount)}</span>`;
+
+  renderOverview(s);
+  renderLive(s);
+  renderFailure(s);
+  renderActivity(s);
+  renderReason(s);
+  renderVendorPicker(s);
+  renderVendor(s);
+  renderQuality(s);
+}
+
+/* ==========================================================================
+   L12 — INTERACTION
+   ========================================================================== */
+function showTab(name){
+  UI.tab = name;
+  $$(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+  $$(".panel").forEach(p => { p.hidden = p.id !== "panel-" + name; });
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+function applyTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  $("#btnTheme").textContent = theme === "dark" ? "Light" : "Dark";
+  try { localStorage.setItem("rpa-monitor-theme", theme); } catch(e){ /* private mode */ }
+}
+
+/** CSV export of the live vendor table — the operational view an analyst is
+ *  most likely to want to hand on. */
+function exportCsv(){
+  const s = STATE;
+  if(!s || s.empty) return;
+  const header = ["Vendor","VendorKey","Overall","FailureLight","ActivityLight","LastTransaction",
+    "MinutesSinceLast","DynamicThresholdMin","HourClass","MonitoringMode","FrequencyClass",
+    "CurrentVolume","CurrentFailures","CurrentFailureRate","BaselineFailureRate","BaselineVolume",
+    "UsedFallbackBaseline","AlertScore","FailureSpike","CriticalSpike","Cluster","VolumeAnomaly",
+    "VolumeDirection","ExpectedVolumeScaled","SigmaDeviationScaled","CurrentStreak","MaxStreak",
+    "Rule2BreachDays","TotalVolume","TotalFailures","Dormant","PrimaryAlert"];
+  const cell = v => {
+    const s2 = String(v == null ? "" : v);
+    return /[",\n]/.test(s2) ? '"' + s2.replace(/"/g, '""') + '"' : s2;
+  };
+  const lines = [header.join(",")];
+  for(const v of s.vendors){
+    const g = v.failure, a = v.activity;
+    lines.push([
+      v.displayName, v.vendorKey, v.overall, g ? g.light : "", a ? a.light : "",
+      a ? a.lastTxn.toISOString() : "", a ? Math.round(a.minutesSinceLast) : "",
+      a && a.dynamicThresholdMin != null ? a.dynamicThresholdMin : "",
+      a ? a.hourClass : "", a ? a.monitoringMode : "", a ? a.frequencyClass : "",
+      g ? g.currentVolume : "", g ? g.currentFailures : "",
+      g ? g.currentRate.toFixed(6) : "", g ? g.baselineRate.toFixed(6) : "", g ? g.baselineVolume : "",
+      g ? g.usedFallbackBaseline : "", g ? g.alertScore : "",
+      g ? g.signals.spike : "", g ? g.signals.critical : "", g ? g.signals.cluster : "",
+      g ? g.signals.volumeAnomaly : "", g ? g.volumeDirection : "",
+      g ? g.expectedVolumeScaled.toFixed(3) : "", g ? g.sigmaDeviationScaled.toFixed(3) : "",
+      v.streak.currentStreak, v.streak.maxStreak, v.rule2Alerts, v.totalVolume, v.totalFailures,
+      a ? a.dormant : "", v.primaryAlert ? v.primaryAlert.message : ""
+    ].map(cell).join(","));
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a2 = document.createElement("a");
+  a2.href = url;
+  a2.download = `rpa-vendor-monitor-${s.window.currentEnd.toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a2); a2.click(); a2.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Replace the dataset. Everything is rebuilt from computeAll, so no value from
+ *  the previous dataset can survive: the UI reads only from STATE. */
+function loadRows(rawRows, label){
+  try {
+    const next = computeAll(rawRows);
+    if(next.empty && !next.ledger.analysable){
+      alert(`No usable rows found${label ? " in " + label : ""}.\n\n`
+        + `Read ${next.ledger.rawRows} row(s): `
+        + `${next.ledger.excludedBlankRow} empty, ${next.ledger.excludedNoVendor} without a vendor, `
+        + `${next.ledger.excludedBadDate} with an unparseable date.`);
+      return false;
+    }
+    STATE = next;
+    UI.liveOpen.clear();
+    UI.openCategory = null;
+    UI.vendor = null;
+    UI.liveSearch = ""; UI.activitySearch = ""; UI.rule2Search = "";
+    UI.liveStatus = "ALL";
+    $("#liveSearch").value = ""; $("#activitySearch").value = ""; $("#rule2Search").value = "";
+    $("#liveStatus").value = "ALL";
+    render();
+    return true;
+  } catch(err){
+    console.error(err);
+    alert("Could not process that data:\n\n" + err.message);
+    return false;
+  }
+}
+
+function wireEvents(){
+  $$(".tab").forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
+
+  $("#btnTheme").addEventListener("click", () => {
+    applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+
+  $("#btnLoad").addEventListener("click", () => $("#fileInput").click());
+  $("#fileInput").addEventListener("change", e => {
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        loadRows(parseUploaded(String(reader.result), file.name), file.name);
+      } catch(err){
+        console.error(err);
+        alert(`Could not read ${file.name}:\n\n${err.message}\n\n`
+          + `Expected a CSV or JSON file with columns: Status, Vendor, Reason, PO, Date.`);
+      }
+      e.target.value = "";                       // allow re-loading the same file
+    };
+    reader.onerror = () => alert("Could not read that file.");
+    reader.readAsText(file);
+  });
+
+  $("#btnExport").addEventListener("click", exportCsv);
+
+  $("#btnQuality").addEventListener("click", () => { $("#qualityModal").hidden = false; });
+  $("#btnQualityClose").addEventListener("click", () => { $("#qualityModal").hidden = true; });
+  $("#qualityModal").addEventListener("click", e => {
+    if(e.target.id === "qualityModal") $("#qualityModal").hidden = true;
+  });
+  document.addEventListener("keydown", e => {
+    if(e.key === "Escape") $("#qualityModal").hidden = true;
+  });
+
+  $("#liveStatus").addEventListener("change", e => { UI.liveStatus = e.target.value; renderLive(STATE); });
+  $("#liveSearch").addEventListener("input", e => { UI.liveSearch = e.target.value; renderLive(STATE); });
+  $("#activitySearch").addEventListener("input", e => { UI.activitySearch = e.target.value; renderActivity(STATE); });
+  $("#rule2Search").addEventListener("input", e => { UI.rule2Search = e.target.value; renderFailure(STATE); });
+  $("#vendorPick").addEventListener("change", e => { UI.vendor = e.target.value; renderVendor(STATE); });
+
+  window.addEventListener("scroll", hideTooltip, { passive: true });
+}
+
+/* ============================== SELF TEST ==============================
+   ?selftest=1 dumps the computed state as JSON so tools/compare.py can diff it
+   against the Python reference engine field by field.
+   ====================================================================== */
+function selfTestPayload(){
+  const s = STATE;
+  // Local-time ISO, matching Python's naive datetime.isoformat(). Emitting UTC
+  // here would make every timestamp appear to differ by the machine's offset.
+  const iso = d => {
+    const p = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+         + `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
+  const out = {
+    window: {
+      currentEnd: iso(s.window.currentEnd),
+      currentStart: iso(s.window.currentStart),
+      baselineStart: iso(s.window.baselineStart)
+    },
+    kpis: s.kpis,
+    quality: {
+      rawRows: s.ledger.rawRows, analysable: s.ledger.analysable,
+      excludedBlankRow: s.ledger.excludedBlankRow,
+      excludedNoVendor: s.ledger.excludedNoVendor,
+      excludedBadDate: s.ledger.excludedBadDate
+    },
+    signals: {}, activity: {}, streaks: {}, registry: {},
+    categories: s.categories.map(c => ({
+      category: c.category, failures: c.failures, share: c.share,
+      vendors: c.vendorCount, firstSeen: iso(c.firstSeen), lastSeen: iso(c.lastSeen)
+    })),
+    unmapped: Object.fromEntries(s.unmapped.map(u => [u.reason, u.count])),
+    rule2Alerts: s.rule2Alerts.length
+  };
+  for(const [key, g] of s.signals){
+    out.signals[key] = {
+      light: g.light, alertScore: g.alertScore, signals: g.signals,
+      currentVolume: g.currentVolume, currentFailures: g.currentFailures, currentRate: g.currentRate,
+      baselineVolume: g.baselineVolume, baselineFailures: g.baselineFailures,
+      baselineRate: g.baselineRate, usedFallbackBaseline: g.usedFallbackBaseline,
+      baselineHours: g.baselineHours, maxConsecutive: g.maxConsecutive, maxIn30Min: g.maxIn30Min,
+      expectedVolume: g.expectedVolume, sigma: g.sigma, sigmaDeviation: g.sigmaDeviation,
+      expectedVolumeScaled: g.expectedVolumeScaled, sigmaScaled: g.sigmaScaled,
+      sigmaDeviationScaled: g.sigmaDeviationScaled,
+      volumeDirection: g.volumeDirection, currentStreak: g.currentStreak,
+      streakActive: g.streakActive, totalVolume: g.totalVolume, totalFailures: g.totalFailures,
+      distinctReasons: g.distinctReasons
+    };
+  }
+  for(const [key, a] of s.activity){
+    out.activity[key] = {
+      light: a.light, minutesSinceLast: Math.round(a.minutesSinceLast),
+      frequencyClass: a.frequencyClass, baseThresholdMin: a.baseThresholdMin,
+      dynamicThresholdMin: a.dynamicThresholdMin, hourClass: a.hourClass,
+      monitoringMode: a.monitoringMode, histCount: a.histCount, dowMax: a.dowMax,
+      dormant: a.dormant, activeDays: a.activeDays, hourVsMax: a.hourVsMax,
+      historicalMaxGapMin: a.historicalMaxGapMin, dormancyLimitMin: a.dormancyLimitMin,
+      medianIntervalMin: a.medianIntervalMin, p75IntervalMin: a.p75IntervalMin,
+      p90IntervalMin: a.p90IntervalMin,
+      currentDow: a.currentDow, currentHour: a.currentHour, currentDayName: a.currentDayName,
+      lastTxn: iso(a.lastTxn), firstTxn: iso(a.firstTxn)
+    };
+  }
+  for(const v of s.vendors) out.streaks[v.vendorKey] = v.streak;
+  // The full registry, junk included, so the exclusion classification itself is
+  // verified against the reference engine rather than assumed.
+  for(const [key, e] of s.registry){
+    out.registry[key] = { displayName: e.displayName, tier: e.tier,
+      signalEligible: e.signalEligible, internal: e.internal, rows: e.rows.length };
+  }
+  return out;
+}
+
+/* ================================= BOOT ================================ */
+(function boot(){
+  let theme = "light";
+  try {
+    theme = localStorage.getItem("rpa-monitor-theme")
+      || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  } catch(e){ /* private mode */ }
+  applyTheme(theme);
+
+  wireEvents();
+  showTab("overview");
+  STATE = computeAll(rehydrate(EMBEDDED_DATA));
+  render();
+
+  if(/[?&]selftest=1/.test(location.search)){
+    const blob = new Blob([JSON.stringify(selfTestPayload(), null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "selftest.json";
+    a.textContent = "download selftest.json";
+    a.id = "selftest-link";
+    a.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:999;background:var(--blue);color:#fff;padding:10px 14px;border-radius:8px;font-weight:600";
+    document.body.appendChild(a);
+    window.__SELFTEST__ = selfTestPayload();
+  }
+})();
+</script>
+</body>
+</html>
