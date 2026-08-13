@@ -63,6 +63,20 @@ CFG = {
     # Mirrors CONFIG.vendorScope.liveSince in rpa-monitor.html.
     "liveSince": dt.datetime(2026, 8, 1),
     "todayComparisonDays": 7,
+    # Calibration — mirrors CONFIG.calibration in rpa-monitor.html.
+    "calibrationEnabled": True,
+    "calMinEligibleDays": 30,
+    "calMaxAdaptiveRate": 0.90,
+    "calChronicBaselineRate": 0.40,
+    # Drift — mirrors CONFIG.drift.
+    "driftEnabled": True,
+    "driftRecentDays": 30,
+    "driftPriorDays": 90,
+    "driftMinRecentVolume": 50,
+    "driftMinPriorVolume": 50,
+    "driftRegressionDelta": 0.08,
+    "driftSevereDelta": 0.20,
+    "driftImprovementDelta": 0.08,
     "freqHighMaxMedian": 2,
     "freqMediumMaxMedian": 30,
     "freqBounds": {
@@ -133,8 +147,30 @@ REASON_MAP = [
     ("PO details not found", "PO not found in database"),
     ("N/A", "Unspecified"),
 ]
-_LOWER_MAP = [(k.casefold(), c) for k, c in REASON_MAP]
 DEFAULT_CATEGORY = "Unspecified"
+
+# Calibration is loaded lazily so `categorize` works standalone — calibrate.py
+# imports it while *producing* the calibration and must not depend on it.
+CALIBRATION: dict = {}
+_LOWER_MAP = [(k.casefold(), c) for k, c in REASON_MAP]
+
+
+def load_calibration(path: str = "data/calibration.json") -> dict:
+    """Per-brand thresholds and learned reason rules. Optional: without it the
+    engine runs on the flat thresholds it shipped with."""
+    global CALIBRATION, _LOWER_MAP
+    try:
+        with open(path, encoding="utf-8") as fh:
+            CALIBRATION = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        CALIBRATION = {}
+        return CALIBRATION
+    # Learned rules go immediately BEFORE the final "N/A" rule, so the
+    # hand-written rules keep priority and these only catch the fall-through.
+    learned = [(r["match"], r["category"]) for r in CALIBRATION.get("reasonRules", [])]
+    combined = REASON_MAP[:-1] + learned + REASON_MAP[-1:]
+    _LOWER_MAP = [(k.casefold(), c) for k, c in combined]
+    return CALIBRATION
 
 
 def categorize(reason: str | None) -> str:
@@ -146,6 +182,27 @@ def categorize(reason: str | None) -> str:
         if keyword in text:
             return category
     return DEFAULT_CATEGORY
+
+
+def brand_calibration(vendor_key: str):
+    if not CFG["calibrationEnabled"]:
+        return None
+    p = CALIBRATION.get("brands", {}).get(vendor_key)
+    if not p:
+        return None
+    p = dict(p)
+    p["reliable"] = p["reliable"] and p["eligibleDays"] >= CFG["calMinEligibleDays"]
+    return p
+
+
+def resolve_threshold(vendor_key: str, floor: float, key: str) -> tuple[float, str]:
+    """Floor from the documented rule, raised by the brand's own percentile,
+    capped so a degraded brand cannot raise itself out of alerting."""
+    cal = brand_calibration(vendor_key)
+    if not cal or not cal["reliable"]:
+        return floor, "flat"
+    value = min(CFG["calMaxAdaptiveRate"], max(floor, cal.get(key) or 0.0))
+    return value, ("flat" if value == floor else "adaptive")
 
 
 # ---------------------------------------------------------------------------
@@ -284,10 +341,16 @@ def aggregate(txns: list[Txn], vendor_keys=None, start=None, end=None) -> dict:
             if txt and txt.upper() != "N/A":
                 unmapped[txt] += 1
 
+    # Rule 2 against each brand's own threshold, resolved once per brand.
+    thresholds: dict[str, tuple] = {}
+    for k, _ in vendor_days:
+        if k not in thresholds:
+            thresholds[k] = resolve_threshold(k, CFG["rule2RateThreshold"], "p90DailyRate")
     alerts = [{"vendorKey": k, "day": d, "transactions": n, "failures": f,
-               "failureRate": f / n if n else 0.0}
+               "failureRate": f / n if n else 0.0,
+               "threshold": thresholds[k][0], "thresholdSource": thresholds[k][1]}
               for (k, d), (n, f) in vendor_days.items()
-              if n >= CFG["rule2MinTxns"] and (f / n if n else 0) > CFG["rule2RateThreshold"]]
+              if n >= CFG["rule2MinTxns"] and (f / n if n else 0) > thresholds[k][0]]
 
     return {
         "rows": rows,
@@ -412,7 +475,9 @@ def compute_signals(registry: dict, current_end: dt.datetime) -> dict:
                  or (base_rate > 0
                      and cur_rate / base_rate >= CFG["spikeRelativeRatio"]
                      and cur_rate >= CFG["spikeRelativeMinRate"])))
-        critical = bool(cur_rate >= CFG["criticalMinRate"]
+        crit_threshold, crit_source = resolve_threshold(
+            key, CFG["criticalMinRate"], "p95DailyRate")
+        critical = bool(cur_rate >= crit_threshold
                         and cur_fail >= CFG["criticalMinFailures"])
         cluster = bool(max_consec >= CFG["clusterMinConsecutive"]
                        or max_in_30 >= CFG["clusterMinInWindow"])
@@ -469,6 +534,7 @@ def compute_signals(registry: dict, current_end: dt.datetime) -> dict:
 
         streak = current_streak(rows)
         total_fail = sum(1 for t in rows if t.is_failure)
+        cal = brand_calibration(key)
 
         results[key] = {
             "light": light,
@@ -497,6 +563,57 @@ def compute_signals(registry: dict, current_end: dt.datetime) -> dict:
             "totalVolume": len(rows),
             "totalFailures": total_fail,
             "distinctReasons": distinct,
+            "criticalThreshold": crit_threshold,
+            "criticalThresholdSource": crit_source,
+            "chronic": bool(cal and cal["baselineRate"] >= CFG["calChronicBaselineRate"]),
+        }
+    return results
+
+
+def compute_drift(registry: dict, current_end: dt.datetime) -> dict:
+    """Slow movement the 2-hour window cannot see, and the counterweight to
+    adaptive thresholds: a degrading brand raises its own percentile and would
+    otherwise go quiet."""
+    results = {}
+    if not CFG["driftEnabled"]:
+        return results
+    recent_start = current_end - dt.timedelta(days=CFG["driftRecentDays"])
+    prior_start = recent_start - dt.timedelta(days=CFG["driftPriorDays"])
+
+    for key, entry in registry.items():
+        if entry["tier"] == "EXCLUDED_JUNK":
+            continue
+        rows = entry["rows"]
+        # Always the same key set, whatever the outcome, so consumers (and the
+        # parity check) never have to special-case a missing field.
+        blank = {"status": "INSUFFICIENT_DATA", "delta": None, "recentRate": None,
+                 "priorRate": None, "source": None, "recentVolume": 0, "priorVolume": None}
+        recent = [t for t in rows if recent_start < t.date <= current_end]
+        if len(recent) < CFG["driftMinRecentVolume"]:
+            results[key] = {**blank, "recentVolume": len(recent)}
+            continue
+        recent_rate = sum(1 for t in recent if t.is_failure) / len(recent)
+
+        prior = [t for t in rows if prior_start < t.date <= recent_start]
+        cal = brand_calibration(key)
+        if len(prior) >= CFG["driftMinPriorVolume"]:
+            prior_rate = sum(1 for t in prior if t.is_failure) / len(prior)
+            source, prior_volume = "dataset", len(prior)
+        elif cal and cal["reliable"]:
+            prior_rate, source, prior_volume = cal["baselineRate"], "calibration", cal["transactions"]
+        else:
+            results[key] = {**blank, "recentVolume": len(recent), "recentRate": recent_rate}
+            continue
+
+        delta = recent_rate - prior_rate
+        status = ("SEVERE_REGRESSION" if delta >= CFG["driftSevereDelta"]
+                  else "REGRESSION" if delta >= CFG["driftRegressionDelta"]
+                  else "IMPROVEMENT" if delta <= -CFG["driftImprovementDelta"]
+                  else "STABLE")
+        results[key] = {
+            "status": status, "delta": delta, "recentRate": recent_rate,
+            "priorRate": prior_rate, "source": source,
+            "recentVolume": len(recent), "priorVolume": prior_volume,
         }
     return results
 
@@ -620,6 +737,7 @@ def build(path: str, parity: bool = False) -> dict:
 
     signals = compute_signals(registry, current_end)
     activity = compute_activity(registry, current_end, parity=parity)
+    drift = compute_drift(registry, current_end)
 
     streaks = {k: rule1(e["rows"]) for k, e in registry.items()
                if e["tier"] != "EXCLUDED_JUNK"}
@@ -706,10 +824,27 @@ def build(path: str, parity: bool = False) -> dict:
             "activityYellow": sum(1 for v in live_activity.values() if v["light"] == "YELLOW"),
             "activityGreen": sum(1 for v in live_activity.values() if v["light"] == "GREEN"),
             "activityGrey": sum(1 for v in live_activity.values() if v["light"] == "GREY"),
+            "chronicVendors": sum(1 for k in live_keys
+                                  if k in signals and signals[k]["chronic"]),
+            "regressingVendors": sum(1 for k in live_keys if k in drift
+                                     and drift[k]["status"] in ("REGRESSION", "SEVERE_REGRESSION")),
+            "improvingVendors": sum(1 for k in live_keys if k in drift
+                                    and drift[k]["status"] == "IMPROVEMENT"),
+            "calibratedVendors": sum(1 for k in live_keys
+                                     if (brand_calibration(k) or {}).get("reliable")),
+            "liveFailures": live_agg["totals"]["failures"],
         },
         "signals": signals,
         "activity": activity,
+        "drift": drift,
         "streaks": streaks,
+        "calibration": {
+            "active": bool(CALIBRATION.get("brands")),
+            "brands": len(CALIBRATION.get("brands", {})),
+            "reliableBrands": sum(1 for p in CALIBRATION.get("brands", {}).values()
+                                  if p["reliable"] and p["eligibleDays"] >= CFG["calMinEligibleDays"]),
+            "learnedRules": len(CALIBRATION.get("reasonRules", [])),
+        },
         "rule2Alerts": live_agg["rule2Alerts"],
         "categories": live_agg["categories"],
         "unmapped": live_agg["unmapped"],
@@ -725,11 +860,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("payload", nargs="?", default="data/sheet1_payload.json")
     ap.add_argument("-o", "--out")
+    ap.add_argument("--calibration", default="data/calibration.json")
     ap.add_argument("--parity", action="store_true",
                     help="disable all documented deviations and reproduce "
                          "the workbook's own values")
     args = ap.parse_args()
 
+    load_calibration(args.calibration)
     result = build(args.payload, parity=args.parity)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as fh:
@@ -753,12 +890,18 @@ def main() -> None:
     active = sum(1 for s in result["streaks"].values() if s["status"] == "Active")
     resolved = sum(1 for s in result["streaks"].values() if s["status"] == "Resolved")
     print(f"RULE 1   active {active}  resolved {resolved}")
-    fails = k["analysedFailures"]
+    # Reason analysis is live-scoped, so the denominator must be too.
+    fails = k["liveFailures"]
     uns = next((c for c in result["categories"] if c["category"] == "Unspecified"), None)
-    print(f"REASONS  {len(result['categories'])} categories, "
-          f"Unspecified {uns['failures'] if uns else 0}/{fails}, "
+    print(f"REASONS  {len(result['categories'])} categories over {fails:,} live failures, "
+          f"Unspecified {uns['failures'] if uns else 0}, "
           f"truly unmapped {sum(result['unmapped'].values())} "
           f"across {len(result['unmapped'])} texts")
+    c = result["calibration"]
+    print(f"CALIB    {c['reliableBrands']}/{c['brands']} brands adaptive, "
+          f"{c['learnedRules']} learned reason rules")
+    print(f"TREND    {k['regressingVendors']} regressing, {k['improvingVendors']} improving, "
+          f"{k['chronicVendors']} chronic")
 
 
 if __name__ == "__main__":

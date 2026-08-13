@@ -1,0 +1,406 @@
+{
+ "generated": "2026-08-13T10:07:33",
+ "source": "data/history_dca_2026.xlsx",
+ "sourceRows": 73481,
+ "sourceFrom": "2025-12-15T22:10:13",
+ "sourceTo": "2026-08-12T22:53:46",
+ "config": {
+  "minDayVolume": 5,
+  "minEligibleDays": 30,
+  "rule2Percentile": 0.9,
+  "criticalPercentile": 0.95,
+  "chronicBaselineRate": 0.4,
+  "maxAdaptiveRate": 0.9
+ },
+ "brands": {
+  "ARCTERA": {
+   "eligibleDays": 22,
+   "activeDays": 67,
+   "transactions": 328,
+   "failures": 73,
+   "baselineRate": 0.2225609756097561,
+   "p50DailyRate": 0.17777777777777776,
+   "p90DailyRate": 0.42571428571428577,
+   "p95DailyRate": 0.5914285714285713,
+   "medianDailyVolume": 8.5,
+   "reliable": false,
+   "chronic": false
+  },
+  "BROADCOM": {
+   "eligibleDays": 150,
+   "activeDays": 162,
+   "transactions": 7067,
+   "failures": 2305,
+   "baselineRate": 0.3261638601952738,
+   "p50DailyRate": 0.26747967479674795,
+   "p90DailyRate": 0.5063455531809963,
+   "p95DailyRate": 0.5370334928229665,
+   "medianDailyVolume": 37.0,
+   "reliable": true,
+   "chronic": false
+  },
+  "CHECKPOINT": {
+   "eligibleDays": 159,
+   "activeDays": 193,
+   "transactions": 2849,
+   "failures": 965,
+   "baselineRate": 0.3387153387153387,
+   "p50DailyRate": 0.3333333333333333,
+   "p90DailyRate": 0.5418803418803422,
+   "p95DailyRate": 0.6036363636363634,
+   "medianDailyVolume": 16,
+   "reliable": true,
+   "chronic": false
+  },
+  "CITRIX": {
+   "eligibleDays": 85,
+   "activeDays": 93,
+   "transactions": 1809,
+   "failures": 325,
+   "baselineRate": 0.179657269209508,
+   "p50DailyRate": 0.13333333333333333,
+   "p90DailyRate": 0.39483870967741946,
+   "p95DailyRate": 0.5285714285714285,
+   "medianDailyVolume": 22,
+   "reliable": true,
+   "chronic": false
+  },
+  "COMMVAULT": {
+   "eligibleDays": 94,
+   "activeDays": 157,
+   "transactions": 860,
+   "failures": 347,
+   "baselineRate": 0.40348837209302324,
+   "p50DailyRate": 0.4,
+   "p90DailyRate": 0.7000000000000002,
+   "p95DailyRate": 0.7907142857142856,
+   "medianDailyVolume": 7.0,
+   "reliable": true,
+   "chronic": true
+  },
+  "FORCEPOINT": {
+   "eligibleDays": 36,
+   "activeDays": 137,
+   "transactions": 493,
+   "failures": 209,
+   "baselineRate": 0.4239350912778905,
+   "p50DailyRate": 0.42857142857142855,
+   "p90DailyRate": 0.6458333333333333,
+   "p95DailyRate": 0.701048951048951,
+   "medianDailyVolume": 6.0,
+   "reliable": true,
+   "chronic": true
+  },
+  "FORTINET": {
+   "eligibleDays": 164,
+   "activeDays": 176,
+   "transactions": 13165,
+   "failures": 1912,
+   "baselineRate": 0.14523357387011013,
+   "p50DailyRate": 0.12701664532650447,
+   "p90DailyRate": 0.2521084337349398,
+   "p95DailyRate": 0.34526315789473677,
+   "medianDailyVolume": 80.0,
+   "reliable": true,
+   "chronic": false
+  },
+  "HP": {
+   "eligibleDays": 165,
+   "activeDays": 200,
+   "transactions": 2255,
+   "failures": 669,
+   "baselineRate": 0.2966740576496674,
+   "p50DailyRate": 0.2777777777777778,
+   "p90DailyRate": 0.5,
+   "p95DailyRate": 0.6,
+   "medianDailyVolume": 12,
+   "reliable": true,
+   "chronic": false
+  },
+  "IBM": {
+   "eligibleDays": 109,
+   "activeDays": 195,
+   "transactions": 1352,
+   "failures": 429,
+   "baselineRate": 0.3173076923076923,
+   "p50DailyRate": 0.2727272727272727,
+   "p90DailyRate": 0.6,
+   "p95DailyRate": 0.6399999999999996,
+   "medianDailyVolume": 7,
+   "reliable": true,
+   "chronic": false
+  },
+  "KASPERSKY": {
+   "eligibleDays": 25,
+   "activeDays": 103,
+   "transactions": 385,
+   "failures": 89,
+   "baselineRate": 0.23116883116883116,
+   "p50DailyRate": 0.2,
+   "p90DailyRate": 0.6900000000000002,
+   "p95DailyRate": 0.75,
+   "medianDailyVolume": 6,
+   "reliable": false,
+   "chronic": false
+  },
+  "ORACLE": {
+   "eligibleDays": 124,
+   "activeDays": 164,
+   "transactions": 1253,
+   "failures": 325,
+   "baselineRate": 0.2593774940143655,
+   "p50DailyRate": 0.2426470588235294,
+   "p90DailyRate": 0.6,
+   "p95DailyRate": 0.6621212121212119,
+   "medianDailyVolume": 8.0,
+   "reliable": true,
+   "chronic": false
+  },
+  "REDHAT": {
+   "eligibleDays": 145,
+   "activeDays": 156,
+   "transactions": 2225,
+   "failures": 204,
+   "baselineRate": 0.09168539325842696,
+   "p50DailyRate": 0.0625,
+   "p90DailyRate": 0.2,
+   "p95DailyRate": 0.2681818181818178,
+   "medianDailyVolume": 13,
+   "reliable": true,
+   "chronic": false
+  },
+  "RSA": {
+   "eligibleDays": 83,
+   "activeDays": 168,
+   "transactions": 967,
+   "failures": 365,
+   "baselineRate": 0.37745604963805585,
+   "p50DailyRate": 0.4,
+   "p90DailyRate": 0.6,
+   "p95DailyRate": 0.7464285714285711,
+   "medianDailyVolume": 8,
+   "reliable": true,
+   "chronic": false
+  },
+  "SOPHOS": {
+   "eligibleDays": 156,
+   "activeDays": 161,
+   "transactions": 4487,
+   "failures": 539,
+   "baselineRate": 0.12012480499219969,
+   "p50DailyRate": 0.106203007518797,
+   "p90DailyRate": 0.21544117647058825,
+   "p95DailyRate": 0.25,
+   "medianDailyVolume": 28.0,
+   "reliable": true,
+   "chronic": false
+  },
+  "SPLUNK": {
+   "eligibleDays": 130,
+   "activeDays": 186,
+   "transactions": 1420,
+   "failures": 759,
+   "baselineRate": 0.5345070422535211,
+   "p50DailyRate": 0.5419580419580419,
+   "p90DailyRate": 0.75,
+   "p95DailyRate": 0.8,
+   "medianDailyVolume": 8.0,
+   "reliable": true,
+   "chronic": true
+  },
+  "TENABLE": {
+   "eligibleDays": 159,
+   "activeDays": 196,
+   "transactions": 3502,
+   "failures": 933,
+   "baselineRate": 0.26641918903483724,
+   "p50DailyRate": 0.25806451612903225,
+   "p90DailyRate": 0.47894736842105307,
+   "p95DailyRate": 1.0,
+   "medianDailyVolume": 21,
+   "reliable": true,
+   "chronic": false
+  },
+  "TRELLIX": {
+   "eligibleDays": 35,
+   "activeDays": 135,
+   "transactions": 463,
+   "failures": 112,
+   "baselineRate": 0.24190064794816415,
+   "p50DailyRate": 0.25,
+   "p90DailyRate": 0.561038961038961,
+   "p95DailyRate": 0.5799999999999998,
+   "medianDailyVolume": 6,
+   "reliable": true,
+   "chronic": false
+  },
+  "TRENDMICRO": {
+   "eligibleDays": 157,
+   "activeDays": 162,
+   "transactions": 5539,
+   "failures": 705,
+   "baselineRate": 0.12727929229102727,
+   "p50DailyRate": 0.1111111111111111,
+   "p90DailyRate": 0.2673170731707317,
+   "p95DailyRate": 0.3399999999999996,
+   "medianDailyVolume": 28,
+   "reliable": true,
+   "chronic": false
+  },
+  "VEEAM": {
+   "eligibleDays": 174,
+   "activeDays": 177,
+   "transactions": 11711,
+   "failures": 3804,
+   "baselineRate": 0.324822816155751,
+   "p50DailyRate": 0.3125,
+   "p90DailyRate": 0.5,
+   "p95DailyRate": 0.566688829787234,
+   "medianDailyVolume": 64.0,
+   "reliable": true,
+   "chronic": false
+  },
+  "VMWARE": {
+   "eligibleDays": 166,
+   "activeDays": 173,
+   "transactions": 9811,
+   "failures": 4943,
+   "baselineRate": 0.5038222403424727,
+   "p50DailyRate": 0.5031645569620253,
+   "p90DailyRate": 0.6830181245074862,
+   "p95DailyRate": 0.7875757575757576,
+   "medianDailyVolume": 61.5,
+   "reliable": true,
+   "chronic": true
+  },
+  "WAREHOUSE": {
+   "eligibleDays": 80,
+   "activeDays": 121,
+   "transactions": 1540,
+   "failures": 327,
+   "baselineRate": 0.21233766233766233,
+   "p50DailyRate": 0.16666666666666666,
+   "p90DailyRate": 0.4895348837209303,
+   "p95DailyRate": 0.6270833333333332,
+   "medianDailyVolume": 17.0,
+   "reliable": true,
+   "chronic": false
+  }
+ },
+ "reasonRules": [
+  {
+   "match": "The purchase order contains a non-standard format of the quantity line. Please take the appropriate action to create and post manually the item arrival.",
+   "category": "Decimal QTY",
+   "observations": 85,
+   "confidence": 0.835
+  },
+  {
+   "match": "The automate faced the following error message for Order#311-PO806040. Add attachment: could not find a journal line matching Item , line number 30",
+   "category": "Technical issue",
+   "observations": 4,
+   "confidence": 1.0
+  },
+  {
+   "match": "Could not find file '\\uw1vmabap001p\\flexistorage\\ECS\\EMEA Item Arrival\\Output\\Order Confirmation SO# 250296811\\LineItems_CheckPoint.csv'.",
+   "category": "Technical issue",
+   "observations": 3,
+   "confidence": 1.0
+  },
+  {
+   "match": "The BOT was not able to find the MYD type for this PO. Please take the appropriate action to create and post manually the item arrival.",
+   "category": "MYD type",
+   "observations": 53,
+   "confidence": 1.0
+  },
+  {
+   "match": "We are missing email so BOT is not able to perform the automated process. Please review and take appropriate corrective action.",
+   "category": "Document missing",
+   "observations": 43,
+   "confidence": 1.0
+  },
+  {
+   "match": "No pro service items to receive from related PO. Please take the appropriate action to manually post the item arrival.",
+   "category": "Items",
+   "observations": 31,
+   "confidence": 0.935
+  },
+  {
+   "match": "PO can’t be received automatically as it appears to be an Over delivery (More items on the email than AX).",
+   "category": "Over delivery",
+   "observations": 10,
+   "confidence": 1.0
+  },
+  {
+   "match": "MultiYearDeal information is not found in DB, Please review and take appropriate corrective action.",
+   "category": "MYD",
+   "observations": 5,
+   "confidence": 1.0
+  },
+  {
+   "match": "There is an over delivery between the items in AX and the items mentioned on Vendor email.",
+   "category": "Over delivery",
+   "observations": 4,
+   "confidence": 1.0
+  },
+  {
+   "match": "This is not a Commercial Order Please review and take appropriate corrective action.",
+   "category": "Commercial",
+   "observations": 4,
+   "confidence": 1.0
+  },
+  {
+   "match": "Add attachment: could not find a journal line matching Item , line number 10",
+   "category": "Technical issue",
+   "observations": 4,
+   "confidence": 1.0
+  },
+  {
+   "match": "We are missing email so BOT is not able to perform the automated process.",
+   "category": "Document missing",
+   "observations": 20,
+   "confidence": 1.0
+  },
+  {
+   "match": "The given key 'SQLforSODetail_Citrix' was not present in the dictionary.",
+   "category": "Technical issue",
+   "observations": 34,
+   "confidence": 1.0
+  },
+  {
+   "match": "Object reference not set to an instance of an object.",
+   "category": "Technical issue",
+   "observations": 4,
+   "confidence": 1.0
+  },
+  {
+   "match": "Column 'LINENUMBER' does not belong to table .",
+   "category": "Technical issue",
+   "observations": 3,
+   "confidence": 1.0
+  },
+  {
+   "match": "An error occurred while sending the request.",
+   "category": "Technical issue",
+   "observations": 34,
+   "confidence": 0.824
+  },
+  {
+   "match": "Error while copying content to a stream.",
+   "category": "Technical issue",
+   "observations": 16,
+   "confidence": 0.875
+  },
+  {
+   "match": "The source contains no DataRows.",
+   "category": "Technical issue",
+   "observations": 16,
+   "confidence": 0.812
+  },
+  {
+   "match": "The request timed-out.",
+   "category": "Technical issue",
+   "observations": 8,
+   "confidence": 1.0
+  }
+ ]
+}

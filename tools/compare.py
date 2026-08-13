@@ -82,6 +82,10 @@ def main() -> None:
                       for k, v in oracle["activity"].items()},
          browser["activity"], diffs)
     walk("streaks", oracle["streaks"], browser["streaks"], diffs)
+    # Calibration-driven behaviour: adaptive thresholds and the drift signal.
+    walk("drift", oracle["drift"], browser["drift"], diffs)
+    walk("calibration", oracle["calibration"], {k: v for k, v in browser["calibration"].items()
+                                                if k in oracle["calibration"]}, diffs)
     walk("registry", oracle["registry"], browser["registry"], diffs)
     walk("categories", oracle["categories"], browser["categories"], diffs)
     walk("unmapped", oracle["unmapped"], browser["unmapped"], diffs)
@@ -97,8 +101,8 @@ def main() -> None:
 
     vendors = len(oracle["signals"])
     print(f"compared {vendors} signal vendors, {len(oracle['activity'])} activity vendors, "
-          f"{len(oracle['streaks'])} streaks, {len(oracle['categories'])} categories, "
-          f"{len(oracle['unmapped'])} unmapped reasons")
+          f"{len(oracle['streaks'])} streaks, {len(oracle['drift'])} drift profiles, "
+          f"{len(oracle['categories'])} categories, {len(oracle['unmapped'])} unmapped reasons")
 
     if diffs:
         print(f"\n{len(diffs)} DIFFERENCE(S)  (oracle | browser)")

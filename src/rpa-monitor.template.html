@@ -135,8 +135,10 @@ main{max-width:1680px; margin:0 auto; padding:var(--gap) 20px 56px}
 .scope-strip{
   max-width:1680px; margin:0 auto; padding:8px 20px 0;
   font-size:12px; color:var(--text-faint);
+  display:flex; gap:6px 24px; flex-wrap:wrap;
 }
 .scope-strip .warn{color:var(--amber); font-weight:600}
+.scope-strip code{font-family:var(--mono); font-size:11px}
 
 /* ================================ cards ================================== */
 .card{
@@ -598,7 +600,31 @@ const CONFIG = Object.freeze({
     baselineHoursMax: 1000    // Excel grid limit, kept for parity
   },
   rule1: { minStreak: 2 },                        // 2+ failures in a row
+  // rateThreshold and critical.minRate are FLOORS, not absolutes. When a brand
+  // has a trustworthy calibration its own historical percentile is used
+  // instead, because several brands operate above the flat values as a matter
+  // of course — the flat rule then fires on more than half of all brand-days
+  // and stops carrying information.
   rule2: { minTxns: 5, rateThreshold: 0.20 },     // >=5 txns AND >20% failures
+  calibration: {
+    enabled: true,
+    minEligibleDays: 30,        // below this a brand's percentiles are unstable
+    maxAdaptiveRate: 0.90,      // a degraded brand must never become un-alertable
+    chronicBaselineRate: 0.40,  // standing context, never an alert
+    staleAfterDays: 120         // warn when the calibration lags the live data
+  },
+  drift: {
+    // A 2-hour window cannot see a slow regression. This compares recent
+    // behaviour against a longer reference and reports the movement.
+    enabled: true,
+    recentDays: 30,
+    priorDays: 90,
+    minRecentVolume: 50,
+    minPriorVolume: 50,
+    regressionDelta: 0.08,      // +8pp or worse is a regression worth naming
+    severeDelta: 0.20,          // ...and this much is an incident
+    improvementDelta: 0.08
+  },
   spike: {
     minCurrentVolume: 5,      // below this there is not enough traffic to judge
     absoluteDelta: 0.15,      // +15 percentage points over baseline
@@ -658,6 +684,12 @@ const CONFIG = Object.freeze({
   display:   { recentTransactions: 60, topUnmapped: 200, maxReasonChars: 400 }
 });
 
+/* Per-brand thresholds and reason rules derived from the historical export by
+   tools/calibrate.py. Declared before the reason map because that map splices
+   in the learned rules at load time. Purely an enhancement: with an empty
+   calibration the dashboard runs on flat thresholds with drift disabled. */
+const CALIBRATION = __CALIBRATION_PAYLOAD__;
+
 /* Ordered keyword -> category. FIRST MATCH WINS, so order is significant.
    Port of the workbook's 'Reason Map' table. Extend by adding a row; put more
    specific keywords above more general ones. */
@@ -704,7 +736,23 @@ const REASON_MAP = [
   ["N/A",                                           "Unspecified"]
 ];
 const DEFAULT_CATEGORY = "Unspecified";
-const REASON_MAP_LC = REASON_MAP.map(([k, c]) => [k.toLowerCase(), c]);
+
+/** Rules recovered from the historical export's curated category column by
+ *  joining on PO. They are spliced in immediately BEFORE the final "N/A" rule,
+ *  so all forty hand-written rules keep priority and these only catch text that
+ *  would otherwise fall through to "Unspecified". */
+function buildReasonMap(){
+  const learned = (CALIBRATION && Array.isArray(CALIBRATION.reasonRules))
+    ? CALIBRATION.reasonRules : [];
+  const base = REASON_MAP.slice(0, REASON_MAP.length - 1);   // all but "N/A"
+  const tail = REASON_MAP.slice(REASON_MAP.length - 1);      // the "N/A" rule
+  const extra = learned.map(r => [r.match, r.category, "calibration"]);
+  return base.concat(extra, tail)
+             .map(([k, c, src]) => [String(k).toLowerCase(), c, src || "builtin"]);
+}
+const REASON_MAP_LC = buildReasonMap();
+const LEARNED_CATEGORIES = new Set(
+  (CALIBRATION && CALIBRATION.reasonRules || []).map(r => r.category));
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -724,6 +772,50 @@ function ratio(numerator, denominator){
   return denominator > 0 ? numerator / denominator : 0;
 }
 function clamp(v, lo, hi){ return Math.min(hi, Math.max(lo, v)); }
+
+/* --------------------------------------------------------------------------
+   CALIBRATION — per-brand thresholds derived from historical behaviour.
+   -------------------------------------------------------------------------- */
+const CAL_BRANDS = (CALIBRATION && CALIBRATION.brands) || {};
+const CAL_ACTIVE = CONFIG.calibration.enabled && Object.keys(CAL_BRANDS).length > 0;
+
+function calibrationFor(vendorKey){
+  if(!CAL_ACTIVE) return null;
+  const p = CAL_BRANDS[vendorKey];
+  if(!p) return null;
+  // A brand needs enough history for its percentiles to mean anything. Below
+  // the gate the profile is still reported, but thresholds fall back to flat.
+  return { ...p, reliable: p.reliable && p.eligibleDays >= CONFIG.calibration.minEligibleDays };
+}
+
+/**
+ * Resolve a threshold for one brand: the documented flat value is a floor, the
+ * brand's own percentile raises it, and a ceiling stops a badly degraded brand
+ * from raising its threshold out of reach and going silent.
+ * Returns the value plus its provenance, so explanations can cite where the
+ * number came from rather than quoting a bare figure.
+ */
+function resolveThreshold(vendorKey, floor, percentileKey){
+  const cal = calibrationFor(vendorKey);
+  if(!cal || !cal.reliable){
+    return { value: floor, source: "flat", floor,
+             reason: cal ? "too few calibrated days" : "no calibration" };
+  }
+  const raw = cal[percentileKey] || 0;
+  const value = clamp(Math.max(floor, raw), floor, CONFIG.calibration.maxAdaptiveRate);
+  return {
+    value,
+    source: value === floor ? "flat" : "adaptive",
+    floor, raw,
+    capped: raw > CONFIG.calibration.maxAdaptiveRate,
+    days: cal.eligibleDays,
+    baselineRate: cal.baselineRate
+  };
+}
+const rule2ThresholdFor = key =>
+  resolveThreshold(key, CONFIG.rule2.rateThreshold, "p90DailyRate");
+const criticalThresholdFor = key =>
+  resolveThreshold(key, CONFIG.critical.minRate, "p95DailyRate");
 
 /** numpy's default linear-interpolation percentile, so the JS profile matches
  *  the reference engine exactly. `sorted` must already be ascending. */
@@ -1200,12 +1292,26 @@ function aggregate(txns, opts){
     }
   }
 
-  const rule2All = [...vendorDays.values()].map(vd => ({
-    ...vd,
-    failureRate: ratio(vd.failures, vd.transactions),
-    alert: vd.transactions >= CONFIG.rule2.minTxns
-        && ratio(vd.failures, vd.transactions) > CONFIG.rule2.rateThreshold
-  }));
+  // Rule 2 is evaluated against each brand's own threshold. Resolved once per
+  // brand rather than per day — it is a property of the brand, not the day.
+  const thresholdCache = new Map();
+  const thresholdFor = key => {
+    let t = thresholdCache.get(key);
+    if(!t){ t = rule2ThresholdFor(key); thresholdCache.set(key, t); }
+    return t;
+  };
+  const rule2All = [...vendorDays.values()].map(vd => {
+    const rate = ratio(vd.failures, vd.transactions);
+    const threshold = thresholdFor(vd.vendorKey);
+    return {
+      ...vd,
+      failureRate: rate,
+      threshold: threshold.value,
+      thresholdSource: threshold.source,
+      thresholdDays: threshold.days || 0,
+      alert: vd.transactions >= CONFIG.rule2.minTxns && rate > threshold.value
+    };
+  });
   const rule2Alerts = rule2All.filter(r => r.alert)
     .sort((a, b) => a.day < b.day ? 1 : a.day > b.day ? -1 : b.failureRate - a.failureRate);
 
@@ -1437,8 +1543,11 @@ function computeSignals(registry, currentEnd){
        || (baselineRate > 0
            && currentRate / baselineRate >= CONFIG.spike.relativeRatio
            && currentRate >= CONFIG.spike.relativeMinRate));
-    // 2. CRITICAL SPIKE — bad in absolute terms, independent of any baseline.
-    const critical = currentRate >= CONFIG.critical.minRate
+    // 2. CRITICAL SPIKE — severe for THIS brand. The documented 40% is a floor;
+    // where a brand's own history says 40% is an ordinary day, its p95 is used
+    // instead, capped so a degraded brand cannot silence itself.
+    const criticalThreshold = criticalThresholdFor(key);
+    const critical = currentRate >= criticalThreshold.value
                   && currentFailures >= CONFIG.critical.minFailures;
     // 3. CLUSTER — failures bunched together means something is actively broken.
     const cluster = maxConsecutive >= CONFIG.cluster.minConsecutive
@@ -1488,9 +1597,23 @@ function computeSignals(registry, currentEnd){
     }
 
     const streak = currentStreak(rows);
+    const cal = calibrationFor(key);
     results.set(key, {
       light, alertScore,
       signals: { spike, critical, cluster, volumeAnomaly },
+      criticalThreshold: criticalThreshold.value,
+      criticalThresholdSource: criticalThreshold.source,
+      calibration: cal ? {
+        baselineRate: cal.baselineRate,
+        p90DailyRate: cal.p90DailyRate,
+        p95DailyRate: cal.p95DailyRate,
+        eligibleDays: cal.eligibleDays,
+        reliable: cal.reliable,
+        // A brand can sit inside its own adaptive threshold every day and still
+        // be failing half its work. That is a different question from "did
+        // something break today", so it is surfaced separately.
+        chronic: cal.baselineRate >= CONFIG.calibration.chronicBaselineRate
+      } : null,
       currentVolume, currentFailures, currentRate,
       baselineVolume, baselineFailures, baselineRate, usedFallbackBaseline, baselineHours,
       maxConsecutive, maxIn30Min,
@@ -1500,6 +1623,70 @@ function computeSignals(registry, currentEnd){
       totalVolume: rows.length,
       totalFailures: rows.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0),
       distinctReasons, currentRows: cur
+    });
+  }
+  return results;
+}
+
+/* ==========================================================================
+   DRIFT — slow movement the 2-hour window cannot see.
+   A brand can degrade steadily for weeks without ever tripping a spike: each
+   individual day looks close enough to the last. This compares recent
+   behaviour against a longer reference and reports the movement.
+
+   It is also the counterweight to adaptive thresholds. If a brand degrades, its
+   calibrated percentile rises with it and the adaptive threshold quietly stops
+   alerting; drift catches the movement the threshold absorbs.
+   ========================================================================== */
+function computeDrift(registry, currentEnd){
+  const results = new Map();
+  if(!CONFIG.drift.enabled) return results;
+
+  const recentStart = currentEnd - CONFIG.drift.recentDays * MS_DAY;
+  const priorStart = recentStart - CONFIG.drift.priorDays * MS_DAY;
+
+  for(const [key, entry] of registry){
+    if(entry.tier === "EXCLUDED_JUNK") continue;
+    const rows = entry.rows;
+    const recent = rows.filter(t => t.time > recentStart && t.time <= currentEnd);
+    // Always the same shape, whatever the outcome, so consumers never have to
+    // special-case a missing field.
+    const blank = { status: "INSUFFICIENT_DATA", delta: null, recentRate: null,
+                    priorRate: null, source: null, recentVolume: 0, priorVolume: null };
+    if(recent.length < CONFIG.drift.minRecentVolume){
+      results.set(key, { ...blank, recentVolume: recent.length });
+      continue;
+    }
+    const recentRate = ratio(recent.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0), recent.length);
+
+    // Prefer the dataset's own prior window; a live export that only spans a
+    // couple of months has no prior 90 days, so fall back to the calibrated
+    // long-run baseline. Switches to live data automatically as history grows.
+    const prior = rows.filter(t => t.time > priorStart && t.time <= recentStart);
+    const cal = calibrationFor(key);
+    let priorRate = null, source = null, priorVolume = prior.length;
+    if(prior.length >= CONFIG.drift.minPriorVolume){
+      priorRate = ratio(prior.reduce((a, t) => a + (t.isFailure ? 1 : 0), 0), prior.length);
+      source = "dataset";
+    } else if(cal && cal.reliable){
+      priorRate = cal.baselineRate;
+      priorVolume = cal.transactions;
+      source = "calibration";
+    }
+    if(priorRate === null){
+      results.set(key, { ...blank, recentVolume: recent.length, recentRate });
+      continue;
+    }
+
+    const delta = recentRate - priorRate;
+    const status = delta >= CONFIG.drift.severeDelta ? "SEVERE_REGRESSION"
+                 : delta >= CONFIG.drift.regressionDelta ? "REGRESSION"
+                 : delta <= -CONFIG.drift.improvementDelta ? "IMPROVEMENT"
+                 : "STABLE";
+    results.set(key, {
+      ...blank, status, delta, recentRate, priorRate, source,
+      recentVolume: recent.length, priorVolume,
+      recentDays: CONFIG.drift.recentDays
     });
   }
   return results;
@@ -1532,11 +1719,36 @@ const EXPLAIN = {
     `${v} is Red because its current failure rate is ${pct(m.currentRate)}. It recorded `
     + `${num(m.currentFailures)} failure${m.currentFailures === 1 ? "" : "s"} from `
     + `${num(m.currentVolume)} transaction${m.currentVolume === 1 ? "" : "s"} in the current `
-    + `${CONFIG.window.currentHours}-hour window, at or above the ${pct(CONFIG.critical.minRate, 0)} `
-    + `critical threshold with at least ${CONFIG.critical.minFailures} failures. Its baseline `
+    + `${CONFIG.window.currentHours}-hour window, at or above `
+    + (m.criticalThresholdSource === "adaptive"
+        ? `${v}'s own critical threshold of ${pct(m.criticalThreshold)} `
+          + `(its 95th-percentile day across ${num(m.calibration.eligibleDays)} calibrated days)`
+        : `the ${pct(CONFIG.critical.minRate, 0)} critical threshold`)
+    + ` with at least ${CONFIG.critical.minFailures} failures. Its baseline `
     + `failure rate is ${pct(m.baselineRate)}`
     + (m.cluster ? `, and the current failure sequence contains a cluster of failures` : "")
     + `.`,
+
+  TREND_REGRESSION: (v, m) =>
+    `${v} is trending worse. Its failure rate over the last ${m.recentDays} days is `
+    + `${pct(m.recentRate)} across ${num(m.recentVolume)} transactions, against `
+    + `${pct(m.priorRate)} `
+    + (m.source === "dataset"
+        ? `over the preceding ${CONFIG.drift.priorDays} days`
+        : `historically (calibrated on ${num(m.priorVolume)} transactions)`)
+    + ` — a rise of ${pp(m.delta)} percentage points. A shift this gradual does not trip the `
+    + `${CONFIG.window.currentHours}-hour spike detection, and it raises the brand's own `
+    + `thresholds over time, so it is reported separately.`,
+
+  TREND_IMPROVEMENT: (v, m) =>
+    `${v} is trending better: ${pct(m.recentRate)} failure rate over the last ${m.recentDays} days `
+    + `against ${pct(m.priorRate)} before, an improvement of ${pp(-m.delta)} percentage points.`,
+
+  CHRONIC: (v, m) =>
+    `${v} fails ${pct(m.baselineRate)} of its transactions as a matter of course, measured over `
+    + `${num(m.eligibleDays)} days of history. Its day-to-day monitoring is judged against that `
+    + `baseline, so ordinary days do not raise alerts — but the baseline itself is the problem, `
+    + `and no single day's alert will surface it.`,
 
   FAILURE_SPIKE: (v, m) =>
     `${v} shows a failure spike: ${pct(m.currentRate)} of its ${num(m.currentVolume)} current `
@@ -1566,8 +1778,12 @@ const EXPLAIN = {
 
   RULE2_DAILY_RATE: (v, m) =>
     `${v} breached the daily failure-rate rule on ${fmtDay(m.day)}: ${num(m.failures)} of `
-    + `${num(m.transactions)} transactions failed (${pct(m.failureRate)}), above the `
-    + `${pct(CONFIG.rule2.rateThreshold, 0)} threshold on at least ${CONFIG.rule2.minTxns} transactions.`,
+    + `${num(m.transactions)} transactions failed (${pct(m.failureRate)}), above `
+    + (m.thresholdSource === "adaptive"
+        ? `${v}'s own threshold of ${pct(m.threshold)} — its 90th-percentile day across `
+          + `${num(m.thresholdDays)} calibrated days`
+        : `the ${pct(CONFIG.rule2.rateThreshold, 0)} threshold`)
+    + ` on at least ${CONFIG.rule2.minTxns} transactions.`,
 
   DORMANT: (v, m) =>
     `${v} is Red for low activity. Its last transaction was ${num(m.minutesSinceLast)} minutes ago `
@@ -1608,7 +1824,7 @@ function makeAlert(vendorKey, displayName, dimension, signal, severity, metrics)
 
 /** Build every alert for one vendor, worst first. The first entry becomes the
  *  primary alert shown in the vendor table. */
-function buildAlerts(entry, sig, act, streak, rule2Count){
+function buildAlerts(entry, sig, act, streak, rule2Count, drift){
   const name = entry.displayName, key = entry.vendorKey;
   const alerts = [];
 
@@ -1629,6 +1845,20 @@ function buildAlerts(entry, sig, act, streak, rule2Count){
     else if(act.light === "YELLOW") alerts.push(makeAlert(key, name, "ACTIVITY", "INACTIVITY", "YELLOW", m));
     else if(act.light === "GREY"  ) alerts.push(makeAlert(key, name, "ACTIVITY", "QUIET_SUPPRESSED", "GREY", m));
   }
+  // Trend and chronic are standing conditions rather than same-day incidents.
+  // They are ranked below the live signals but never dropped: they are the two
+  // things a purely per-brand, per-window view would otherwise never surface.
+  if(drift){
+    if(drift.status === "SEVERE_REGRESSION")
+      alerts.push(makeAlert(key, name, "TREND", "TREND_REGRESSION", "RED", drift));
+    else if(drift.status === "REGRESSION")
+      alerts.push(makeAlert(key, name, "TREND", "TREND_REGRESSION", "YELLOW", drift));
+    else if(drift.status === "IMPROVEMENT")
+      alerts.push(makeAlert(key, name, "TREND", "TREND_IMPROVEMENT", "INFO", drift));
+  }
+  if(sig && sig.calibration && sig.calibration.chronic)
+    alerts.push(makeAlert(key, name, "TREND", "CHRONIC", "INFO", sig.calibration));
+
   const order = { RED: 0, YELLOW: 1, GREY: 2, INFO: 3 };
   alerts.sort((a, b) => order[a.severity] - order[b.severity]);
   return alerts;
@@ -1741,6 +1971,7 @@ function computeAll(rawRows){
 
   const signals = computeSignals(registry, currentEnd);
   const activity = computeActivity(registry, anchor);
+  const drift = computeDrift(registry, currentEnd);
 
   // Rule 2 over every monitored vendor, for per-vendor breach counts.
   const monitoredKeys = new Set([...registry.values()]
@@ -1755,10 +1986,11 @@ function computeAll(rawRows){
     if(entry.tier === "EXCLUDED_JUNK") continue;
     const sig = signals.get(key) || null;
     const act = activity.get(key) || null;
+    const dft = drift.get(key) || null;
     const streak = rule1(entry.rows);
     const failureLight = sig ? sig.light : "GREEN";
     const activityLight = act ? act.light : "GREY";
-    const alerts = buildAlerts(entry, sig, act, streak, rule2ByVendor.get(key) || 0);
+    const alerts = buildAlerts(entry, sig, act, streak, rule2ByVendor.get(key) || 0, dft);
 
     vendors.push({
       vendorKey: key,
@@ -1774,6 +2006,9 @@ function computeAll(rawRows){
       overall: combineStatus(failureLight, activityLight),
       failure: sig,
       activity: act,
+      drift: dft,
+      calibration: sig ? sig.calibration : calibrationFor(key),
+      chronic: !!(sig && sig.calibration && sig.calibration.chronic),
       streak,
       rule2Alerts: rule2ByVendor.get(key) || 0,
       topCategory: topCategory(entry.rows),
@@ -1801,6 +2036,25 @@ function computeAll(rawRows){
     retiredCount: vendors.length - liveVendors.length,
     fellBack: scopeFellBack
   };
+
+  // Calibration provenance. A frozen snapshot ages: thresholds derived from
+  // behaviour months old stop describing a brand that has moved since, so the
+  // gap between the calibration and the live data is stated, not assumed away.
+  const calSourceTo = CALIBRATION && CALIBRATION.sourceTo ? parseLocalDate(CALIBRATION.sourceTo) : null;
+  const calibrationState = {
+    active: CAL_ACTIVE,
+    generated: CALIBRATION && CALIBRATION.generated ? parseLocalDate(CALIBRATION.generated) : null,
+    sourceFrom: CALIBRATION && CALIBRATION.sourceFrom ? parseLocalDate(CALIBRATION.sourceFrom) : null,
+    sourceTo: calSourceTo,
+    sourceRows: (CALIBRATION && CALIBRATION.sourceRows) || 0,
+    brands: Object.keys(CAL_BRANDS).length,
+    reliableBrands: Object.values(CAL_BRANDS)
+      .filter(p => p.reliable && p.eligibleDays >= CONFIG.calibration.minEligibleDays).length,
+    learnedRules: (CALIBRATION && CALIBRATION.reasonRules || []).length,
+    lagDays: calSourceTo ? (currentEnd - calSourceTo.getTime()) / MS_DAY : null
+  };
+  calibrationState.stale = CAL_ACTIVE && calibrationState.lagDays != null
+    && calibrationState.lagDays > CONFIG.calibration.staleAfterDays;
 
   const today = todaySummary(txns, liveKeys, anchor);
 
@@ -1861,12 +2115,17 @@ function computeAll(rawRows){
     liveVendors: liveVendors.length,
     retiredVendors: vendors.length - liveVendors.filter(v => v.live).length,
     excludedVendors: [...registry.values()].filter(e => e.tier === "EXCLUDED_JUNK").length,
-    attentionVendors: liveVendors.filter(v => v.overall === "RED" || v.overall === "YELLOW").length
+    attentionVendors: liveVendors.filter(v => v.overall === "RED" || v.overall === "YELLOW").length,
+    chronicVendors: liveVendors.filter(v => v.chronic).length,
+    regressingVendors: liveVendors.filter(v => v.drift
+      && (v.drift.status === "REGRESSION" || v.drift.status === "SEVERE_REGRESSION")).length,
+    improvingVendors: liveVendors.filter(v => v.drift && v.drift.status === "IMPROVEMENT").length,
+    calibratedVendors: liveVendors.filter(v => v.calibration && v.calibration.reliable).length
   };
 
   return {
-    empty: false, txns, registry, vendors, signals, activity, ledger, kpis,
-    liveVendors, liveKeys, scope, today, todayAlerts,
+    empty: false, txns, registry, vendors, signals, activity, drift, ledger, kpis,
+    liveVendors, liveKeys, scope, today, todayAlerts, calibrationState,
     allTime,     // every monitored brand, all time — per-vendor breach counts
     liveAgg,     // live brands, all time — drives Reasons and the headline KPIs
     vendorByKey: new Map(vendors.map(v => [v.vendorKey, v])),
@@ -2138,6 +2397,29 @@ function signalPills(sig){
 function hourClassTag(cls){
   return cls ? `<span class="tag ${cls.toLowerCase()}">${esc(cls)}</span>` : "—";
 }
+
+/** Slow movement, shown as its own column rather than folded into the traffic
+ *  light: a brand can be trending badly while today looks perfectly normal. */
+function driftBadge(drift){
+  if(!drift || drift.status === "INSUFFICIENT_DATA")
+    return `<span style="color:var(--text-faint)">—</span>`;
+  if(drift.status === "STABLE")
+    return `<span style="color:var(--text-faint)">stable</span>`;
+  const up = drift.delta > 0;
+  const cls = drift.status === "SEVERE_REGRESSION" ? "on-red" : up ? "on-amber" : "";
+  const style = up ? "" : ' style="color:var(--green)"';
+  return `<span class="sig ${cls}"${style} title="${esc(pct(drift.priorRate))} → ${esc(pct(drift.recentRate))} over the last ${drift.recentDays} days">`
+    + `${up ? "▲" : "▼"} ${esc(pp(Math.abs(drift.delta)))}pp</span>`;
+}
+
+/** Standing context, deliberately not a traffic light: these brands are not
+ *  having a bad day, they have a bad baseline. */
+function chronicBadge(vendor){
+  if(!vendor.chronic) return "";
+  const rate = vendor.calibration ? pct(vendor.calibration.baselineRate) : "";
+  return ` <span class="sig on-red" title="Fails ${esc(rate)} of transactions as a matter of course, `
+    + `so day-to-day thresholds are set high for this brand">CHRONIC ${esc(rate)}</span>`;
+}
 function explainBlock(alert){
   if(!alert) return "";
   return `<div class="explain sev-${alert.severity}">${esc(alert.message)}</div>`;
@@ -2300,8 +2582,12 @@ function renderLive(s){
     kpiCard("Low activity", num(k.activityRed + k.activityYellow),
       k.dormantVendors ? `${num(k.dormantVendors)} dormant` : `${num(k.activityGrey)} in a quiet period`,
       k.activityRed ? "red" : k.activityYellow ? "amber" : "green"),
-    kpiCard("Active streaks", num(k.streakActiveVendors), `${CONFIG.rule1.minStreak}+ failures unbroken`,
-      k.streakActiveVendors ? "amber" : "green")
+    kpiCard("Trending worse", num(k.regressingVendors),
+      k.improvingVendors ? `${num(k.improvingVendors)} trending better` : `over ${CONFIG.drift.recentDays} days`,
+      k.regressingVendors ? "amber" : "green"),
+    kpiCard("Chronic", num(k.chronicVendors),
+      `baseline over ${pct(CONFIG.calibration.chronicBaselineRate, 0)} — not a daily alert`,
+      k.chronicVendors ? "red" : "green")
   ].join("");
 
   // The anchor is MAX(Date), so at a quiet hour most brands legitimately have
@@ -2314,7 +2600,8 @@ function renderLive(s){
   const columns = [
     { key: "overall", label: "Status", sortValue: v => STATUS_RANK[v.overall], render: v => lightBadge(v.overall) },
     { key: "vendor", label: "Brand", cellClass: "vendor", sortValue: v => v.displayName,
-      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>` },
+      render: v => `<span class="truncate" title="${esc(v.displayName)}">${esc(v.displayName)}</span>`
+        + chronicBadge(v) },
     { key: "failure", label: "Failure", sortValue: v => STATUS_RANK[v.failure ? v.failure.light : "GREY"],
       render: v => lightBadge(v.failure ? v.failure.light : null) },
     { key: "activityLight", label: "Activity", sortValue: v => STATUS_RANK[v.activity ? v.activity.light : "GREY"],
@@ -2331,6 +2618,10 @@ function renderLive(s){
       sortValue: v => v.failure ? v.failure.currentRate : -1,
       render: v => !v.failure ? "—" : v.failure.currentVolume === 0
         ? `<span style="color:var(--text-faint)">—</span>` : pct(v.failure.currentRate) },
+    { key: "trend", label: `${CONFIG.drift.recentDays}d trend`, num: true,
+      title: `Failure rate over the last ${CONFIG.drift.recentDays} days against the preceding period`,
+      sortValue: v => v.drift && isFinite(v.drift.delta) ? -v.drift.delta : 999,
+      render: v => driftBadge(v.drift) },
     { key: "signals", label: "Signals", sortable: false, render: v => signalPills(v.failure) }
   ];
 
@@ -2486,7 +2777,9 @@ function renderReason(s){
     `${categories.length} categories across ${num(totalFailures)} failures · live brands only`;
 
   buildTable($("#categoryTable"), [
-    { key: "cat", label: "Category", sortValue: c => c.category, render: c => esc(c.category) },
+    { key: "cat", label: "Category", sortValue: c => c.category,
+      render: c => esc(c.category) + (LEARNED_CATEGORIES.has(c.category)
+        ? ` <span class="sig on-blue" title="Recovered from the historical export's curated labels by joining on PO, not from the hand-written keyword map">LEARNED</span>` : "") },
     { key: "failures", label: "Failures", num: true, sortValue: c => c.failures, render: c => num(c.failures) },
     { key: "share", label: "Share", num: true, sortValue: c => c.share, render: c => pct(c.share) },
     { key: "bar", label: "", sortable: false, render: c => {
@@ -2639,6 +2932,22 @@ function vendorDetailPanel(v, compact){
          minutesSinceLast: act ? act.minutesSinceLast : 0 }))}</div>`;
 
   const stats = [];
+  if(v.calibration){
+    const c = v.calibration;
+    stats.push(["Calibrated baseline", pct(c.baselineRate)
+      + ` <span style="color:var(--text-faint);font-weight:450">(${num(c.eligibleDays)} days)</span>`]);
+    stats.push(["Daily threshold (p90)", c.reliable ? pct(c.p90DailyRate)
+      : `<span style="color:var(--text-faint)">flat ${pct(CONFIG.rule2.rateThreshold, 0)} — too few calibrated days</span>`]);
+    stats.push(["Critical threshold (p95)", sig
+      ? pct(sig.criticalThreshold) + ` <span style="color:var(--text-faint);font-weight:450">(${esc(sig.criticalThresholdSource)})</span>`
+      : "—"]);
+  }
+  if(v.drift && v.drift.status !== "INSUFFICIENT_DATA"){
+    stats.push([`Last ${v.drift.recentDays} days vs before`,
+      `${pct(v.drift.priorRate)} → ${pct(v.drift.recentRate)} `
+      + `<span style="color:${v.drift.delta > 0 ? "var(--red)" : "var(--green)"}">`
+      + `(${v.drift.delta > 0 ? "+" : ""}${pp(v.drift.delta)}pp)</span>`]);
+  }
   if(sig){
     stats.push(["Current window volume", num(sig.currentVolume)]);
     stats.push(["Current failures", num(sig.currentFailures)]);
@@ -2798,14 +3107,29 @@ function render(){
 
   // The vendor scope is always stated: a fixed cutoff that silently excluded
   // half the estate would be worse than no filter at all.
-  const sc = s.scope;
-  $("#scopeStrip").innerHTML = sc.fellBack
+  const sc = s.scope, cal = s.calibrationState;
+  const scopeText = sc.fellBack
     ? `<span class="warn">No brand has transacted since ${esc(fmtDay(dayKeyOf(sc.liveSince)))}</span>
        — showing all ${esc(num(sc.monitoredCount))} brands instead of an empty dashboard.
        Update <code>CONFIG.vendorScope.liveSince</code> for this dataset.`
     : `Live brands since ${esc(fmtDay(dayKeyOf(sc.liveSince)))} ·
        <strong>${esc(num(sc.liveCount))}</strong> of ${esc(num(sc.monitoredCount))} monitored
        ${sc.retiredCount ? `· ${esc(num(sc.retiredCount))} retired, available on Operations` : ""}`;
+
+  // Thresholds are per-brand when calibrated, flat when not. Which one is in
+  // force changes what every alert means, so it is never left implicit.
+  const calText = !cal.active
+    ? `<span class="warn">Uncalibrated</span> — flat ${esc(pct(CONFIG.rule2.rateThreshold, 0))} /
+       ${esc(pct(CONFIG.critical.minRate, 0))} thresholds for every brand, trend detection off`
+    : `Thresholds calibrated on ${esc(num(cal.sourceRows))} historical transactions to
+       ${esc(fmtDay(dayKeyOf(cal.sourceTo)))} ·
+       <strong>${esc(num(cal.reliableBrands))}</strong> of ${esc(num(cal.brands))} brands adaptive`
+      + (cal.stale
+          ? ` · <span class="warn">calibration is ${esc(fmtDuration(cal.lagDays * 1440))} behind the
+              live data — regenerate it</span>`
+          : "");
+
+  $("#scopeStrip").innerHTML = `<div>${scopeText}</div><div>${calText}</div>`;
 
   // Both badges count brands, so the two tabs are directly comparable: Today is
   // brands with any alert, Live is brands whose traffic light is not green.
@@ -3018,6 +3342,21 @@ function selfTestPayload(){
       baselineStart: iso(s.window.baselineStart)
     },
     kpis: s.kpis,
+    calibration: {
+      active: s.calibrationState.active,
+      brands: s.calibrationState.brands,
+      reliableBrands: s.calibrationState.reliableBrands,
+      learnedRules: s.calibrationState.learnedRules,
+      stale: s.calibrationState.stale
+    },
+    drift: Object.fromEntries([...s.drift].map(([k, d]) => [k, {
+      status: d.status,
+      delta: d.delta === undefined ? null : d.delta,
+      recentRate: d.recentRate === undefined ? null : d.recentRate,
+      priorRate: d.priorRate === undefined ? null : d.priorRate,
+      source: d.source || null,
+      recentVolume: d.recentVolume, priorVolume: d.priorVolume === undefined ? null : d.priorVolume
+    }])),
     scope: {
       liveSince: iso(s.scope.liveSince),
       liveCount: s.scope.liveCount,
@@ -3064,7 +3403,10 @@ function selfTestPayload(){
       sigmaDeviationScaled: g.sigmaDeviationScaled,
       volumeDirection: g.volumeDirection, currentStreak: g.currentStreak,
       streakActive: g.streakActive, totalVolume: g.totalVolume, totalFailures: g.totalFailures,
-      distinctReasons: g.distinctReasons
+      distinctReasons: g.distinctReasons,
+      criticalThreshold: g.criticalThreshold,
+      criticalThresholdSource: g.criticalThresholdSource,
+      chronic: !!(g.calibration && g.calibration.chronic)
     };
   }
   for(const [key, a] of s.activity){

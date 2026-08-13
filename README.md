@@ -46,6 +46,82 @@ every comparison on the Today page is **like-for-like**: today's elapsed window 
 time-of-day slice on each of the previous 7 days, reported as a range (`typically 0–24 at this
 hour`) rather than a percentage, because a delta like "+875%" is noise on numbers that small.
 
+## Calibration
+
+Thresholds are **per brand**, derived from a year of history rather than fixed for everyone.
+
+The dashboard shipped with the workbook's flat rules: Rule 2 alerts above a 20% daily failure rate,
+Critical Spike above 40%. Backtested against 73,481 historical transactions those fire on **54.5% of
+all eligible brand-days** — SPLUNK breaches on 93.8% of its days, VMWARE on 75.9%. Those brands are
+not broken; their normal operating rates are 53.5% and 50.4%, so the thresholds sit *below* their
+baseline. An alert that fires more than half the time carries no information.
+
+`tools/calibrate.py` reads the history export and records each brand's own distribution of daily
+failure rates. At runtime the flat values become **floors**:
+
+```
+rule2Threshold(brand)    = reliable ? clamp(max(20%, brand p90), 20%, 90%) : 20%
+criticalThreshold(brand) = reliable ? clamp(max(40%, brand p95), 40%, 90%) : 40%
+```
+
+- **Reliability gate** — a brand needs ≥30 eligible days before its percentiles are trusted. Split
+  the history in half and high-volume brands move ~1pp (FORTINET −0.9, VMWARE −0.1, SPLUNK −1.6)
+  while thin ones swing 20–30pp (KASPERSKY −27.6 on 25 days). Below the gate, the flat rules apply
+  unchanged. Today 19 of 21 brands are adaptive.
+- **Ceiling** — no adapted threshold may exceed 90%. Without it a badly degraded brand raises its own
+  percentile out of reach and goes silent: TENABLE's p95 is already 100% after an August regression.
+- **Floors** — the documented 20%/40% business rules still hold as minimums, so calibration can only
+  ever make a brand *harder* to alert on, never easier.
+
+Result on the live dashboard: **Rule 2 alerts fall from 282 to 72**, and SPLUNK stops being Red —
+its 62.5% current-window rate is below its own p95 of 80%. Every explanation cites which threshold
+was used and where it came from, rather than quoting a bare number.
+
+### Chronic brands
+
+Adaptive thresholds create an obvious risk: a brand that has *always* been bad becomes "normal" and
+stops alerting. SPLUNK at 53.5% and VMWARE at 50.4% would simply go quiet.
+
+Those are two different questions, so the dashboard answers them separately. Alerts say *what broke
+today*; a **chronic** badge (calibrated baseline ≥40%) marks structurally underperforming brands as
+standing context. Four qualify: SPLUNK 53.5%, FORCEPOINT 42.4%, COMMVAULT 40.3%, VMWARE 50.4%.
+It is never a traffic light and never suppresses a genuine same-day anomaly.
+
+### Trend detection
+
+A 2-hour window cannot see a slow regression — each day looks close enough to the last. The **30d
+trend** column compares the last 30 days against the preceding 90 (falling back to the calibrated
+baseline when the live export is too short), flagging movement past ±8pp and calling ≥20pp severe.
+
+This is also the counterweight to adaptive thresholds: a degrading brand raises its own percentile,
+so its threshold quietly stops alerting. Trend catches exactly the movement the threshold absorbs —
+HP is currently +24.6pp and VMWARE +9.1pp, neither of which trips any spike rule.
+
+### Reason rules learned from history
+
+The history export carries a curated `Reason2` label per row; the live Sheet1 export does not. But
+the two share ~98% of their PO numbers, so `calibrate.py` joins them and recovers a category for
+free-text reasons the hand-written keyword map misses.
+
+19 rules are learned this way (≥3 observations, ≥80% agreement) and spliced in **immediately before
+the final `N/A` rule**, so all 40 hand-written rules keep priority and the learned ones only catch
+what would otherwise fall through. **Unmapped failures drop from 355 to 30.** Categories sourced this
+way are marked `LEARNED` on the Reasons tab.
+
+### Regenerating
+
+```bash
+python3 tools/calibrate.py data/history_dca_2026.xlsx data/calibration.json
+python3 tools/build.py
+python3 tools/backtest.py data/history_dca_2026.xlsx     # the evidence, re-runnable
+```
+
+The calibration is a frozen snapshot and **ages**: thresholds derived from months-old behaviour stop
+describing a brand that has moved. The header shows the source range and warns when the calibration
+lags the live data by more than `CONFIG.calibration.staleAfterDays`. It is never a hard dependency —
+delete `data/calibration.json` and the dashboard runs exactly as it did on flat thresholds, with
+trend detection off. That path is covered by tests.
+
 ## Why this exists
 
 The logic previously lived in an Excel workbook, implemented three times over: as formulas across
@@ -60,11 +136,15 @@ property the test suite is built around.
 
 ```
 rpa-monitor.html              the deliverable — open this
-src/rpa-monitor.template.html source, with a __DATA_PAYLOAD__ placeholder
-data/source_workbook.xlsx     the source workbook (Sheet1 is the only sheet read)
+src/rpa-monitor.template.html source, with __DATA_PAYLOAD__ / __CALIBRATION_PAYLOAD__ placeholders
+data/source_workbook.xlsx     live export (Sheet1 is the only sheet read)
+data/history_dca_2026.xlsx    historical export, used offline for calibration only
 data/sheet1_payload.json      extracted transactions, dictionary-encoded
-tools/extract_sheet1.py       workbook  -> payload
-tools/build.py                template + payload -> rpa-monitor.html
+data/calibration.json         per-brand thresholds + learned reason rules
+tools/extract_sheet1.py       live workbook -> payload
+tools/calibrate.py            history workbook -> calibration
+tools/backtest.py             flat vs per-brand threshold evidence
+tools/build.py                template + payload + calibration -> rpa-monitor.html
 tools/reference_engine.py     independent Python implementation (the test oracle)
 tools/run_selftest.js         runs the page in Chromium, dumps its computed state
 tools/compare.py              diffs browser state against the oracle, field by field
@@ -75,8 +155,14 @@ Rebuild after changing the template or the data:
 
 ```bash
 python3 tools/extract_sheet1.py data/source_workbook.xlsx data/sheet1_payload.json
+python3 tools/calibrate.py data/history_dca_2026.xlsx data/calibration.json
 python3 tools/build.py
 ```
+
+The two workbooks play different roles. `source_workbook.xlsx` is the **live feed** the dashboard
+runs on. `history_dca_2026.xlsx` is a richer, longer export (73,494 rows, Jan–Aug 2026, one sheet
+per brand, with latency and country fields) used **only offline, to calibrate thresholds**. It is
+never ingested at runtime.
 
 ## Verifying it
 
@@ -87,7 +173,7 @@ Two independent implementations of the same specification — the browser engine
 python3 tools/reference_engine.py data/sheet1_payload.json -o data/oracle.json
 node tools/run_selftest.js          # -> data/selftest.json
 python3 tools/compare.py            # -> ALL FIELDS MATCH
-node tools/test_robustness.js       # -> 37 passed, 0 failed
+node tools/test_robustness.js       # -> 95 passed, 0 failed
 ```
 
 `reference_engine.py --parity` disables the three documented deviations below and reproduces the
@@ -269,6 +355,8 @@ appear in the logic. `REASON_MAP` sits directly below it.
 | `frequency` | median ≤2 / ≤30 min bands, threshold clamps (10–15, 30–60, 180–240) |
 | `hourClass` | 0.70 peak, 0.30 active, 2 watch minimum, ×1.0/×1.5/×3.0 multipliers |
 | `activity` | 0.75 yellow ratio, WATCH escalation, dormancy ceiling and gap multiple |
+| `calibration` | reliability gate (30 days), adaptive ceiling (90%), chronic baseline (40%), staleness window |
+| `drift` | 30d recent vs 90d prior, ±8pp regression, 20pp severe, minimum volumes |
 | `vendorScope` | `liveSince` — the brand-liveness cutoff |
 | `today` | `comparisonDays` — how many prior days form the like-for-like band |
 | `freshness` | Fresh ≤60 min, Delayed ≤240 min, Stale beyond |
@@ -286,5 +374,15 @@ reasonable defaults, not measurements.
 - The `liveSince` cutoff is a fixed date that needs updating by hand as the reporting period moves.
   The header displays it and the zero-live guard prevents a silent empty dashboard, but it will not
   self-maintain.
+- TENABLE's p95 shifted from 35.8% to 100% between halves of the history — a genuine August
+  regression, not noise. Its calibrated threshold is therefore built partly on already-degraded
+  behaviour. The 90% ceiling stops it going silent and trend detection flags the movement, but it is
+  worth a human look before trusting its numbers.
+- The history export carries **processing latency** (`SentTime`−`ReceivedTime`) and a **country**
+  dimension, both currently unused. Latency regimes differ enormously by brand (REDHAT ~5.6 min
+  median, BROADCOM ~440 min) and real incidents show up clearly — FORTINET went from 8 minutes to
+  30 hours on 12 July. Failure rates also vary by country (Ireland 49%, Poland 19%) and by hour
+  (13% at 04:00, 50% at 02:00). None of these fields exist in the live Sheet1 export, so using them
+  would mean ingesting the history schema at runtime rather than only calibrating from it.
 - `Arrow ECS *` entities are internal and all now fall outside the live scope. They remain available
   through the Operations "include retired brands" toggle.

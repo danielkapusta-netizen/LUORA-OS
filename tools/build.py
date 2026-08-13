@@ -18,8 +18,20 @@ import sys
 
 TEMPLATE = "src/rpa-monitor.template.html"
 PAYLOAD = "data/sheet1_payload.json"
+CALIBRATION = "data/calibration.json"
 OUTPUT = "rpa-monitor.html"
 TOKEN = "__DATA_PAYLOAD__"
+CAL_TOKEN = "__CALIBRATION_PAYLOAD__"
+
+
+def encode(obj) -> str:
+    """JSON safe to paste inside a <script> block. This dataset really does
+    carry HTML in its free-text fields, so </script> would otherwise terminate
+    the block early; U+2028/2029 are literal line terminators in JS source."""
+    return (json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+            .replace("</", "<\\/")
+            .replace(" ", "\\u2028")
+            .replace(" ", "\\u2029"))
 
 
 def main() -> None:
@@ -45,20 +57,26 @@ def main() -> None:
         "reasons": payload["reasons"],
         "rows": payload["rows"],
     }
-    # </script> inside reason text would terminate the script block early; this
-    # dataset really does contain HTML in its free-text fields.
-    encoded = (json.dumps(embedded, separators=(",", ":"), ensure_ascii=False)
-               .replace("</", "<\\/")
-               .replace(" ", "\\u2028")
-               .replace(" ", "\\u2029"))
+    # Per-brand thresholds and learned reason rules. Optional by design: with no
+    # calibration file the page runs on the flat thresholds it shipped with, so
+    # a missing file degrades the dashboard rather than breaking it.
+    try:
+        with open(CALIBRATION, encoding="utf-8") as fh:
+            calibration = json.load(fh)
+        cal_note = (f"{len(calibration.get('brands', {}))} brands, "
+                    f"{len(calibration.get('reasonRules', []))} learned reason rules")
+    except (OSError, json.JSONDecodeError):
+        calibration = {}
+        cal_note = "none found — dashboard will use flat thresholds"
 
-    out = html.replace(TOKEN, encoded)
+    out = html.replace(TOKEN, encode(embedded)).replace(CAL_TOKEN, encode(calibration))
     with open(output, "w", encoding="utf-8") as fh:
         fh.write(out)
 
     print(f"wrote {output}  ({len(out.encode()) / 1e6:.2f} MB)")
     print(f"  {len(embedded['rows']):,} transactions, "
           f"{len(embedded['vendors'])} vendors, {len(embedded['reasons']):,} distinct reasons")
+    print(f"  calibration: {cal_note}")
 
 
 if __name__ == "__main__":

@@ -70,12 +70,7 @@ function iso(d){
     s0.window.currentStart.slice(0, 19) === "2026-08-13T00:22:10", s0.window.currentStart);
   check("BaselineStart = CurrentStart - 7d",
     s0.window.baselineStart.slice(0, 19) === "2026-08-06T00:22:10", s0.window.baselineStart);
-  check("Red vendors = 1", s0.kpis.redVendors === 1, "got " + s0.kpis.redVendors);
-  check("Yellow vendors = 0", s0.kpis.yellowVendors === 0, "got " + s0.kpis.yellowVendors);
   check("Streak-active vendors = 8 (live only)", s0.kpis.streakActiveVendors === 8, "got " + s0.kpis.streakActiveVendors);
-  check("Rule 2 alerts = 282 (live only)", s0.rule2Alerts === 282, "got " + s0.rule2Alerts);
-  check("Rule 2 alerts = 293 across all monitored brands",
-    s0.kpis.monitoredRule2Alerts === 293, "got " + s0.kpis.monitoredRule2Alerts);
   check("Analysed transactions = 19,762", s0.kpis.analysedTransactions === 19762, "got " + s0.kpis.analysedTransactions);
 
   const splunk = s0.signals.SPLUNK;
@@ -84,17 +79,100 @@ function iso(d){
     `${splunk.currentVolume}/${splunk.currentFailures}`);
   check("SPLUNK current rate 62.5%", Math.abs(splunk.currentRate - 0.625) < 1e-12, String(splunk.currentRate));
   check("SPLUNK baseline rate 54.386%", Math.abs(splunk.baselineRate - 0.543859649122807) < 1e-12, String(splunk.baselineRate));
-  check("SPLUNK Red via critical spike at score 2",
-    splunk.light === "RED" && splunk.signals.critical && !splunk.signals.spike && splunk.alertScore === 2,
-    JSON.stringify(splunk.signals) + " score " + splunk.alertScore);
 
-  // Red at a low alert score is the documented behaviour; make sure the page
-  // explains it rather than implying Red requires a high score.
-  const splunkMsg = await page.evaluate(() =>
-    (STATE.vendors.find(v => v.vendorKey === "SPLUNK").primaryAlert || {}).message || "");
-  check("SPLUNK explanation quotes rate, counts and baseline",
-    /62\.5%/.test(splunkMsg) && /5 failures from 8 transactions/.test(splunkMsg)
-      && /54\.4%/.test(splunkMsg) && /cluster/.test(splunkMsg), splunkMsg);
+  // ------------------------------------------------------------ calibration
+  console.log("\nCALIBRATION (per-brand thresholds from a year of history)");
+  check("21 brands calibrated, 19 reliable",
+    s0.calibration.brands === 21 && s0.calibration.reliableBrands === 19,
+    `${s0.calibration.brands}/${s0.calibration.reliableBrands}`);
+  check("calibration is active and not stale",
+    s0.calibration.active === true && s0.calibration.stale === false);
+  check("19 reason rules learned from the historical join",
+    s0.calibration.learnedRules === 19, "got " + s0.calibration.learnedRules);
+
+  // The headline result: the flat 20% rule fired on more than half of all
+  // brand-days, which is not an alert, it is a constant.
+  check("Rule 2 alerts fall from 282 to 72 on live brands",
+    s0.rule2Alerts === 72, "got " + s0.rule2Alerts);
+  check("Rule 2 alerts fall from 293 to 83 across all monitored brands",
+    s0.kpis.monitoredRule2Alerts === 83, "got " + s0.kpis.monitoredRule2Alerts);
+
+  // SPLUNK runs at a 53.5% baseline, so the flat 40% critical threshold sat
+  // below its ordinary operating point and fired on 72% of its days.
+  check("SPLUNK's critical threshold adapts to its own p95 of 80%",
+    splunk.criticalThresholdSource === "adaptive"
+      && Math.abs(splunk.criticalThreshold - 0.80) < 1e-9,
+    `${splunk.criticalThresholdSource} @ ${splunk.criticalThreshold}`);
+  check("SPLUNK no longer fires Critical Spike at 62.5%",
+    splunk.signals.critical === false && splunk.light !== "RED",
+    `critical=${splunk.signals.critical} light=${splunk.light}`);
+  check("SPLUNK still Yellow — its failure cluster is a real signal",
+    splunk.light === "YELLOW" && splunk.signals.cluster === true, splunk.light);
+  check("SPLUNK is flagged chronic instead of alerting daily",
+    splunk.chronic === true);
+  check("no live brand is Red on failure signals now", s0.kpis.redVendors === 0,
+    "got " + s0.kpis.redVendors);
+
+  // A brand with too little history must keep the documented flat rule.
+  const thin = Object.entries(s0.signals)
+    .filter(([, g]) => g.criticalThresholdSource === "flat");
+  check("brands without a trustworthy calibration keep the flat 40% threshold",
+    thin.length > 0 && thin.every(([, g]) => Math.abs(g.criticalThreshold - 0.40) < 1e-9),
+    `${thin.length} on flat`);
+
+  check("4 brands flagged chronic", s0.kpis.chronicVendors === 4, "got " + s0.kpis.chronicVendors);
+  const chronicText = await page.evaluate(() => {
+    const v = STATE.vendors.find(x => x.vendorKey === "SPLUNK");
+    return (v.alerts.find(a => a.signal === "CHRONIC") || {}).message || "";
+  });
+  check("chronic explanation names the baseline, not a daily breach",
+    /53\.5%/.test(chronicText) && /matter of course/.test(chronicText), chronicText);
+
+  // Explanations must cite where a threshold came from, not a bare number.
+  const rule2Msg = await page.evaluate(() => {
+    const a = STATE.todayAlerts.find(x => x.signal === "RULE2_DAILY_RATE");
+    return a ? a.message : "";
+  });
+  check("Rule 2 explanation cites the brand's own calibrated threshold",
+    /own threshold of/.test(rule2Msg) && /calibrated days/.test(rule2Msg), rule2Msg);
+
+  // ------------------------------------------------------------------ drift
+  console.log("\nTREND / DRIFT");
+  const vm = s0.drift.VMWARE;
+  check("VMWARE flagged as regressing",
+    vm.status === "REGRESSION" && vm.delta >= 0.08,
+    `${vm.status} ${(100 * vm.delta).toFixed(1)}pp`);
+  check("VMWARE drift uses the live dataset, not the calibrated fallback",
+    vm.source === "dataset" && vm.recentVolume >= 50 && vm.priorVolume >= 50,
+    `${vm.source} ${vm.recentVolume}/${vm.priorVolume}`);
+  check("6 live brands trending worse", s0.kpis.regressingVendors === 6,
+    "got " + s0.kpis.regressingVendors);
+  const thinDrift = Object.values(s0.drift).filter(d => d.status === "INSUFFICIENT_DATA");
+  check("low-volume brands are not given a trend verdict",
+    thinDrift.length > 0 && thinDrift.every(d => d.delta === null),
+    `${thinDrift.length} insufficient`);
+  const driftMsg = await page.evaluate(() => {
+    const v = STATE.vendors.find(x => x.vendorKey === "VMWARE");
+    return (v.alerts.find(a => a.signal === "TREND_REGRESSION") || {}).message || "";
+  });
+  check("drift explanation states both rates and the movement",
+    /last 30 days/.test(driftMsg) && /percentage points/.test(driftMsg), driftMsg);
+
+  // ----------------------------------------------------------- reason rules
+  console.log("\nREASON MAP LEARNED FROM HISTORY");
+  const unmappedTotal = Object.values(s0.unmapped).reduce((a, n) => a + n, 0);
+  check("unmapped failures fall from 355 to under 50",
+    unmappedTotal < 50, `${unmappedTotal} across ${Object.keys(s0.unmapped).length} texts`);
+  const cats = Object.fromEntries(s0.categories.map(c => [c.category, c.failures]));
+  check("learned categories appear in the breakdown",
+    cats["Technical issue"] > 0 && cats["MYD type"] > 0,
+    JSON.stringify(Object.keys(cats).slice(0, 5)));
+  // A learned rule must never steal rows from a hand-written one.
+  check("hand-written categories keep their counts",
+    cats["Contract start date too late"] === 1182 && cats["Missing start/end date"] === 586,
+    `${cats["Contract start date too late"]} / ${cats["Missing start/end date"]}`);
+  check("literal N/A reasons still resolve to Unspecified",
+    cats["Unspecified"] === 48, "got " + cats["Unspecified"]);
 
   // -------------------------------------------------------------- liveness
   console.log("\nVENDOR SCOPE (live since 1 Aug 2026)");
@@ -145,7 +223,10 @@ function iso(d){
   check("39 transactions, 19 failures today",
     td.transactions === 39 && td.failures === 19, `${td.transactions}/${td.failures}`);
   check("failure rate today 48.7%", Math.abs(td.failureRate - 19 / 39) < 1e-12, String(td.failureRate));
-  check("2 Rule 2 breaches today", td.rule2Alerts === 2, "got " + td.rule2Alerts);
+  // Under flat thresholds today showed 2 breaches; SPLUNK's 65.2% is an
+  // ordinary day for a brand whose own p90 is 75%, so only FORTINET remains.
+  check("1 Rule 2 breach today after calibration (was 2)",
+    td.rule2Alerts === 1, "got " + td.rule2Alerts);
   check("5 brands transacted today", td.activeVendors === 5, "got " + td.activeVendors);
   check("like-for-like prior slices are same-time-of-day, not full days",
     JSON.stringify(td.priorSlices) === JSON.stringify([0, 24, 0, 0, 18, 4, 14]),
@@ -178,8 +259,8 @@ function iso(d){
   check("all-time defaults to the 24 live brands",
     base.vendorRows === 24 && base.brandOptions === 25, // +1 for "All brands"
     `${base.vendorRows} rows, ${base.brandOptions} options`);
-  check("all-time Rule 2 history is the live-scoped 282",
-    base.rule2Rows === 282, "got " + base.rule2Rows);
+  check("all-time Rule 2 history is the live-scoped, calibrated 72",
+    base.rule2Rows === 72, "got " + base.rule2Rows);
 
   await page.selectOption("#opsRetired", []).catch(() => {});
   await page.check("#opsRetired");
@@ -191,7 +272,7 @@ function iso(d){
     withRetired.vendorRows > base.vendorRows,
     `${base.vendorRows} -> ${withRetired.vendorRows}`);
   check("include-retired changes the Rule 2 history",
-    withRetired.rule2Rows === 293, "got " + withRetired.rule2Rows);
+    withRetired.rule2Rows === 83, "got " + withRetired.rule2Rows);
   await page.uncheck("#opsRetired");
   await page.waitForTimeout(200);
 
@@ -348,6 +429,47 @@ function iso(d){
   check("file with wrong columns is rejected without throwing", errors.length === 0, errors.join("; "));
 
   await browser.close();
+
+  // ------------------------------------------------- degradation without calibration
+  // The calibration is an enhancement, never a hard dependency: a build without
+  // it must behave exactly as the dashboard did before this work.
+  console.log("\nDEGRADATION WITHOUT CALIBRATION");
+  const raw = fs.readFileSync(HTML, "utf8");
+  const stripped = raw.replace(/const CALIBRATION = \{.*?\};\n/s, "const CALIBRATION = {};\n");
+  if (stripped === raw) {
+    check("could substitute an empty calibration into the build", false,
+      "CALIBRATION declaration not found in the built file");
+  } else {
+    const uncalPath = write("uncalibrated.html", stripped);
+    const b2 = await chromium.launch();
+    const p2 = await b2.newPage();
+    const errs2 = [];
+    p2.on("pageerror", e => errs2.push(e.message));
+    await p2.goto("file://" + uncalPath + "?selftest=1", { waitUntil: "load" });
+    await p2.waitForFunction(() => window.__SELFTEST__ !== undefined, { timeout: 30000 })
+      .catch(() => {});
+    const sU = await p2.evaluate(() => window.__SELFTEST__ || null);
+    await b2.close();
+
+    check("page runs with no calibration", !!sU && errs2.length === 0, errs2.join("; "));
+    if (sU) {
+      check("falls back to the flat 20% rule (282 alerts again)",
+        sU.rule2Alerts === 282, "got " + sU.rule2Alerts);
+      check("SPLUNK is Red again on the flat 40% threshold",
+        sU.signals.SPLUNK.signals.critical === true
+          && Math.abs(sU.signals.SPLUNK.criticalThreshold - 0.40) < 1e-9,
+        `critical=${sU.signals.SPLUNK.signals.critical} thr=${sU.signals.SPLUNK.criticalThreshold}`);
+      check("trend detection falls back to the dataset window",
+        sU.drift.VMWARE.status === "REGRESSION" && sU.drift.VMWARE.source === "dataset",
+        sU.drift.VMWARE.status + "/" + sU.drift.VMWARE.source);
+      check("no brand is marked chronic without calibration",
+        sU.kpis.chronicVendors === 0, "got " + sU.kpis.chronicVendors);
+      check("reason map reverts to the hand-written rules only",
+        Object.values(sU.unmapped).reduce((a, n) => a + n, 0) > 300,
+        "unmapped " + Object.values(sU.unmapped).reduce((a, n) => a + n, 0));
+    }
+  }
+
   fs.rmSync(TMP, { recursive: true, force: true });
 
   console.log(`\n${passed} passed, ${failed} failed`);
