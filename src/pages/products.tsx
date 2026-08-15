@@ -23,6 +23,7 @@ import type { Snapshot } from '@/domain/snapshot'
 import type { Insight, Order } from '@/domain/types'
 import { useSnapshot } from '@/hooks/use-snapshot'
 import { formatDate, formatNumber, formatPercent, formatPLN } from '@/lib/format'
+import { disclosure, rise } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 type SortKey = 'revenue' | 'margin' | 'marginPct' | 'orders'
@@ -156,7 +157,7 @@ export function ProductsPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={`Search ${noun}…`}
-            className="h-9 w-full rounded-control border border-hairline bg-surface pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-subtle"
+            className="h-9 w-full rounded-control border border-hairline bg-surface pl-9 pr-3 t-small text-ink placeholder:text-ink-subtle"
           />
         </label>
       </div>
@@ -215,23 +216,19 @@ function CatalogueRowCard({
   const isThin = row.marginPct < 15
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: Math.min(rank, 12) * 0.03, ease: [0.16, 1, 0.3, 1] }}
-    >
+    <motion.div {...rise(Math.min(rank, 12))}>
       <Card className={cn('overflow-hidden transition-shadow', isOpen && 'shadow-lifted')}>
         <button
           type="button"
           onClick={onToggle}
           aria-expanded={isOpen}
-          className="flex w-full items-center gap-4 px-5 py-4 text-left"
+          className="press-sm flex w-full items-center gap-4 px-5 py-4 text-left transition-colors duration-150 hover:bg-surface-sunken/40"
         >
-          <span className="tnum w-6 shrink-0 text-[12px] font-medium text-ink-subtle">{rank}</span>
+          <span className="tnum w-6 shrink-0 t-caption font-medium text-ink-subtle">{rank}</span>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="truncate text-[14px] font-medium text-ink" title={row.label}>
+              <span className="t-body truncate font-medium text-ink" title={row.label}>
                 {row.label}
               </span>
               {row.costUnknown && (
@@ -249,7 +246,7 @@ function CatalogueRowCard({
                 </Tooltip>
               )}
             </div>
-            <p className="mt-0.5 text-[12px] text-ink-subtle">
+            <p className="t-caption mt-0.5 text-ink-subtle">
               {formatNumber(row.orders)} {row.orders === 1 ? 'order' : 'orders'} ·{' '}
               {formatNumber(row.units)} units
               {dimension !== 'product' && ` · ${row.memberCount} products`}
@@ -278,10 +275,10 @@ function CatalogueRowCard({
         <AnimatePresence initial={false}>
           {isOpen && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              initial={disclosure.initial}
+              animate={disclosure.animate}
+              exit={disclosure.exit}
+              transition={disclosure.transition}
             >
               <RowDetail
                 row={row}
@@ -301,12 +298,12 @@ function CatalogueRowCard({
 function Figure({ label, value, tone }: { label: string; value: string; tone?: 'negative' }) {
   return (
     <div className="text-right">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+      <p className="t-label text-ink-subtle">
         {label}
       </p>
       <p
         className={cn(
-          'tnum text-[14px] font-semibold',
+          'tnum t-body font-semibold',
           tone === 'negative' ? 'text-negative' : 'text-ink',
         )}
       >
@@ -367,12 +364,12 @@ function RowDetail({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-[13px] font-semibold text-ink">Health score</p>
+              <p className="t-small font-semibold text-ink">Health score</p>
               <Badge variant={grade.variant} size="sm">
                 {grade.label}
               </Badge>
             </div>
-            <p className="mt-0.5 text-[12px] text-ink-muted">{health.summary}</p>
+            <p className="mt-0.5 t-caption text-ink-muted">{health.summary}</p>
           </div>
         </div>
       </div>
@@ -390,7 +387,7 @@ function RowDetail({
               )}
               aria-hidden="true"
             />
-            <span className="text-[12px] leading-relaxed text-ink-muted">
+            <span className="t-caption text-ink-muted">
               <span className="font-medium text-ink">{factor.label}: </span>
               {factor.detail}
             </span>
@@ -401,10 +398,10 @@ function RowDetail({
       <dl className="grid grid-cols-2 gap-x-8 gap-y-4 border-t border-hairline pt-5 sm:grid-cols-4">
         {stats.map((stat) => (
           <div key={stat.label}>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <dt className="t-label text-ink-subtle">
               {stat.label}
             </dt>
-            <dd className="tnum mt-1 text-[14px] font-medium text-ink">{stat.value}</dd>
+            <dd className="tnum mt-1 t-body font-medium text-ink">{stat.value}</dd>
           </div>
         ))}
       </dl>
@@ -412,10 +409,10 @@ function RowDetail({
       {history.length >= 2 && (
         <div className="space-y-2.5">
           <div>
-            <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+            <p className="t-caption font-semibold uppercase tracking-[0.06em] text-ink-muted">
               Margin over time
             </p>
-            <p className="mt-1 text-[12px] text-ink-subtle">
+            <p className="mt-1 t-caption text-ink-subtle">
               Margin rate against the portfolio average, with realised unit price behind it — a
               margin falling while price holds points at cost, both falling points at discounting.
             </p>
@@ -425,7 +422,7 @@ function RowDetail({
               history={history}
               portfolioMarginPct={snapshot.totals.marginPct}
             />
-            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-ink-muted">
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 t-caption text-ink-muted">
               <span className="flex items-center gap-1.5">
                 <span className="h-0.5 w-4 rounded-full bg-accent" />
                 Margin %
@@ -456,7 +453,7 @@ function RowDetail({
 
       {ownInsights.length > 0 && (
         <div className="space-y-3">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+          <p className="t-caption font-semibold uppercase tracking-[0.06em] text-ink-muted">
             Findings
           </p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -501,10 +498,10 @@ function MemberProducts({
     <div className="space-y-2.5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+          <p className="t-caption font-semibold uppercase tracking-[0.06em] text-ink-muted">
             Products in this {row.memberCount === 1 ? 'group' : 'group'}
           </p>
-          <p className="mt-1 text-[12px] text-ink-subtle">
+          <p className="mt-1 t-caption text-ink-subtle">
             {members.length} {members.length === 1 ? 'product' : 'products'} traded in this period,
             ranked by revenue.
           </p>
@@ -512,7 +509,7 @@ function MemberProducts({
         <button
           type="button"
           onClick={onDrillToProducts}
-          className="text-[12px] font-medium text-accent-ink underline decoration-hairline-strong underline-offset-4 hover:decoration-accent"
+          className="t-caption font-medium text-accent-ink underline decoration-hairline-strong underline-offset-4 hover:decoration-accent"
         >
           Open the full product view
         </button>
@@ -521,7 +518,7 @@ function MemberProducts({
       <div className="overflow-x-auto">
         <table className="w-full min-w-[600px] text-left">
           <thead>
-            <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <tr className="t-label text-ink-subtle">
               <th className="pb-2 font-semibold">Product</th>
               <th className="pb-2 text-right font-semibold">Orders</th>
               <th className="pb-2 text-right font-semibold">Units</th>
@@ -532,7 +529,7 @@ function MemberProducts({
           </thead>
           <tbody>
             {members.map((product) => (
-              <tr key={product.productKey} className="border-t border-hairline text-[12px]">
+              <tr key={product.productKey} className="border-t border-hairline t-caption">
                 <td className="max-w-[280px] py-2 pr-4">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-ink" title={product.label}>
@@ -604,19 +601,19 @@ function HistoryTable({ history }: { history: ReturnType<typeof buildCatalogueHi
   return (
     <div className="space-y-2.5">
       <div>
-        <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+        <p className="t-caption font-semibold uppercase tracking-[0.06em] text-ink-muted">
           Monthly history
         </p>
         {/* The figures above are scoped to the selected period; this table is
             not. Saying so prevents it reading as a contradiction. */}
-        <p className="mt-1 text-[12px] text-ink-subtle">
+        <p className="mt-1 t-caption text-ink-subtle">
           Every month on record, regardless of the period selected above.
         </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] text-left">
           <thead>
-            <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <tr className="t-label text-ink-subtle">
               <th className="pb-2 font-semibold">Month</th>
               <th className="pb-2 font-semibold">Revenue</th>
               <th className="pb-2 text-right font-semibold">Profit</th>
@@ -630,7 +627,7 @@ function HistoryTable({ history }: { history: ReturnType<typeof buildCatalogueHi
               const previous = index > 0 ? recent[index - 1] : undefined
               const marginShift = previous ? point.marginPct - previous.marginPct : 0
               return (
-                <tr key={point.date} className="border-t border-hairline text-[12px]">
+                <tr key={point.date} className="border-t border-hairline t-caption">
                   <td className="py-2 text-ink-muted">
                     {new Date(`${point.date}T00:00:00Z`).toLocaleDateString('en-GB', {
                       month: 'short',

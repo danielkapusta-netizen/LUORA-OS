@@ -15,6 +15,7 @@ import type { LineItem, Order } from '@/domain/types'
 import { useSnapshot } from '@/hooks/use-snapshot'
 import { formatDate, formatNumber, formatPercent, formatPLN, formatPLNExact } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { disclosure } from '@/lib/motion'
 
 type ChannelFilter = 'all' | 'allegro' | 'empik'
 type MarginFilter = 'all' | 'healthy' | 'thin'
@@ -138,7 +139,7 @@ export function TransactionsPage() {
               setVisibleCount(PAGE_SIZE)
             }}
             placeholder="Search product or customer…"
-            className="h-9 w-full rounded-control border border-hairline bg-surface pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-subtle"
+            className="h-9 w-full rounded-control border border-hairline bg-surface pl-9 pr-3 t-small text-ink placeholder:text-ink-subtle"
           />
         </label>
         <div className="flex flex-wrap items-center gap-2">
@@ -172,7 +173,7 @@ export function TransactionsPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="hidden border-b border-hairline bg-surface-sunken/50 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle sm:grid sm:grid-cols-[104px_1fr_78px_96px_104px_82px_28px] sm:gap-4">
+          <div className="hidden border-b border-hairline bg-surface-sunken/50 px-5 py-2.5 t-label text-ink-subtle sm:grid sm:grid-cols-[104px_1fr_78px_96px_104px_82px_28px] sm:gap-4">
             <span>Date</span>
             <span>Order</span>
             <span>Channel</span>
@@ -231,18 +232,18 @@ function OrderRow({
         onClick={onToggle}
         aria-expanded={isOpen}
         className={cn(
-          'grid w-full grid-cols-[1fr_28px] items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-surface-sunken/50',
+          'press-sm grid w-full grid-cols-[1fr_28px] items-center gap-3 px-5 py-3.5 text-left transition-colors duration-150 hover:bg-surface-sunken/50',
           'sm:grid-cols-[104px_1fr_78px_96px_104px_82px_28px] sm:gap-4',
           isOpen && 'bg-surface-sunken/50',
         )}
       >
-        <span className="hidden text-[12px] text-ink-muted sm:block">
+        <span className="hidden t-caption text-ink-muted sm:block">
           {order.date ? formatDate(order.date) : '—'}
         </span>
 
         <span className="min-w-0">
           <span className="flex items-center gap-2">
-            <span className="truncate text-[13px] font-medium text-ink">{summary}</span>
+            <span className="truncate t-small font-medium text-ink">{summary}</span>
             {order.lineCount > 1 && (
               <Badge variant="accent" size="sm" className="shrink-0">
                 <Package className="h-3 w-3" aria-hidden="true" />
@@ -260,7 +261,7 @@ function OrderRow({
               </Tooltip>
             )}
           </span>
-          <span className="mt-0.5 block truncate text-[11px] text-ink-subtle">
+          <span className="mt-0.5 block truncate t-micro text-ink-subtle">
             {order.customerName || 'Unnamed customer'}
             <span className="sm:hidden">
               {' · '}
@@ -275,15 +276,15 @@ function OrderRow({
           </Badge>
         </span>
 
-        <span className="tnum hidden text-right text-[13px] text-ink sm:block">
+        <span className="tnum hidden text-right t-small text-ink sm:block">
           {formatPLNExact(order.revenuePLN)}
         </span>
-        <span className="tnum hidden text-right text-[13px] font-medium text-ink sm:block">
+        <span className="tnum hidden text-right t-small font-medium text-ink sm:block">
           {order.isComplete ? formatPLNExact(order.marginPLN) : '—'}
         </span>
         <span
           className={cn(
-            'tnum hidden text-right text-[13px] sm:block',
+            'tnum hidden text-right t-small sm:block',
             isThin ? 'font-medium text-negative' : 'text-ink-muted',
           )}
         >
@@ -302,10 +303,10 @@ function OrderRow({
       <AnimatePresence initial={false}>
         {isOpen && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            initial={disclosure.initial}
+            animate={disclosure.animate}
+            exit={disclosure.exit}
+            transition={disclosure.transition}
             className="overflow-hidden"
           >
             <OrderDetail order={order} />
@@ -344,7 +345,7 @@ function OrderDetail({ order }: { order: Order }) {
   return (
     <div className="space-y-5 border-t border-hairline bg-surface-sunken/40 px-5 py-5">
       <div>
-        <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+        <p className="mb-2.5 t-label text-ink-subtle">
           Products in this order
         </p>
         <ul className="space-y-2">
@@ -357,55 +358,55 @@ function OrderDetail({ order }: { order: Order }) {
       <div className="grid grid-cols-1 gap-6 border-t border-hairline pt-4 sm:grid-cols-[1fr_260px]">
         <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3">
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <dt className="t-label text-ink-subtle">
               Customer
             </dt>
-            <dd className="mt-0.5 text-[13px] text-ink">{order.customerName || '—'}</dd>
+            <dd className="mt-0.5 t-small text-ink">{order.customerName || '—'}</dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <dt className="t-label text-ink-subtle">
               Placed
             </dt>
-            <dd className="mt-0.5 text-[13px] text-ink">
+            <dd className="mt-0.5 t-small text-ink">
               {order.date ? order.date.toLocaleString('en-GB') : '—'}
             </dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <dt className="t-label text-ink-subtle">
               Settled in
             </dt>
-            <dd className="mt-0.5 text-[13px] text-ink">{currencies.join(', ')}</dd>
+            <dd className="mt-0.5 t-small text-ink">{currencies.join(', ')}</dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <dt className="t-label text-ink-subtle">
               Units
             </dt>
-            <dd className="tnum mt-0.5 text-[13px] text-ink">{formatNumber(order.units)}</dd>
+            <dd className="tnum mt-0.5 t-small text-ink">{formatNumber(order.units)}</dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <dt className="t-label text-ink-subtle">
               Shipping charged
             </dt>
-            <dd className="tnum mt-0.5 flex items-center gap-1.5 text-[13px] text-ink">
+            <dd className="tnum mt-0.5 flex items-center gap-1.5 t-small text-ink">
               <Truck className="h-3.5 w-3.5 text-ink-subtle" aria-hidden="true" />
               {formatPLNExact(order.shipmentPLN)}
             </dd>
           </div>
           <div>
-            <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <dt className="t-label text-ink-subtle">
               Margin
             </dt>
-            <dd className="tnum mt-0.5 text-[13px] text-ink">{formatPercent(order.marginPct)}</dd>
+            <dd className="tnum mt-0.5 t-small text-ink">{formatPercent(order.marginPct)}</dd>
           </div>
         </dl>
 
         <div className="rounded-xl border border-hairline bg-surface p-4">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <p className="mb-3 t-label text-ink-subtle">
             Where the money went
           </p>
           {!order.isComplete ? (
             // A breakdown built from blank cells would be arithmetic on nothing.
-            <p className="text-[12px] leading-relaxed text-ink-muted">
+            <p className="t-caption text-ink-muted">
               This order is still being calculated in the source sheet. Its figures will appear
               once the conversion and margin columns are filled.
             </p>
@@ -419,10 +420,10 @@ function OrderDetail({ order }: { order: Order }) {
                   index === breakdown.length - 1 && 'border-t border-hairline pt-2',
                 )}
               >
-                <dt className="text-[12px] text-ink-muted">{row.label}</dt>
+                <dt className="t-caption text-ink-muted">{row.label}</dt>
                 <dd
                   className={cn(
-                    'tnum text-[12px] font-medium',
+                    'tnum t-caption font-medium',
                     row.tone === 'negative'
                       ? 'text-negative'
                       : row.tone === 'positive'
@@ -440,13 +441,13 @@ function OrderDetail({ order }: { order: Order }) {
       </div>
 
       {!order.isComplete && (
-        <p className="text-[12px] text-caution">
+        <p className="t-caption text-caution">
           At least one line in this order is missing its PLN conversion in the source sheet, so the
           order is excluded from profit totals.
         </p>
       )}
       {order.hasSuspectedMissingLine && (
-        <p className="text-[12px] text-caution">
+        <p className="t-caption text-caution">
           This order arrived with a row that exactly duplicated the product above instead of a
           second, different product. Luora dropped the duplicate so revenue is not double-counted,
           but the real second item is not present in this feed — the total below is understated.
@@ -460,18 +461,18 @@ function LineRow({ item }: { item: LineItem }) {
   return (
     <li className="flex items-baseline justify-between gap-4 rounded-lg bg-surface px-3 py-2">
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] text-ink" title={item.rawSku}>
+        <span className="block truncate t-small text-ink" title={item.rawSku}>
           {item.productLabel}
         </span>
-        <span className="tnum mt-0.5 block text-[11px] text-ink-subtle">
+        <span className="tnum mt-0.5 block t-micro text-ink-subtle">
           {item.qty} × {formatNumber(item.priceOriginal)} {item.currency}
           {item.currency !== 'PLN' && ` · ${formatPLNExact(item.revenuePLN)}`}
         </span>
       </span>
-      <span className="tnum shrink-0 text-right text-[12px] text-ink-muted">
+      <span className="tnum shrink-0 text-right t-caption text-ink-muted">
         {formatPLNExact(item.revenuePLN)}
       </span>
-      <span className="tnum w-16 shrink-0 text-right text-[12px] font-medium text-ink">
+      <span className="tnum w-16 shrink-0 text-right t-caption font-medium text-ink">
         {formatPercent(item.marginPct)}
       </span>
     </li>

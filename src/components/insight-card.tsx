@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card'
 import type { Insight, InsightSeverity } from '@/domain/types'
 import { formatPLN } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { rise } from '@/lib/motion'
 
 const SEVERITY: Record<
   InsightSeverity,
@@ -30,10 +31,7 @@ export function InsightCard({ insight, index = 0 }: { insight: Insight; index?: 
         : AlertTriangle
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: index * 0.06, ease: [0.16, 1, 0.3, 1] }}
+    <motion.div {...rise(index)}
       className="h-full"
     >
       <Card className="group relative h-full overflow-hidden hover:shadow-lifted">
@@ -56,18 +54,18 @@ export function InsightCard({ insight, index = 0 }: { insight: Insight; index?: 
             )}
           </div>
 
-          <h3 className="mt-3.5 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-ink">
+          <h3 className="mt-3.5 t-strong text-ink">
             {insight.title}
           </h3>
 
-          <p className="mt-2.5 text-[13px] leading-relaxed text-ink-muted">{insight.why}</p>
+          <p className="mt-2.5 t-small text-ink-muted">{insight.why}</p>
 
           <div className="mt-auto flex items-start gap-2.5 border-t border-hairline pt-4 [margin-top:1.25rem]">
             <ArrowRight
               className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-subtle transition-transform duration-200 group-hover:translate-x-0.5"
               aria-hidden="true"
             />
-            <p className="text-[13px] leading-relaxed text-ink">{insight.action}</p>
+            <p className="t-small text-ink">{insight.action}</p>
           </div>
         </div>
       </Card>

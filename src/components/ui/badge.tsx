@@ -15,7 +15,7 @@ const badgeVariants = cva(
         caution: 'bg-caution-soft text-caution',
       },
       size: {
-        sm: 'px-2 py-0.5 text-[11px]',
+        sm: 'px-2 py-0.5 t-micro',
         md: 'px-2.5 py-1 text-xs',
       },
     },

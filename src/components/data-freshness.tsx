@@ -34,7 +34,7 @@ export function DataFreshness({
       >
         <div
           className={cn(
-            'flex cursor-help items-center gap-2 rounded-control border px-3 py-1.5 text-[12px]',
+            'flex cursor-help items-center gap-2 rounded-control border px-3 py-1.5 t-caption',
             isStale
               ? 'border-caution/30 bg-caution-soft text-caution'
               : 'border-hairline bg-surface text-ink-muted',

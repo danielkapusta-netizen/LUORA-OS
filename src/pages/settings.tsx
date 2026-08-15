@@ -51,10 +51,10 @@ export function SettingsPage() {
                   <XCircle className="h-5 w-5 text-negative" aria-hidden="true" />
                 )}
                 <div>
-                  <p className="text-[14px] font-medium text-ink">
+                  <p className="t-body font-medium text-ink">
                     Google Sheets via Apps Script
                   </p>
-                  <p className="text-[12px] text-ink-muted">
+                  <p className="t-caption text-ink-muted">
                     {health.isLoading
                       ? 'Checking connection…'
                       : isConnected
@@ -109,8 +109,8 @@ export function SettingsPage() {
         <Card>
           <CardContent className="flex items-center justify-between p-7">
             <div>
-              <p className="text-[14px] font-medium text-ink">Theme</p>
-              <p className="text-[12px] text-ink-muted">
+              <p className="t-body font-medium text-ink">Theme</p>
+              <p className="t-caption text-ink-muted">
                 Follows your system preference until you choose one here.
               </p>
             </div>
@@ -155,7 +155,7 @@ export function SettingsPage() {
       <section className="space-y-5">
         <SectionHeading title="Calculation principles" />
         <Card>
-          <CardContent className="space-y-3 p-7 text-[13px] leading-relaxed text-ink-muted">
+          <CardContent className="space-y-3 p-7 t-small text-ink-muted">
             <p>
               All aggregation uses PLN-converted figures; original currencies are preserved and
               shown in the Transactions explorer.
@@ -182,13 +182,13 @@ export function SettingsPage() {
 function Fact({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+      <dt className="t-label text-ink-subtle">
         {label}
       </dt>
       <dd
         className={cn(
-          'mt-1 text-[13px] text-ink',
-          mono && 'truncate font-mono text-[11px] text-ink-muted',
+          'mt-1 t-small text-ink',
+          mono && 'truncate font-mono t-micro text-ink-muted',
         )}
         title={mono ? value : undefined}
       >
@@ -202,13 +202,13 @@ function QualityCard({ title, value, detail }: { title: string; value: string; d
   return (
     <Card>
       <CardHeader className="pb-0">
-        <CardTitle className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-subtle">
+        <CardTitle className="t-caption font-semibold uppercase tracking-[0.06em] text-ink-subtle">
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-3">
         <p className="tnum text-[24px] font-semibold tracking-[-0.02em] text-ink">{value}</p>
-        <p className="mt-2 text-[12px] leading-relaxed text-ink-muted">{detail}</p>
+        <p className="mt-2 t-caption text-ink-muted">{detail}</p>
       </CardContent>
     </Card>
   )

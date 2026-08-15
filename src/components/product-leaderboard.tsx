@@ -46,13 +46,13 @@ export function ProductLeaderboard({
           <li key={product.productKey} className="group space-y-2">
             <div className="flex items-baseline justify-between gap-4">
               <div className="flex min-w-0 items-baseline gap-2.5">
-                <span className="tnum w-4 shrink-0 text-[12px] font-medium text-ink-subtle">
+                <span className="tnum w-4 shrink-0 t-caption font-medium text-ink-subtle">
                   {index + 1}
                 </span>
                 {/* min-w-0 on the flex item itself: without it the nowrap
                     text sets a min-content floor and overflows narrow grids. */}
                 <span
-                  className="min-w-0 truncate text-[13px] font-medium text-ink"
+                  className="min-w-0 truncate t-small font-medium text-ink"
                   title={product.label}
                 >
                   {shortLabel(product.label, 52)}
@@ -66,7 +66,7 @@ export function ProductLeaderboard({
                   </Tooltip>
                 )}
               </div>
-              <span className="tnum shrink-0 text-[13px] font-semibold text-ink">
+              <span className="tnum shrink-0 t-small font-semibold text-ink">
                 {formatPLN(value)}
               </span>
             </div>
@@ -85,13 +85,13 @@ export function ProductLeaderboard({
               </div>
               <span
                 className={cn(
-                  'tnum w-[86px] shrink-0 text-right text-[12px]',
+                  'tnum w-[86px] shrink-0 text-right t-caption',
                   isThin ? 'text-negative' : 'text-ink-muted',
                 )}
               >
                 {formatPercent(product.marginPct)} margin
               </span>
-              <span className="tnum w-[62px] shrink-0 text-right text-[12px] text-ink-subtle">
+              <span className="tnum w-[62px] shrink-0 text-right t-caption text-ink-subtle">
                 {product.orders} {product.orders === 1 ? 'order' : 'orders'}
               </span>
             </div>

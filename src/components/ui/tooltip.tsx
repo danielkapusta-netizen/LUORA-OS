@@ -6,6 +6,11 @@ export const TooltipProvider = TooltipPrimitive.Provider
 export const TooltipRoot = TooltipPrimitive.Root
 export const TooltipTrigger = TooltipPrimitive.Trigger
 
+/**
+ * Tooltips grow from the thing they explain rather than appearing beside it —
+ * Radix sets a transform origin on the trigger side, so scaling from it keeps
+ * the relationship between the control and its explanation obvious.
+ */
 export function TooltipContent({
   className,
   sideOffset = 6,
@@ -16,9 +21,9 @@ export function TooltipContent({
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
         className={cn(
-          'z-50 max-w-[260px] rounded-lg border border-hairline bg-surface-raised px-3 py-2',
-          'text-[12px] leading-relaxed text-ink-muted shadow-overlay',
-          'data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0',
+          'material-thin materialize z-50 max-w-[260px] rounded-xl border border-hairline px-3 py-2',
+          't-caption vibrant text-ink-muted shadow-overlay',
+          'origin-(--radix-tooltip-content-transform-origin)',
           className,
         )}
         {...props}

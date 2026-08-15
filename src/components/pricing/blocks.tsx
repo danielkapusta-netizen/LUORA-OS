@@ -100,7 +100,7 @@ export function MarginHealthScale({ health }: { health: MarginHealth }) {
 export function MarginTargets({ row }: { row: PricingRow }) {
   if (row.unitCostPLN === null) {
     return (
-      <p className="text-[13px] leading-relaxed text-ink-muted">
+      <p className="t-small text-ink-muted">
         No landed cost on file — target prices cannot be computed until this product is added to
         the cost sheet.
       </p>
@@ -119,7 +119,7 @@ export function MarginTargets({ row }: { row: PricingRow }) {
             : 'border-negative/25 bg-negative-soft/50',
         )}
       >
-        <span className="text-[12px] font-medium text-ink-muted">
+        <span className="t-caption font-medium text-ink-muted">
           Current average price ({row.ordersInWindow} recent sales)
         </span>
         <span
@@ -134,7 +134,7 @@ export function MarginTargets({ row }: { row: PricingRow }) {
 
       <table className="w-full text-left">
         <thead>
-          <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <tr className="t-label text-ink-subtle">
             <th className="pb-2 font-semibold">Target</th>
             <th className="pb-2 text-right font-semibold">Required price</th>
             <th className="w-16 pb-2 text-right font-semibold">Status</th>
@@ -142,7 +142,7 @@ export function MarginTargets({ row }: { row: PricingRow }) {
         </thead>
         <tbody>
           {row.targets.map((target) => (
-            <tr key={target.label} className="border-t border-hairline text-[13px]">
+            <tr key={target.label} className="border-t border-hairline t-small">
               <td className="py-2 text-ink-muted">{target.label}</td>
               <td className="tnum py-2 text-right text-ink">
                 {target.requiredPricePLN !== null ? formatPLNExact(target.requiredPricePLN) : '—'}
@@ -157,7 +157,7 @@ export function MarginTargets({ row }: { row: PricingRow }) {
                 ) : target.achieved ? (
                   <Check className="ml-auto h-3.5 w-3.5 text-positive" aria-label="Achieved" />
                 ) : (
-                  <span className="text-[11px] text-ink-subtle">
+                  <span className="t-micro text-ink-subtle">
                     +{formatPLN(target.requiredPricePLN - row.averagePricePLN)}
                   </span>
                 )}
@@ -195,7 +195,7 @@ export function ProfitWaterfall({ steps }: { steps: WaterfallStep[] }) {
 
         return (
           <li key={step.label} className="grid grid-cols-[150px_1fr_90px] items-center gap-3">
-            <span className="text-[12px] text-ink-muted">{step.label}</span>
+            <span className="t-caption text-ink-muted">{step.label}</span>
             <div className="relative h-5 overflow-hidden rounded-md bg-surface-sunken">
               <div
                 className={cn(
@@ -212,7 +212,7 @@ export function ProfitWaterfall({ steps }: { steps: WaterfallStep[] }) {
             </div>
             <span
               className={cn(
-                'tnum text-right text-[12px] font-medium',
+                'tnum text-right t-caption font-medium',
                 isResult ? (step.amountPLN >= 0 ? 'text-positive' : 'text-negative') : 'text-ink',
               )}
             >
@@ -243,7 +243,7 @@ export function PricingSimulator({ row }: { row: PricingRow }) {
 
   if (row.unitCostPLN === null) {
     return (
-      <p className="text-[13px] leading-relaxed text-ink-muted">
+      <p className="t-small text-ink-muted">
         The simulator needs a landed cost to project profit — add this product to the cost sheet
         first.
       </p>
@@ -253,7 +253,7 @@ export function PricingSimulator({ row }: { row: PricingRow }) {
   return (
     <div className="space-y-4">
       <label className="block max-w-[220px]">
-        <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+        <span className="mb-1.5 block t-label text-ink-subtle">
           Try a selling price
         </span>
         <div className="relative">
@@ -267,7 +267,7 @@ export function PricingSimulator({ row }: { row: PricingRow }) {
             className="tnum h-11 w-full rounded-control border border-hairline bg-surface pl-3 pr-10 text-[18px] font-semibold tracking-[-0.02em] text-ink"
             aria-label="Hypothetical selling price in PLN"
           />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-ink-subtle">
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 t-small text-ink-subtle">
             zł
           </span>
         </div>
@@ -308,7 +308,7 @@ export function PricingSimulator({ row }: { row: PricingRow }) {
           />
         </dl>
       ) : (
-        <p className="text-[13px] text-ink-subtle">Enter a price to see its consequences.</p>
+        <p className="t-small text-ink-subtle">Enter a price to see its consequences.</p>
       )}
     </div>
   )
@@ -327,7 +327,7 @@ function SimStat({
 }) {
   return (
     <div>
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+      <dt className="t-label text-ink-subtle">
         {label}
       </dt>
       <dd
@@ -338,7 +338,7 @@ function SimStat({
       >
         {value}
       </dd>
-      {caption && <dd className="mt-0.5 text-[11px] text-ink-subtle">{caption}</dd>}
+      {caption && <dd className="mt-0.5 t-micro text-ink-subtle">{caption}</dd>}
     </div>
   )
 }
@@ -350,7 +350,7 @@ export function RecommendationBlock({ rec }: { rec: PricingRecommendation }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-x-10 gap-y-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <p className="t-label text-ink-subtle">
             Current price
           </p>
           <p className="tnum mt-1 text-[20px] font-semibold tracking-[-0.02em] text-ink">
@@ -360,7 +360,7 @@ export function RecommendationBlock({ rec }: { rec: PricingRecommendation }) {
         {rec.kind === 'raise' && rec.recommendedPricePLN !== null && (
           <>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <p className="t-label text-ink-subtle">
                 Recommended price
               </p>
               <p className="tnum mt-1 text-[20px] font-semibold tracking-[-0.02em] text-accent-ink">
@@ -368,7 +368,7 @@ export function RecommendationBlock({ rec }: { rec: PricingRecommendation }) {
               </p>
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+              <p className="t-label text-ink-subtle">
                 Expected margin
               </p>
               <p className="tnum mt-1 text-[20px] font-semibold tracking-[-0.02em] text-positive">
@@ -377,7 +377,7 @@ export function RecommendationBlock({ rec }: { rec: PricingRecommendation }) {
             </div>
             {rec.expectedMonthlyUpliftPLN !== null && (
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                <p className="t-label text-ink-subtle">
                   Monthly uplift
                 </p>
                 <p className="tnum mt-1 text-[20px] font-semibold tracking-[-0.02em] text-positive">
@@ -398,7 +398,7 @@ export function RecommendationBlock({ rec }: { rec: PricingRecommendation }) {
           </Badge>
         )}
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <p className="t-label text-ink-subtle">
             Confidence
           </p>
           <p className="tnum mt-1 text-[20px] font-semibold tracking-[-0.02em] text-ink">
@@ -409,7 +409,7 @@ export function RecommendationBlock({ rec }: { rec: PricingRecommendation }) {
 
       <ul className="space-y-1.5">
         {rec.reasons.map((reason) => (
-          <li key={reason} className="flex items-start gap-2 text-[13px] leading-relaxed text-ink-muted">
+          <li key={reason} className="flex items-start gap-2 t-small text-ink-muted">
             <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-ink-subtle" aria-hidden="true" />
             {reason}
           </li>

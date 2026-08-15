@@ -22,6 +22,7 @@ import { useSnapshot } from '@/hooks/use-snapshot'
 import { formatNumber, formatPercent, formatPLN } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { rise } from '@/lib/motion'
 
 const TREND_METRICS: AnalyticsMetric[] = ['revenue', 'profit', 'margin', 'orders']
 
@@ -139,19 +140,16 @@ export function BusinessReviewPage() {
           {review.summary.map((item, index) => (
             <motion.div
               key={item.label}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: index * 0.04, ease: [0.16, 1, 0.3, 1] }}
-            >
+              {...rise(index)}>
               <Card className="h-full">
                 <div className="p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  <p className="t-label text-ink-subtle">
                     {item.label}
                   </p>
                   <p className="tnum mt-2 text-[22px] font-semibold leading-none tracking-[-0.03em] text-ink">
                     {item.value}
                   </p>
-                  <p className="mt-2 text-[12px] capitalize text-ink-muted">{item.caption}</p>
+                  <p className="mt-2 t-caption capitalize text-ink-muted">{item.caption}</p>
                 </div>
               </Card>
             </motion.div>
@@ -161,10 +159,7 @@ export function BusinessReviewPage() {
 
       {/* ── The written report ─────────────────────────────────────────── */}
       <motion.section
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-      >
+        {...rise()}>
         <Card>
           <CardContent className="max-w-3xl space-y-5 p-8">
             {review.narrative.map((paragraph, index) => (
@@ -174,7 +169,7 @@ export function BusinessReviewPage() {
                   'leading-relaxed',
                   index === 0
                     ? 'text-[17px] font-medium tracking-[-0.01em] text-ink'
-                    : 'text-[14px] text-ink-muted',
+                    : 't-body text-ink-muted',
                 )}
               >
                 {paragraph}
@@ -197,10 +192,7 @@ export function BusinessReviewPage() {
               return (
                 <motion.div
                   key={insight.topic + insight.statement.slice(0, 20)}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: index * 0.05, ease: [0.16, 1, 0.3, 1] }}
-                >
+                  {...rise(index)}>
                   <Card className="h-full">
                     <div className="flex items-start gap-3 p-5">
                       <span
@@ -216,10 +208,10 @@ export function BusinessReviewPage() {
                         <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                       </span>
                       <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                        <p className="t-label text-ink-subtle">
                           {insight.topic}
                         </p>
-                        <p className="mt-1 text-[14px] leading-relaxed text-ink">
+                        <p className="mt-1 t-body text-ink">
                           {insight.statement}
                         </p>
                       </div>
@@ -274,7 +266,7 @@ export function BusinessReviewPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-left">
                 <thead>
-                  <tr className="border-b border-hairline bg-surface-sunken/50 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  <tr className="border-b border-hairline bg-surface-sunken/50 t-label text-ink-subtle">
                     <th className="px-5 py-2.5 font-semibold">Date</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Sales</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Units</th>
@@ -290,7 +282,7 @@ export function BusinessReviewPage() {
                     return (
                       <tr
                         key={point.date}
-                        className="border-b border-hairline text-[13px] last:border-b-0"
+                        className="border-b border-hairline t-small last:border-b-0"
                       >
                         <td className="px-5 py-2.5">
                           <span className="text-ink">
@@ -302,7 +294,7 @@ export function BusinessReviewPage() {
                           </span>
                           <span
                             className={cn(
-                              'ml-2 text-[11px]',
+                              'ml-2 t-micro',
                               isWeekend ? 'text-accent-ink' : 'text-ink-subtle',
                             )}
                           >
@@ -377,7 +369,7 @@ export function BusinessReviewPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] border-collapse text-left">
                 <thead>
-                  <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  <tr className="t-label text-ink-subtle">
                     <th className="px-5 py-3 font-semibold">
                       {heatmapDimension === 'product'
                         ? 'Product'
@@ -400,7 +392,7 @@ export function BusinessReviewPage() {
                   {heatmap.rows.map((row) => (
                     <tr key={row} className="border-t border-hairline">
                       <td
-                        className="max-w-[260px] truncate px-5 py-2.5 text-[13px] text-ink"
+                        className="max-w-[260px] truncate px-5 py-2.5 t-small text-ink"
                         title={row}
                       >
                         {row}
@@ -416,7 +408,7 @@ export function BusinessReviewPage() {
                               content={`${row} · ${column}: ${formatPLN(cell?.value ?? 0)}`}
                             >
                               <span
-                                className="mx-auto flex h-8 w-full min-w-[52px] cursor-help items-center justify-center rounded-md text-[11px] font-medium"
+                                className="mx-auto flex h-8 w-full min-w-[52px] cursor-help items-center justify-center rounded-md t-micro font-medium"
                                 style={{
                                   backgroundColor:
                                     intensity > 0.02

@@ -4,6 +4,10 @@ import { cn } from '@/lib/utils'
 /**
  * The surface everything sits on. Cards carry one idea each — if a card needs a
  * scrollbar or a second heading, it should have been two cards.
+ *
+ * The shadow is deliberately shallow at rest: a page of cards that each claim
+ * elevation reads as clutter. Depth is spent on the things that are actually
+ * above the page — chrome, menus, and whatever the pointer is currently on.
  */
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
@@ -23,16 +27,11 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return (
-    <h3
-      className={cn('text-[15px] font-semibold tracking-[-0.01em] text-ink', className)}
-      {...props}
-    />
-  )
+  return <h3 className={cn('t-strong text-ink', className)} {...props} />
 }
 
 export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn('text-[13px] leading-relaxed text-ink-muted', className)} {...props} />
+  return <p className={cn('t-small text-ink-muted', className)} {...props} />
 }
 
 export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {

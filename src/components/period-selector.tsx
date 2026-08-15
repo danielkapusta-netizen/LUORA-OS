@@ -1,14 +1,20 @@
+import { AnimatePresence, motion } from 'framer-motion'
 import { Calendar, ChevronDown } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { PERIOD_OPTIONS, type PeriodKey } from '@/domain/period'
+import { materialize } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 /**
  * The Business Snapshot selector — the single control that scopes the whole
  * application. Presented as a menu rather than a segmented control because it
  * carries a custom-range option and needs room to breathe in a page header.
+ *
+ * The menu grows out of the button that opened it and collapses back into it,
+ * so the surface is visibly anchored to its source rather than arriving from
+ * nowhere.
  */
 export function PeriodSelector({
   value,
@@ -75,10 +81,16 @@ export function PeriodSelector({
         />
       </Button>
 
-      {isOpen && (
-        <div
+      <AnimatePresence>
+        {isOpen && (
+        <motion.div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-60 rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-overlay"
+          initial={materialize.initial}
+          animate={materialize.animate}
+          exit={materialize.exit}
+          transition={materialize.transition}
+          style={{ transformOrigin: 'top right' }}
+          className="material-thin absolute right-0 z-50 mt-2 w-60 rounded-xl border border-hairline p-1.5 shadow-overlay"
         >
           {PERIOD_OPTIONS.map((option) => (
             <button
@@ -91,9 +103,10 @@ export function PeriodSelector({
                 setOpen(false)
               }}
               className={cn(
-                'flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13px] transition-colors',
+                'press-sm flex w-full items-center justify-between rounded-lg px-3 py-2 text-left',
+                't-small vibrant transition-colors duration-150',
                 value === option.value
-                  ? 'bg-surface-sunken font-medium text-ink'
+                  ? 'bg-surface-sunken font-semibold text-ink'
                   : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
               )}
             >
@@ -109,9 +122,10 @@ export function PeriodSelector({
               type="button"
               onClick={() => setShowCustom(true)}
               className={cn(
-                'flex w-full items-center rounded-lg px-3 py-2 text-left text-[13px] transition-colors',
+                'press-sm flex w-full items-center rounded-lg px-3 py-2 text-left',
+                't-small vibrant transition-colors duration-150',
                 value === 'custom'
-                  ? 'bg-surface-sunken font-medium text-ink'
+                  ? 'bg-surface-sunken font-semibold text-ink'
                   : 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
               )}
             >
@@ -119,22 +133,22 @@ export function PeriodSelector({
             </button>
           ) : (
             <div className="space-y-2 p-2">
-              <label className="block text-[11px] font-medium text-ink-subtle">
+              <label className="t-micro block font-medium text-ink-subtle">
                 From
                 <input
                   type="date"
                   value={from}
                   onChange={(event) => setFrom(event.target.value)}
-                  className="mt-1 h-8 w-full rounded-control border border-hairline bg-surface px-2 text-[13px] text-ink"
+                  className="mt-1 h-8 w-full rounded-control border border-hairline bg-surface px-2 t-small text-ink"
                 />
               </label>
-              <label className="block text-[11px] font-medium text-ink-subtle">
+              <label className="t-micro block font-medium text-ink-subtle">
                 To
                 <input
                   type="date"
                   value={to}
                   onChange={(event) => setTo(event.target.value)}
-                  className="mt-1 h-8 w-full rounded-control border border-hairline bg-surface px-2 text-[13px] text-ink"
+                  className="mt-1 h-8 w-full rounded-control border border-hairline bg-surface px-2 t-small text-ink"
                 />
               </label>
               <Button
@@ -148,8 +162,9 @@ export function PeriodSelector({
               </Button>
             </div>
           )}
-        </div>
-      )}
+        </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

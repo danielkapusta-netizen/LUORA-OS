@@ -35,7 +35,7 @@ export function MarginTrendChart({ lines, height = 220 }: { lines: readonly Line
 
   if (history.length < 2) {
     return (
-      <p className="text-[13px] text-ink-subtle">
+      <p className="t-small text-ink-subtle">
         Not enough history at this grain — try a coarser one.
       </p>
     )
@@ -82,10 +82,10 @@ export function MarginTrendChart({ lines, height = 220 }: { lines: readonly Line
                 if (!point) return null
                 return (
                   <div className="rounded-xl border border-hairline bg-surface-raised p-3 shadow-overlay">
-                    <p className="mb-1.5 text-[12px] font-semibold text-ink">
+                    <p className="mb-1.5 t-caption font-semibold text-ink">
                       {formatDateShort(String(label))}
                     </p>
-                    <p className="tnum text-[12px] text-ink-muted">
+                    <p className="tnum t-caption text-ink-muted">
                       Margin <span className="font-medium text-ink">{formatPercent(point.marginPct)}</span>
                       {' · '}Profit{' '}
                       <span className="font-medium text-ink">{formatPLNExact(point.profitPLN)}</span>
@@ -133,7 +133,7 @@ export function PriceStabilityChart({
   height?: number
 }) {
   if (points.length < 2) {
-    return <p className="text-[13px] text-ink-subtle">Not enough sales to chart price behaviour.</p>
+    return <p className="t-small text-ink-subtle">Not enough sales to chart price behaviour.</p>
   }
 
   const data = points.map((point) => ({
@@ -174,10 +174,10 @@ export function PriceStabilityChart({
               if (!point) return null
               return (
                 <div className="rounded-xl border border-hairline bg-surface-raised p-3 shadow-overlay">
-                  <p className="mb-1 text-[12px] font-semibold text-ink">
+                  <p className="mb-1 t-caption font-semibold text-ink">
                     {formatDateShort(new Date(point.time))}
                   </p>
-                  <p className="tnum text-[12px] text-ink-muted">
+                  <p className="tnum t-caption text-ink-muted">
                     Sold at <span className="font-medium text-ink">{formatPLNExact(point.price)}</span>
                   </p>
                 </div>

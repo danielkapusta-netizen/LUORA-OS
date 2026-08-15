@@ -42,7 +42,7 @@ export function ProductTable({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[700px] text-left">
         <thead>
-          <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+          <tr className="t-label text-ink-subtle">
             <th className="px-5 py-2.5 font-semibold">#</th>
             <th className="py-2.5 font-semibold">Product</th>
             <th className="px-3 py-2.5 text-right font-semibold">Orders</th>
@@ -70,7 +70,7 @@ export function ProductTable({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.3, delay: index * 0.03 }}
-                className="border-t border-hairline text-[13px]"
+                className="border-t border-hairline t-small"
               >
                 <td className="tnum px-5 py-3 text-ink-subtle">{index + 1}</td>
                 <td className="max-w-[260px] py-3">

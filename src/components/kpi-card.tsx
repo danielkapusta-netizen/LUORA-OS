@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card'
 import { Tooltip } from '@/components/ui/tooltip'
 import type { Kpi } from '@/domain/types'
 import { formatDateShort, formatNumber, formatPercent, formatPLN } from '@/lib/format'
+import { rise } from '@/lib/motion'
 
 function formatterFor(kpi: Kpi): (value: number) => string {
   switch (kpi.format) {
@@ -39,15 +40,11 @@ export function KpiCard({
   const tone = kpi.key === 'profit' ? 'positive' : kpi.key === 'margin' ? 'neutral' : 'accent'
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: index * 0.05, ease: [0.16, 1, 0.3, 1] }}
-    >
+    <motion.div {...rise(index)}>
       <Card className="group h-full overflow-hidden hover:shadow-lifted">
         <div className="flex h-full flex-col p-5">
           <div className="flex items-start justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <p className="t-label text-ink-subtle">
               {kpi.label}
             </p>
             <Tooltip content={kpi.hint}>
@@ -71,7 +68,7 @@ export function KpiCard({
               unit={kpi.isRate ? 'pp' : 'percent'}
               higherIsBetter={kpi.higherIsBetter ?? true}
             />
-            <span className="text-[11px] text-ink-subtle">{comparisonLabel}</span>
+            <span className="t-micro text-ink-subtle">{comparisonLabel}</span>
           </div>
 
           {kpi.series.length > 1 && (
@@ -82,7 +79,7 @@ export function KpiCard({
 
           {/* Context row: what the previous window was, where it peaked, and
               what a typical bucket looks like. */}
-          <dl className="mt-auto grid grid-cols-3 gap-2 border-t border-hairline pt-3 text-[11px]">
+          <dl className="mt-auto grid grid-cols-3 gap-2 border-t border-hairline pt-3 t-micro">
             <div>
               <dt className="text-ink-subtle">Previous</dt>
               <dd className="tnum mt-0.5 font-medium text-ink-muted">

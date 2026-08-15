@@ -18,12 +18,12 @@ export function ChannelComparison({ channels }: { channels: readonly ChannelPerf
         <li key={channel.source} className="space-y-2.5">
           <div className="flex items-baseline justify-between gap-4">
             <div className="flex items-baseline gap-2.5">
-              <span className="text-[14px] font-medium text-ink">
+              <span className="t-body font-medium text-ink">
                 {channelName(channel.source)}
               </span>
-              <span className="tnum text-[12px] text-ink-subtle">{channel.orders} orders</span>
+              <span className="tnum t-caption text-ink-subtle">{channel.orders} orders</span>
             </div>
-            <span className="tnum text-[14px] font-semibold text-ink">
+            <span className="tnum t-body font-semibold text-ink">
               {formatPLN(channel.revenuePLN)}
             </span>
           </div>
@@ -37,7 +37,7 @@ export function ChannelComparison({ channels }: { channels: readonly ChannelPerf
             />
           </div>
 
-          <div className="flex items-baseline justify-between gap-4 text-[12px]">
+          <div className="flex items-baseline justify-between gap-4 t-caption">
             <span className="text-ink-subtle">
               {formatPercent(channel.revenueShare * 100, 0)} of revenue
             </span>

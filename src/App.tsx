@@ -10,6 +10,7 @@ import { ProductsPage } from '@/pages/products'
 import { SettingsPage } from '@/pages/settings'
 import { TransactionsPage } from '@/pages/transactions'
 import { TrendsPage } from '@/pages/trends'
+import { springSnappy } from '@/lib/motion'
 
 /**
  * Page transitions are a short cross-fade with a few pixels of lift. Anything
@@ -23,7 +24,7 @@ function PageTransition({ children }: { children: React.ReactNode }) {
       key={location.pathname}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+      transition={springSnappy}
     >
       {children}
     </motion.div>

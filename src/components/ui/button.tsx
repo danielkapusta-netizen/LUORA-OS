@@ -3,19 +3,28 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import type { ButtonHTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 
+/**
+ * The press is the important part.
+ *
+ * Feedback lands on pointer-down rather than on click: the moment a control
+ * waits for release before acknowledging you, directness falls off a cliff.
+ * The scale is small — the surface gives slightly under a finger, it does not
+ * perform. Colour changes ride a slower clock than the transform so the press
+ * reads as physical and the hover as a state.
+ */
 const buttonVariants = cva(
   [
-    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-control font-medium',
-    'transition-[background-color,border-color,color,box-shadow,transform] duration-150',
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-control',
+    'font-medium tracking-[-0.005em]',
+    'transition-[background-color,border-color,color,box-shadow] duration-150',
     'disabled:pointer-events-none disabled:opacity-50',
-    'active:scale-[0.985]',
+    'press',
   ].join(' '),
   {
     variants: {
       variant: {
         primary: 'bg-ink text-canvas hover:bg-ink/90',
-        secondary:
-          'border border-hairline-strong bg-surface text-ink hover:bg-surface-sunken',
+        secondary: 'border border-hairline-strong bg-surface text-ink hover:bg-surface-sunken',
         ghost: 'text-ink-muted hover:bg-surface-sunken hover:text-ink',
         accent: 'bg-accent text-white hover:bg-accent-ink',
       },

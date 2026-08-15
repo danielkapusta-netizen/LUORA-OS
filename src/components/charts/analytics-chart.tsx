@@ -133,7 +133,7 @@ export function AnalyticsChart({
 
               return (
                 <div className="min-w-[200px] rounded-xl border border-hairline bg-surface-raised p-3 shadow-overlay">
-                  <p className="mb-2 text-[12px] font-semibold text-ink">
+                  <p className="mb-2 t-caption font-semibold text-ink">
                     {bucketLabel(String(label), series.granularity)}
                     {point.isProjected && (
                       <span className="ml-1.5 font-normal text-ink-subtle">· projected</span>
@@ -142,9 +142,9 @@ export function AnalyticsChart({
                   <dl className="space-y-1.5">
                     {rows.map((row) => (
                       <div key={row.label} className="flex items-baseline justify-between gap-6">
-                        <dt className="text-[12px] text-ink-muted">{row.label}</dt>
+                        <dt className="t-caption text-ink-muted">{row.label}</dt>
                         <dd
-                          className={`tnum text-[12px] font-medium ${row.muted ? 'text-ink-muted' : 'text-ink'}`}
+                          className={`tnum t-caption font-medium ${row.muted ? 'text-ink-muted' : 'text-ink'}`}
                         >
                           {row.value}
                         </dd>
@@ -258,7 +258,7 @@ export function ChartLegend({
   if (visible.length === 0) return null
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-ink-muted">
+    <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 t-caption text-ink-muted">
       <span className="flex items-center gap-1.5">
         <span className="h-0.5 w-4 rounded-full bg-accent" />
         Actual

@@ -73,7 +73,7 @@ export function HealthScoreCard({ health }: { health: HealthScore }) {
               <span className="text-[38px] font-semibold leading-none tracking-[-0.035em] text-ink">
                 <AnimatedNumber value={health.score} format={(value) => String(Math.round(value))} />
               </span>
-              <span className="mt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-subtle">
+              <span className="t-label mt-1 text-ink-subtle">
                 out of 100
               </span>
             </div>
@@ -88,7 +88,7 @@ export function HealthScoreCard({ health }: { health: HealthScore }) {
             <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
               Business health
             </h2>
-            <p className="text-[14px] leading-relaxed text-ink-muted">{health.headline}</p>
+            <p className="t-body text-ink-muted">{health.headline}</p>
           </div>
 
           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -102,11 +102,11 @@ export function HealthScoreCard({ health }: { health: HealthScore }) {
               >
                 <div className="flex items-baseline justify-between gap-3">
                   <Tooltip content={component.detail}>
-                    <dt className="cursor-help text-[12px] font-medium text-ink-muted underline decoration-hairline-strong decoration-dotted underline-offset-4">
+                    <dt className="cursor-help t-caption font-medium text-ink-muted underline decoration-hairline-strong decoration-dotted underline-offset-4">
                       {component.label}
                     </dt>
                   </Tooltip>
-                  <dd className="tnum shrink-0 text-[12px] font-medium text-ink">
+                  <dd className="tnum shrink-0 t-caption font-medium text-ink">
                     {component.value}
                   </dd>
                 </div>

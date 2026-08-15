@@ -22,6 +22,7 @@ import type { Granularity } from '@/domain/types'
 import { useSnapshot } from '@/hooks/use-snapshot'
 import { formatNumber, formatPercent, formatPLN } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { rise } from '@/lib/motion'
 
 const GRANULARITY_LABELS: Record<Granularity, string> = {
   day: 'Daily',
@@ -150,7 +151,7 @@ export function TrendsPage() {
                   : 'border-hairline bg-surface text-ink-muted hover:bg-surface-sunken hover:text-ink',
               )}
             >
-              <span className="block text-[13px] font-medium">{item.label}</span>
+              <span className="block t-small font-medium">{item.label}</span>
             </button>
           )
         })}
@@ -181,7 +182,7 @@ export function TrendsPage() {
             place the number appears. */}
         <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <p className="t-label text-ink-subtle">
               {period.label}
             </p>
             <p className="tnum mt-1 text-[30px] font-semibold leading-none tracking-[-0.03em] text-ink">
@@ -197,11 +198,11 @@ export function TrendsPage() {
                   higherIsBetter={definition.higherIsBetter}
                   size="md"
                 />
-                <span className="text-[12px] text-ink-subtle">{period.comparisonLabel}</span>
+                <span className="t-caption text-ink-subtle">{period.comparisonLabel}</span>
               </>
             ) : (
               <Tooltip content="The equal-length window before this period reaches back before your first order, so a percentage against it would compare trading to a time when there was none.">
-                <span className="cursor-help text-[12px] text-ink-subtle underline decoration-hairline-strong decoration-dotted underline-offset-4">
+                <span className="cursor-help t-caption text-ink-subtle underline decoration-hairline-strong decoration-dotted underline-offset-4">
                   No comparable earlier period
                 </span>
               </Tooltip>
@@ -210,7 +211,7 @@ export function TrendsPage() {
           {series.projectedTotal !== null && overlays.forecast && (
             <Tooltip content="A straight-line projection from recent trade. It does not model seasonality or campaigns — treat it as a pace check, not a plan.">
               <div className="cursor-help pb-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                <p className="t-label text-ink-subtle">
                   Projected full period
                 </p>
                 <p className="tnum mt-1 text-[16px] font-semibold text-positive">
@@ -243,7 +244,7 @@ export function TrendsPage() {
                   aria-pressed={isOn}
                   onClick={() => setOverlays((current) => ({ ...current, [key]: !current[key] }))}
                   className={cn(
-                    'rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors duration-150',
+                    'rounded-full border px-3 py-1.5 t-caption font-medium transition-colors duration-150',
                     !isAvailable && 'cursor-not-allowed border-hairline text-ink-subtle opacity-50',
                     isAvailable && isOn && 'border-accent/40 bg-accent-soft text-accent-ink',
                     isAvailable &&
@@ -277,9 +278,7 @@ export function TrendsPage() {
 
       {weekdays.some((day) => day.occurrences > 0) && (
         <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          {...rise()}
           className="space-y-5"
         >
           <SectionHeading
@@ -293,7 +292,7 @@ export function TrendsPage() {
                   const max = Math.max(...weekdays.map((item) => item.avgRevenuePLN), 1)
                   return (
                     <li key={day.label} className="flex items-center gap-3">
-                      <span className="w-9 shrink-0 text-[12px] font-medium text-ink-muted">
+                      <span className="w-9 shrink-0 t-caption font-medium text-ink-muted">
                         {day.label}
                       </span>
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-sunken">
@@ -304,10 +303,10 @@ export function TrendsPage() {
                           transition={{ duration: 0.7, delay: 0.04 * index, ease: [0.16, 1, 0.3, 1] }}
                         />
                       </div>
-                      <span className="tnum w-24 shrink-0 text-right text-[12px] text-ink">
+                      <span className="tnum w-24 shrink-0 text-right t-caption text-ink">
                         {formatPLN(day.avgRevenuePLN)}
                       </span>
-                      <span className="tnum w-12 shrink-0 text-right text-[11px] text-ink-subtle">
+                      <span className="tnum w-12 shrink-0 text-right t-micro text-ink-subtle">
                         {day.occurrences}×
                       </span>
                     </li>

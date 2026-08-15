@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion'
 import { useId } from 'react'
+
+import { springSnappy } from '@/lib/motion'
 import { cn } from '@/lib/utils'
 
 export interface SegmentedOption<T extends string> {
@@ -10,6 +12,10 @@ export interface SegmentedOption<T extends string> {
 /**
  * Segmented control with a shared layout indicator — the selection slides
  * between options rather than blinking, which keeps the eye anchored.
+ *
+ * The slide is a spring, so a run of quick changes stays continuous: each new
+ * choice re-targets the motion already in flight instead of restarting it, and
+ * the indicator never snaps back to re-travel ground it has already covered.
  */
 export function Segmented<T extends string>({
   options,
@@ -45,7 +51,8 @@ export function Segmented<T extends string>({
             aria-selected={isActive}
             onClick={() => onChange(option.value)}
             className={cn(
-              'relative rounded-[7px] px-3 py-1.5 text-[13px] font-medium transition-colors duration-150',
+              'press-sm relative rounded-[7px] px-3 py-1.5',
+              't-small font-medium transition-colors duration-150',
               isActive ? 'text-ink' : 'text-ink-subtle hover:text-ink-muted',
             )}
           >
@@ -53,7 +60,7 @@ export function Segmented<T extends string>({
               <motion.span
                 layoutId={layoutId}
                 className="absolute inset-0 rounded-[7px] bg-surface shadow-card"
-                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                transition={springSnappy}
               />
             )}
             <span className="relative z-10">{option.label}</span>

@@ -100,14 +100,14 @@ export function MarginTrendChart({
               ]
               return (
                 <div className="min-w-[180px] rounded-xl border border-hairline bg-surface-raised p-3 shadow-overlay">
-                  <p className="mb-2 text-[12px] font-semibold text-ink">
+                  <p className="mb-2 t-caption font-semibold text-ink">
                     {monthLabel(String(label))}
                   </p>
                   <dl className="space-y-1.5">
                     {rows.map((row) => (
                       <div key={row.label} className="flex items-baseline justify-between gap-6">
-                        <dt className="text-[12px] text-ink-muted">{row.label}</dt>
-                        <dd className="tnum text-[12px] font-medium text-ink">{row.value}</dd>
+                        <dt className="t-caption text-ink-muted">{row.label}</dt>
+                        <dd className="tnum t-caption font-medium text-ink">{row.value}</dd>
                       </div>
                     ))}
                   </dl>

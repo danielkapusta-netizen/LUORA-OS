@@ -124,7 +124,7 @@ export function OverviewPage() {
             </span>
             {period.isAnchoredToData && (
               <Tooltip content="The feed has not updated today, so periods are measured from the most recent order rather than the wall clock.">
-                <span className="inline-flex cursor-help items-center gap-1.5 rounded-full bg-caution-soft px-2 py-0.5 text-[11px] font-medium text-caution">
+                <span className="inline-flex cursor-help items-center gap-1.5 rounded-full bg-caution-soft px-2 py-0.5 t-micro font-medium text-caution">
                   <Clock className="h-3 w-3" aria-hidden="true" />
                   Dated to last order
                 </span>
@@ -238,7 +238,7 @@ export function OverviewPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <ShieldAlert className="h-4 w-4 text-negative" aria-hidden="true" />
-                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+                  <h3 className="t-small font-semibold uppercase tracking-[0.06em] text-ink-muted">
                     Risks to your profit
                   </h3>
                 </div>
@@ -262,7 +262,7 @@ export function OverviewPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-positive" aria-hidden="true" />
-                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+                  <h3 className="t-small font-semibold uppercase tracking-[0.06em] text-ink-muted">
                     Opportunities
                   </h3>
                 </div>
@@ -333,7 +333,7 @@ export function OverviewPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="flex flex-col gap-3 border-t border-hairline pt-6 text-[12px] text-ink-subtle sm:flex-row sm:items-center sm:justify-between"
+            className="flex flex-col gap-3 border-t border-hairline pt-6 t-caption text-ink-subtle sm:flex-row sm:items-center sm:justify-between"
           >
             <p>
               {formatNumber(context.coverage.completeLineItems)} of{' '}

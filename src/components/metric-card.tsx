@@ -8,6 +8,7 @@ import { Delta } from '@/components/delta'
 import { Card } from '@/components/ui/card'
 import { Tooltip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { rise } from '@/lib/motion'
 
 export interface MetricCardProps {
   label: string
@@ -44,15 +45,11 @@ export function MetricCard({
   index = 0,
 }: MetricCardProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: index * 0.05, ease: [0.16, 1, 0.3, 1] }}
-    >
+    <motion.div {...rise(index)}>
       <Card className="group h-full overflow-hidden hover:shadow-lifted">
         <div className="flex h-full flex-col p-6">
           <div className="flex items-start justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+            <p className="t-label text-ink-subtle">
               {label}
             </p>
             {hint && (
@@ -75,7 +72,7 @@ export function MetricCard({
           {(delta !== undefined || deltaCaption) && (
             <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1">
               {delta !== undefined && <Delta value={delta ?? null} unit={deltaUnit} />}
-              {deltaCaption && <span className="text-[12px] text-ink-subtle">{deltaCaption}</span>}
+              {deltaCaption && <span className="t-caption text-ink-subtle">{deltaCaption}</span>}
             </div>
           )}
 
@@ -85,7 +82,7 @@ export function MetricCard({
             </div>
           )}
 
-          {footer && <div className="mt-auto pt-4 text-[12px] text-ink-muted">{footer}</div>}
+          {footer && <div className="mt-auto pt-4 t-caption text-ink-muted">{footer}</div>}
         </div>
       </Card>
     </motion.div>

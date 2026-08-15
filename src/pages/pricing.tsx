@@ -29,6 +29,7 @@ import {
 import { useSnapshot } from '@/hooks/use-snapshot'
 import { formatNumber, formatPercent, formatPLN, formatPLNExact } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { disclosure } from '@/lib/motion'
 
 const DIMENSION_OPTIONS = [
   { value: 'product' as const, label: 'Products' },
@@ -173,7 +174,7 @@ export function PricingPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={`Search ${noun}…`}
-            className="h-9 w-full rounded-control border border-hairline bg-surface pl-9 pr-3 text-[13px] text-ink placeholder:text-ink-subtle"
+            className="h-9 w-full rounded-control border border-hairline bg-surface pl-9 pr-3 t-small text-ink placeholder:text-ink-subtle"
           />
         </label>
       </div>
@@ -185,7 +186,7 @@ export function PricingPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <div className="hidden border-b border-hairline bg-surface-sunken/50 px-5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle lg:grid lg:grid-cols-[24px_1fr_96px_110px_100px_84px_110px_110px_28px] lg:gap-3">
+          <div className="hidden border-b border-hairline bg-surface-sunken/50 px-5 py-2.5 t-label text-ink-subtle lg:grid lg:grid-cols-[24px_1fr_96px_110px_100px_84px_110px_110px_28px] lg:gap-3">
             <span />
             <span>{dimension === 'brand' ? 'Brand' : 'Product'}</span>
             <span className="text-right">Current</span>
@@ -220,7 +221,7 @@ export function PricingPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-left">
                 <thead>
-                  <tr className="border-b border-hairline bg-surface-sunken/50 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">
+                  <tr className="border-b border-hairline bg-surface-sunken/50 t-label text-ink-subtle">
                     <th className="px-5 py-2.5 font-semibold">Product</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Current margin</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Was</th>
@@ -231,7 +232,7 @@ export function PricingPage() {
                 </thead>
                 <tbody>
                   {atRisk.map((row) => (
-                    <tr key={row.key} className="border-b border-hairline text-[13px] last:border-b-0">
+                    <tr key={row.key} className="border-b border-hairline t-small last:border-b-0">
                       <td className="max-w-[240px] truncate px-5 py-3 font-medium text-ink" title={row.label}>
                         {row.label}
                       </td>
@@ -250,7 +251,7 @@ export function PricingPage() {
                       <td className="tnum px-3 py-3 text-right text-ink">
                         −{formatPLN(row.risk!.estMonthlyImpactPLN)}
                       </td>
-                      <td className="max-w-[260px] px-5 py-3 text-[12px] text-ink-muted">
+                      <td className="max-w-[260px] px-5 py-3 t-caption text-ink-muted">
                         {row.recommendation.kind === 'raise' && row.recommendation.recommendedPricePLN
                           ? `Reprice to ${formatPLNExact(row.recommendation.recommendedPricePLN)}`
                           : row.recommendation.kind === 'fix-costs'
@@ -283,7 +284,7 @@ function SummaryStat({
   return (
     <Card>
       <div className="p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">{label}</p>
+        <p className="t-label text-ink-subtle">{label}</p>
         <p
           className={cn(
             'tnum mt-2 text-[24px] font-semibold leading-none tracking-[-0.03em]',
@@ -295,7 +296,7 @@ function SummaryStat({
         >
           {value}
         </p>
-        <p className="mt-2 text-[12px] text-ink-muted">{caption}</p>
+        <p className="mt-2 t-caption text-ink-muted">{caption}</p>
       </div>
     </Card>
   )
@@ -317,7 +318,7 @@ function PricingTableRow({
         onClick={onToggle}
         aria-expanded={isOpen}
         className={cn(
-          'grid w-full grid-cols-[24px_1fr_28px] items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-surface-sunken/50',
+          'press-sm grid w-full grid-cols-[24px_1fr_28px] items-center gap-3 px-5 py-3.5 text-left transition-colors duration-150 hover:bg-surface-sunken/50',
           'lg:grid-cols-[24px_1fr_96px_110px_100px_84px_110px_110px_28px]',
           isOpen && 'bg-surface-sunken/50',
         )}
@@ -325,7 +326,7 @@ function PricingTableRow({
         <StatusDot status={row.status} />
         <span className="min-w-0">
           <span className="flex items-center gap-1.5">
-            <span className="truncate text-[13px] font-medium text-ink" title={row.label}>
+            <span className="truncate t-small font-medium text-ink" title={row.label}>
               {row.label}
             </span>
             {row.costUnknown && (
@@ -334,19 +335,19 @@ function PricingTableRow({
               </Tooltip>
             )}
           </span>
-          <span className="mt-0.5 block text-[11px] text-ink-subtle lg:hidden">
+          <span className="mt-0.5 block t-micro text-ink-subtle lg:hidden">
             {formatPLNExact(row.averagePricePLN)} avg · {formatPercent(row.averageMarginPct)} margin
           </span>
         </span>
-        <span className="tnum hidden text-right text-[13px] text-ink lg:block">
+        <span className="tnum hidden text-right t-small text-ink lg:block">
           {formatPLNExact(row.currentPricePLN)}
         </span>
-        <span className="tnum hidden text-right text-[13px] text-ink lg:block">
+        <span className="tnum hidden text-right t-small text-ink lg:block">
           {formatPLNExact(row.averagePricePLN)}
         </span>
         <span
           className={cn(
-            'tnum hidden text-right text-[13px] lg:block',
+            'tnum hidden text-right t-small lg:block',
             row.averageProfitPLN < 0 ? 'font-medium text-negative' : 'text-ink',
           )}
         >
@@ -354,7 +355,7 @@ function PricingTableRow({
         </span>
         <span
           className={cn(
-            'tnum hidden text-right text-[13px] lg:block',
+            'tnum hidden text-right t-small lg:block',
             row.status === 'red'
               ? 'font-medium text-negative'
               : row.status === 'yellow'
@@ -366,13 +367,13 @@ function PricingTableRow({
         </span>
         <span
           className={cn(
-            'tnum hidden text-right text-[13px] lg:block',
+            'tnum hidden text-right t-small lg:block',
             row.monthlyProfitPLN < 0 ? 'font-medium text-negative' : 'text-ink',
           )}
         >
           {formatPLN(row.monthlyProfitPLN)}
         </span>
-        <span className="tnum hidden text-right text-[13px] text-ink-muted lg:block">
+        <span className="tnum hidden text-right t-small text-ink-muted lg:block">
           {formatPLN(row.monthlyRevenuePLN)}
         </span>
         <ChevronDown
@@ -387,10 +388,10 @@ function PricingTableRow({
       <AnimatePresence initial={false}>
         {isOpen && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            initial={disclosure.initial}
+            animate={disclosure.animate}
+            exit={disclosure.exit}
+            transition={disclosure.transition}
             className="overflow-hidden"
           >
             <ExpandedRow row={row} />
@@ -414,8 +415,8 @@ function Block({
 }) {
   return (
     <div className={cn('rounded-xl border border-hairline bg-surface p-5', className)}>
-      <p className="text-[12px] font-semibold uppercase tracking-[0.06em] text-ink-muted">{title}</p>
-      {description && <p className="mt-1 text-[12px] leading-relaxed text-ink-subtle">{description}</p>}
+      <p className="t-caption font-semibold uppercase tracking-[0.06em] text-ink-muted">{title}</p>
+      {description && <p className="mt-1 t-caption text-ink-subtle">{description}</p>}
       <div className="mt-4">{children}</div>
     </div>
   )
@@ -482,7 +483,7 @@ function ExpandedRow({ row }: { row: PricingRow }) {
             {waterfall ? (
               <ProfitWaterfall steps={waterfall} />
             ) : (
-              <p className="text-[13px] text-ink-subtle">Needs a landed cost to draw.</p>
+              <p className="t-small text-ink-subtle">Needs a landed cost to draw.</p>
             )}
           </Block>
         </div>
@@ -515,7 +516,7 @@ function ExpandedRow({ row }: { row: PricingRow }) {
       {row.risk && (
         <div className="flex items-start gap-3 rounded-xl border border-negative/25 bg-negative-soft/40 p-4">
           <TrendingDown className="mt-0.5 h-4 w-4 shrink-0 text-negative" aria-hidden="true" />
-          <p className="text-[13px] leading-relaxed text-ink">
+          <p className="t-small text-ink">
             {row.risk.note} Estimated impact −{formatPLN(row.risk.estMonthlyImpactPLN)} per month at
             current volume.
           </p>
@@ -538,11 +539,11 @@ function PriceFact({
 }) {
   return (
     <div>
-      <dt className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-subtle">{label}</dt>
+      <dt className="t-label text-ink-subtle">{label}</dt>
       <dd
         className={cn(
           'tnum mt-1',
-          strong ? 'text-[17px] font-semibold tracking-[-0.01em]' : 'text-[14px] font-medium',
+          strong ? 'text-[17px] font-semibold tracking-[-0.01em]' : 't-body font-medium',
           tone === 'negative' ? 'text-negative' : tone === 'caution' ? 'text-caution' : 'text-ink',
         )}
       >

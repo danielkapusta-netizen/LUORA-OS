@@ -115,7 +115,7 @@ export function ActionCentrePage() {
           title="How findings are generated"
           description="Eight rules run against every data refresh. A rule only fires when it can cite a number, and it must propose an action — observations without actions are suppressed."
         />
-        <div className="grid grid-cols-1 gap-x-10 gap-y-3 text-[13px] leading-relaxed text-ink-muted sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-10 gap-y-3 t-small text-ink-muted sm:grid-cols-2">
           <p>Margin leaks — material products earning far below the portfolio rate.</p>
           <p>Profit concentration — too much profit resting on a single listing.</p>
           <p>Unverified costs — revenue whose margin is reported without COGS.</p>

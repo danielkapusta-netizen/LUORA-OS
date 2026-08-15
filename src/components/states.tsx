@@ -34,7 +34,7 @@ export function EmptyState({
       <div className="max-w-sm space-y-1.5">
         <p className="text-[15px] font-medium text-ink">{title}</p>
         {description && (
-          <p className="text-[13px] leading-relaxed text-ink-muted">{description}</p>
+          <p className="t-small text-ink-muted">{description}</p>
         )}
       </div>
       {action}
@@ -60,7 +60,7 @@ export function ErrorState({
         </div>
         <div className="flex-1 space-y-1.5">
           <p className="text-[15px] font-semibold text-ink">{title}</p>
-          <p className="text-[13px] leading-relaxed text-ink-muted">
+          <p className="t-small text-ink-muted">
             {description ??
               'Luora could not reach the data service. This is usually a temporary Apps Script timeout.'}
           </p>

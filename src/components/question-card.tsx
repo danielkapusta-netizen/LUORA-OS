@@ -7,6 +7,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import type { QuestionAnswer, QuestionTone } from '@/domain/questions'
 import type { Confidence } from '@/domain/types'
 import { cn } from '@/lib/utils'
+import { rise } from '@/lib/motion'
 
 const TONE_STYLE: Record<QuestionTone, { metric: string; rail: string }> = {
   positive: { metric: 'text-positive', rail: 'bg-positive' },
@@ -36,10 +37,7 @@ export function QuestionCard({
   const tone = TONE_STYLE[answer.tone]
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: index * 0.06, ease: [0.16, 1, 0.3, 1] }}
+    <motion.div {...rise(index)}
       className="h-full"
     >
       <Card className="group relative h-full overflow-hidden hover:shadow-lifted">
@@ -51,12 +49,12 @@ export function QuestionCard({
               className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-subtle"
               aria-hidden="true"
             />
-            <h3 className="text-[13px] font-medium leading-snug text-ink-muted">
+            <h3 className="t-small font-medium text-ink-muted">
               {answer.question}
             </h3>
           </div>
 
-          <p className="mt-4 text-[15px] font-semibold leading-snug tracking-[-0.01em] text-ink">
+          <p className="mt-4 t-strong text-ink">
             {answer.headline}
           </p>
 
@@ -64,12 +62,12 @@ export function QuestionCard({
             <span className={cn('tnum text-[24px] font-semibold tracking-[-0.03em]', tone.metric)}>
               {answer.metric}
             </span>
-            <span className="text-[12px] leading-snug text-ink-subtle">
+            <span className="t-caption text-ink-subtle">
               {answer.metricCaption}
             </span>
           </div>
 
-          <p className="mt-3.5 text-[13px] leading-relaxed text-ink-muted">{answer.explanation}</p>
+          <p className="mt-3.5 t-small text-ink-muted">{answer.explanation}</p>
 
           {answer.recommendation && (
             <div className="mt-auto flex items-start gap-2.5 border-t border-hairline pt-4 [margin-top:1.25rem]">
@@ -77,7 +75,7 @@ export function QuestionCard({
                 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-subtle transition-transform duration-200 group-hover:translate-x-0.5"
                 aria-hidden="true"
               />
-              <p className="text-[13px] leading-relaxed text-ink">{answer.recommendation}</p>
+              <p className="t-small text-ink">{answer.recommendation}</p>
             </div>
           )}
 
