@@ -15,6 +15,7 @@ export const JOBS = {
   listingsImport: 'listings-import',
   stockPush: 'stock-push',
   stockReconcile: 'stock-reconcile',
+  stockSyncAll: 'stock-sync-all',
   orderBackfill: 'order-backfill',
   invoiceAuto: 'invoice-auto',
   invoiceCreate: 'invoice-create',
@@ -32,8 +33,10 @@ export interface JobPayloads {
   [JOBS.marketplaceProcessing]: { orderId: string };
   [JOBS.deliveryCheck]: Record<string, never>;
   [JOBS.listingsImport]: { accountId: string };
-  [JOBS.stockPush]: { accountId: string };
+  /** force: compare with the quantity last read from the marketplace, not with our last push. */
+  [JOBS.stockPush]: { accountId: string; force?: boolean };
   [JOBS.stockReconcile]: Record<string, never>;
+  [JOBS.stockSyncAll]: Record<string, never>;
   [JOBS.orderBackfill]: Record<string, never>;
   [JOBS.invoiceAuto]: { orderId: string };
   [JOBS.invoiceCreate]: { invoiceId: string };
@@ -75,6 +78,7 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.listingsImport]: { retries: 1, delaySeconds: 60 },
   [JOBS.stockPush]: { retries: 3, delaySeconds: 60 },
   [JOBS.stockReconcile]: { retries: 0, delaySeconds: 0 },
+  [JOBS.stockSyncAll]: { retries: 0, delaySeconds: 0 },
   [JOBS.orderBackfill]: { retries: 0, delaySeconds: 0 },
   [JOBS.invoiceAuto]: { retries: 2, delaySeconds: 60 },
   // Issuing is not retried automatically: the invoice id is saved first, but a lost response could still issue twice.

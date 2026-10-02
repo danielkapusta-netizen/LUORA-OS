@@ -5,6 +5,7 @@ import {
   orderEvents,
   orderItems,
   orders,
+  productListings,
   products,
   shipments,
   users,
@@ -117,7 +118,7 @@ export async function upsertOrders(
           });
         await tx.batch([
           insertOrder,
-          ...(await itemStatements(tx, id, n)),
+          ...(await itemStatements(tx, account.id, id, n)),
           tx.insert(orderEvents).values({ orderId: id, type: 'sync', message: `Imported from ${account.name}` }),
         ] as unknown as Parameters<Tx['batch']>[0]);
         if (!n.cancelled && !n.fulfilled) stockChanged = (await applyOrderStock(tx, id)) || stockChanged;
@@ -188,13 +189,26 @@ export async function upsertOrders(
   return { created: newOrderIds.length, updated, newOrderIds };
 }
 
-async function itemStatements(tx: Tx, orderId: string, n: NormalizedOrder) {
+async function itemStatements(tx: Tx, accountId: string, orderId: string, n: NormalizedOrder) {
   if (n.items.length === 0) return [];
   const skus = [...new Set(n.items.map((i) => i.sku).filter((s): s is string => Boolean(s)))];
   const known = skus.length
     ? await tx.select({ id: products.id, sku: products.sku, imageUrl: products.imageUrl }).from(products).where(inArray(products.sku, skus))
     : [];
   const bySku = new Map(known.map((p) => [p.sku, p]));
+  // The offer / variant a line was bought from is linked to its product on the Inventory page;
+  // that link wins over the SKU (Allegro offers have none, Empik uses its own).
+  const offerIds = [...new Set(n.items.map((i) => i.externalProductId).filter((s): s is string => Boolean(s)))];
+  const linked = offerIds.length
+    ? await tx
+        .select({ externalId: productListings.externalId, id: products.id, imageUrl: products.imageUrl })
+        .from(productListings)
+        .innerJoin(products, eq(products.id, productListings.productId))
+        .where(and(eq(productListings.accountId, accountId), inArray(productListings.externalId, offerIds)))
+    : [];
+  const byOffer = new Map(linked.map((p) => [p.externalId, p]));
+  const productFor = (i: NormalizedOrder['items'][number]) =>
+    (i.externalProductId ? byOffer.get(i.externalProductId) : undefined) ?? (i.sku ? bySku.get(i.sku) : undefined);
   return insertStatements(
     tx,
     orderItems,
@@ -207,8 +221,8 @@ async function itemStatements(tx: Tx, orderId: string, n: NormalizedOrder) {
       unitPrice: i.unitPrice,
       externalProductId: i.externalProductId ?? null,
       // Allegro and Empik don't always send a photo; fall back to the product's (from Shopify).
-      imageUrl: i.imageUrl ?? (i.sku ? (bySku.get(i.sku)?.imageUrl ?? null) : null),
-      productId: i.sku ? (bySku.get(i.sku)?.id ?? null) : null,
+      imageUrl: i.imageUrl ?? productFor(i)?.imageUrl ?? null,
+      productId: productFor(i)?.id ?? null,
     })),
   );
 }

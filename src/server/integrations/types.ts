@@ -115,6 +115,8 @@ export interface Listing {
   sku: string | null;
   title: string;
   quantity: number | null;
+  /** Barcode (EAN/GTIN), when the marketplace exposes it. */
+  ean?: string | null;
   /** Provider ids needed to update stock later (inventory item id, offer sku, ...). */
   ref: Record<string, string | number | null>;
   imageUrl?: string | null;

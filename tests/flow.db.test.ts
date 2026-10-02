@@ -211,6 +211,89 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect((await m.inventory.runStockPush(account.id)).pushed).toBe(0);
   });
 
+  it('builds the product list from Shopify and matches Allegro / Empik listings to it', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const accountOf = async (type: 'shopify' | 'allegro' | 'empik') =>
+      (await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, type)))[0];
+    const [shopify, allegro, empik] = [await accountOf('shopify'), await accountOf('allegro'), await accountOf('empik')];
+
+    // Every demo product comes from Shopify, and the other platforms are linked to it by SKU.
+    const catalogue = await db.select().from(s.products);
+    expect(catalogue.every((p) => p.shopifyVariantId)).toBe(true);
+    expect(await m.inventory.needsMatching()).toHaveLength(0);
+
+    // A Shopify variant without a SKU still becomes a product.
+    const { MockMarketplaceAdapter } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const original = MockMarketplaceAdapter.prototype.listListings;
+    MockMarketplaceAdapter.prototype.listListings = async function* (this: InstanceType<typeof MockMarketplaceAdapter>) {
+      yield* original.call(this);
+      if (this.marketplace === 'shopify') {
+        yield { externalId: 'gid://shopify/ProductVariant/777', sku: null, ean: '5901234123457', title: 'Luora Night Cream 50 ml - Default Title', quantity: 7, ref: {} };
+      }
+    };
+    try {
+      await m.inventory.importListings(shopify.id);
+    } finally {
+      MockMarketplaceAdapter.prototype.listListings = original;
+    }
+    const [night] = await db.select().from(s.products).where(orm.eq(s.products.shopifyVariantId, 'gid://shopify/ProductVariant/777'));
+    expect(night).toMatchObject({ sku: 'shopify:777', name: 'Luora Night Cream 50 ml', stock: 7, ean: '5901234123457' });
+
+    // An Empik offer from before (its own SKU and product, with a sale) is matched by name and folded in.
+    const [legacy] = await db.insert(s.products).values({ sku: 'S1474060', name: 'Old Empik product', stock: 3 }).returning();
+    await db.insert(s.stockMovements).values({ productId: legacy.id, delta: -1, reason: 'order' });
+    const [empikListing] = await db
+      .insert(s.productListings)
+      .values({ accountId: empik.id, externalId: '9001', sku: 'S1474060', title: 'Krem do twarzy Luora Night Cream na noc 50ml', productId: legacy.id, lastSeenQty: 4 })
+      .returning();
+    // An Allegro offer (no SKU) with an order line bought from it.
+    const [allegroListing] = await db
+      .insert(s.productListings)
+      .values({ accountId: allegro.id, externalId: '18800000001', title: 'Luora Night Cream 50 ml – nawilżający krem na noc', lastSeenQty: 2 })
+      .returning();
+    const [allegroOrder] = await db.select().from(s.orders).where(orm.eq(s.orders.accountId, allegro.id)).limit(1);
+    const [line] = await db
+      .insert(s.orderItems)
+      .values({ orderId: allegroOrder.id, externalLineId: 'night-1', name: 'Luora Night Cream', quantity: 1, unitPrice: '50.00', externalProductId: '18800000001' })
+      .returning();
+
+    const suggestions = await m.inventory.matchingSuggestions();
+    expect(suggestions.map((x) => [x.listing.id, x.suggestions[0]?.productId, x.clear])).toEqual(
+      expect.arrayContaining([
+        [empikListing.id, night.id, true],
+        [allegroListing.id, night.id, true],
+      ]),
+    );
+    expect(await m.inventory.confirmClearSuggestions()).toBe(2);
+    expect(await m.inventory.needsMatching()).toHaveLength(0);
+    expect(await db.select().from(s.products).where(orm.eq(s.products.id, legacy.id))).toHaveLength(0);
+    const moved = await db.select().from(s.stockMovements).where(orm.eq(s.stockMovements.productId, night.id));
+    expect(moved.map((x) => x.reason).sort()).toEqual(['import', 'order']);
+    const [linkedLine] = await db.select().from(s.orderItems).where(orm.eq(s.orderItems.id, line.id));
+    expect(linkedLine.productId).toBe(night.id);
+    expect((await db.select().from(s.products).where(orm.eq(s.products.id, night.id)))[0].stock).toBe(7); // Shopify's stock is kept
+
+    // "Sync all": re-reads every platform, then pushes wherever a platform shows another number.
+    queue.length = 0;
+    await m.inventory.syncAllStock();
+    expect(queue.filter((j) => j.name === 'stock-push').map((j) => j.data)).toEqual(
+      expect.arrayContaining([{ accountId: allegro.id, force: true }, { accountId: empik.id, force: true }]),
+    );
+    const pushed = await m.inventory.runStockPush(empik.id, { force: true });
+    expect(pushed).toMatchObject({ dryRun: true });
+    expect(pushed.pushed).toBeGreaterThan(0);
+    queue.length = 0;
+
+    // Unlinking puts a listing back under "Needs matching".
+    await m.inventory.linkListing(allegroListing.id, null);
+    expect((await m.inventory.needsMatching()).map((l) => l.id)).toEqual([allegroListing.id]);
+    await m.inventory.linkListing(allegroListing.id, night.id);
+    queue.length = 0;
+    // Not a demo product, so the demo clean-up below would leave it.
+    await db.delete(s.products).where(orm.eq(s.products.id, night.id));
+  });
+
   it('reports analytics over the stored orders', async () => {
     const data = await m.analytics.analytics({ from: new Date(Date.now() - 30 * 86_400_000), to: new Date(Date.now() + 60_000) });
     expect(data.kpis.orders).toBeGreaterThan(30);

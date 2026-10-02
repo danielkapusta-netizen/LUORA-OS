@@ -329,6 +329,10 @@ export const products = sqliteTable('products', {
   stock: integer('stock').notNull().default(0),
   /** Photo pulled from a marketplace listing (Shopify first), used to fill in order items with no photo of their own. */
   imageUrl: text('image_url'),
+  /** Set for products that come from Shopify (the product list's source of truth). */
+  shopifyVariantId: text('shopify_variant_id').unique(),
+  /** Barcode from Shopify, used to match Empik offers automatically. */
+  ean: text('ean'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -344,6 +348,7 @@ export const productListings = sqliteTable(
     externalId: text('external_id').notNull(),
     sku: text('sku'),
     title: text('title').notNull(),
+    ean: text('ean'),
     ref: json<Record<string, string | number | null>>('ref').notNull().$defaultFn(() => ({})),
     /** Quantity the marketplace reported at the last import. */
     lastSeenQty: integer('last_seen_qty'),

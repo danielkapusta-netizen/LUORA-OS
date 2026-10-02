@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { getDb, insertMany, insertStatements, type Tx } from '../db/client';
 import {
   marketplaceAccounts,
@@ -9,10 +9,12 @@ import {
   stockMovements,
   stockSyncLog,
 } from '../db/schema';
-import type { StockUpdate } from '../integrations/types';
+import { cleanShopifyTitle, hasRealSku, placeholderSku } from '../../lib/sku';
+import type { Listing, StockUpdate } from '../integrations/types';
 import { enqueue, JOBS } from '../jobs/queue';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
+import { createMatcher, isClearSuggestion } from './matching';
 
 /** Seconds to wait so a burst of orders becomes one stock push per account. */
 const PUSH_DEBOUNCE_SECONDS = 30;
@@ -96,83 +98,214 @@ export async function scheduleStockPush(): Promise<void> {
 }
 
 /**
- * Reads every listing from the marketplace and links it to a product by SKU.
- * A SKU seen for the first time becomes a product whose stock starts at the listing's quantity.
+ * Reads every listing from the marketplace.
+ * - Shopify is the product list: each variant is a product (name, SKU, barcode and photo follow
+ *   Shopify). A variant new to Luora starts with its Shopify quantity; known products keep their stock.
+ * - Allegro / Empik listings never create products. They are linked to a Shopify product with the
+ *   same SKU or barcode, or wait on the Inventory page to be matched by name.
  */
 export async function importListings(accountId: string): Promise<{ listings: number; created: number; unmatched: number }> {
   const db = getDb();
   const account = await loadMarketplaceAccount(accountId);
   const adapter = getMarketplaceAdapter(account);
+  const isShopify = account.type === 'shopify';
   let count = 0;
   let created = 0;
-  let unmatched = 0;
 
   for await (const listing of adapter.listListings()) {
     count++;
-    {
-      const tx = db;
-      let productId: string | null = null;
-      if (listing.sku) {
-        const [product] = await tx.select({ id: products.id, imageUrl: products.imageUrl }).from(products).where(eq(products.sku, listing.sku));
-        if (product) {
-          productId = product.id;
-          // Photos come from whichever marketplace has them first; don't overwrite one already stored.
-          if (listing.imageUrl && !product.imageUrl) {
-            await tx.update(products).set({ imageUrl: listing.imageUrl }).where(eq(products.id, product.id));
-          }
-        } else {
-          const [inserted] = await tx
-            .insert(products)
-            .values({ sku: listing.sku, name: listing.title, stock: Math.max(0, listing.quantity ?? 0), imageUrl: listing.imageUrl ?? null })
-            .returning({ id: products.id });
-          productId = inserted.id;
-          created++;
-          await tx.insert(stockMovements).values({ productId, delta: Math.max(0, listing.quantity ?? 0), reason: 'import' });
-        }
-      } else unmatched++;
-
-      await tx
-        .insert(productListings)
-        .values({
-          accountId,
-          externalId: listing.externalId,
+    let productId: string | null = null;
+    if (isShopify) {
+      const result = await upsertShopifyProduct(listing);
+      productId = result.productId;
+      if (result.created) created++;
+    }
+    await db
+      .insert(productListings)
+      .values({
+        accountId,
+        externalId: listing.externalId,
+        sku: listing.sku,
+        title: isShopify ? cleanShopifyTitle(listing.title) : listing.title,
+        ean: listing.ean ?? null,
+        ref: listing.ref,
+        productId,
+        lastSeenQty: listing.quantity,
+        lastSeenAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [productListings.accountId, productListings.externalId],
+        set: {
           sku: listing.sku,
-          title: listing.title,
+          title: isShopify ? cleanShopifyTitle(listing.title) : listing.title,
+          ean: listing.ean ?? null,
           ref: listing.ref,
-          productId,
           lastSeenQty: listing.quantity,
           lastSeenAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [productListings.accountId, productListings.externalId],
-          set: {
-            sku: listing.sku,
-            title: listing.title,
-            ref: listing.ref,
-            lastSeenQty: listing.quantity,
-            lastSeenAt: new Date(),
-            // Keep a manual link; only fill in a missing one.
-            productId: sql`coalesce(${productListings.productId}, ${productId})`,
-          },
-        });
-    }
+          // Shopify listings always belong to their own product; other links are kept as made.
+          productId: isShopify ? productId : sql`${productListings.productId}`,
+        },
+      });
   }
 
-  // Link order lines that arrived before their product existed.
+  await autoLinkListings();
+  // Link order lines that arrived before their product (or listing link) existed.
+  await db.run(sql`
+    update order_items set product_id = (
+      select l.product_id from product_listings l join orders o on o.account_id = l.account_id
+      where o.id = order_items.order_id and l.external_id = order_items.external_product_id)
+    where product_id is null and external_product_id is not null and exists (
+      select 1 from product_listings l join orders o on o.account_id = l.account_id
+      where o.id = order_items.order_id and l.external_id = order_items.external_product_id and l.product_id is not null)`);
   await db.run(sql`
     update order_items set product_id = (select p.id from products p where p.sku = order_items.sku)
     where product_id is null and sku is not null and exists (select 1 from products p where p.sku = order_items.sku)`);
   // Fill in photos for order lines whose own marketplace (e.g. Allegro, Empik) has none.
   await db.run(sql`
-    update order_items set image_url = (select p.image_url from products p where p.sku = order_items.sku)
-    where image_url is null and sku is not null
-      and exists (select 1 from products p where p.sku = order_items.sku and p.image_url is not null)`);
+    update order_items set image_url = (select p.image_url from products p where p.id = order_items.product_id)
+    where image_url is null and product_id is not null
+      and exists (select 1 from products p where p.id = order_items.product_id and p.image_url is not null)`);
+  const [{ unmatched }] = await db
+    .select({ unmatched: sql<number>`count(*)` })
+    .from(productListings)
+    .leftJoin(products, eq(products.id, productListings.productId))
+    .where(and(eq(productListings.accountId, accountId), isNull(products.shopifyVariantId)));
   return { listings: count, created, unmatched };
 }
 
+async function upsertShopifyProduct(listing: Listing): Promise<{ productId: string; created: boolean }> {
+  const db = getDb();
+  const name = cleanShopifyTitle(listing.title);
+  const [byVariant] = await db.select().from(products).where(eq(products.shopifyVariantId, listing.externalId));
+  const [bySku] = byVariant || !listing.sku ? [] : await db.select().from(products).where(eq(products.sku, listing.sku));
+  const existing = byVariant ?? bySku;
+  if (existing) {
+    const sku = listing.sku && listing.sku !== existing.sku ? listing.sku : existing.sku;
+    const update = {
+      name,
+      shopifyVariantId: listing.externalId,
+      ean: listing.ean ?? existing.ean,
+      imageUrl: listing.imageUrl ?? existing.imageUrl,
+    };
+    try {
+      await db.update(products).set({ ...update, sku }).where(eq(products.id, existing.id));
+    } catch {
+      // The new SKU belongs to another product already; keep the old one rather than fail the import.
+      await db.update(products).set(update).where(eq(products.id, existing.id));
+    }
+    return { productId: existing.id, created: false };
+  }
+  const stock = Math.max(0, listing.quantity ?? 0);
+  const [inserted] = await db
+    .insert(products)
+    .values({
+      sku: listing.sku || placeholderSku(listing.externalId),
+      name,
+      stock,
+      imageUrl: listing.imageUrl ?? null,
+      ean: listing.ean ?? null,
+      shopifyVariantId: listing.externalId,
+    })
+    .returning({ id: products.id });
+  await db.insert(stockMovements).values({ productId: inserted.id, delta: stock, reason: 'import' });
+  return { productId: inserted.id, created: true };
+}
+
+/** Links Allegro / Empik listings that aren't on a Shopify product yet to the one with the same SKU or barcode. */
+async function autoLinkListings(): Promise<void> {
+  const db = getDb();
+  const shopifyProducts = await db
+    .select({ id: products.id, sku: products.sku, ean: products.ean })
+    .from(products)
+    .where(isNotNull(products.shopifyVariantId));
+  const bySku = new Map(shopifyProducts.filter((p) => hasRealSku(p.sku)).map((p) => [p.sku, p.id]));
+  const byEan = new Map(shopifyProducts.filter((p) => p.ean).map((p) => [p.ean!, p.id]));
+  for (const l of await needsMatching()) {
+    const productId = (l.sku && bySku.get(l.sku)) || (l.ean && byEan.get(l.ean)) || null;
+    if (productId) await linkListing(l.id, productId);
+  }
+}
+
+/**
+ * Points a listing at a product (or unlinks it with null). When the listing leaves an older
+ * product that came from Allegro / Empik and nothing else uses it, that product is folded into
+ * the new one: its order lines and stock history move over, and it is deleted. The Shopify
+ * product keeps its own stock.
+ */
 export async function linkListing(listingId: string, productId: string | null): Promise<void> {
-  await getDb().update(productListings).set({ productId }).where(eq(productListings.id, listingId));
+  const db = getDb();
+  const [listing] = await db.select().from(productListings).where(eq(productListings.id, listingId));
+  if (!listing) throw new Error('Listing not found');
+  await db.update(productListings).set({ productId }).where(eq(productListings.id, listingId));
+  if (productId) {
+    // Order lines bought from this offer now count against the product.
+    await db.run(sql`
+      update order_items set product_id = ${productId}
+      where external_product_id = ${listing.externalId}
+        and order_id in (select id from orders where account_id = ${listing.accountId})
+        and (product_id is null or product_id = ${listing.productId})`);
+    const old = listing.productId;
+    if (old && old !== productId) {
+      const [legacy] = await db.select({ shopifyVariantId: products.shopifyVariantId }).from(products).where(eq(products.id, old));
+      const [{ others }] = await db.select({ others: sql<number>`count(*)` }).from(productListings).where(eq(productListings.productId, old));
+      if (legacy && !legacy.shopifyVariantId && others === 0) {
+        await db.batch([
+          db.update(orderItems).set({ productId }).where(eq(orderItems.productId, old)),
+          db.update(stockMovements).set({ productId }).where(eq(stockMovements.productId, old)),
+          db.delete(products).where(eq(products.id, old)),
+        ]);
+      }
+    }
+  }
   await scheduleStockPush();
+}
+
+/** Allegro / Empik listings that are not linked to a Shopify product. */
+export async function needsMatching() {
+  return getDb()
+    .select({
+      id: productListings.id,
+      accountId: productListings.accountId,
+      accountName: marketplaceAccounts.name,
+      marketplace: marketplaceAccounts.type,
+      externalId: productListings.externalId,
+      sku: productListings.sku,
+      ean: productListings.ean,
+      title: productListings.title,
+      lastSeenQty: productListings.lastSeenQty,
+      lastSeenAt: productListings.lastSeenAt,
+      lastPushedQty: productListings.lastPushedQty,
+      lastPushedAt: productListings.lastPushedAt,
+    })
+    .from(productListings)
+    .innerJoin(marketplaceAccounts, eq(marketplaceAccounts.id, productListings.accountId))
+    .leftJoin(products, eq(products.id, productListings.productId))
+    .where(and(ne(marketplaceAccounts.type, 'shopify'), isNull(products.shopifyVariantId)))
+    .orderBy(asc(marketplaceAccounts.name), asc(productListings.title));
+}
+
+/** Listings waiting to be matched, each with up to three Shopify products suggested by name. */
+export async function matchingSuggestions() {
+  const [pending, catalogue] = await Promise.all([
+    needsMatching(),
+    getDb().select({ id: products.id, name: products.name }).from(products).where(isNotNull(products.shopifyVariantId)),
+  ]);
+  const suggest = createMatcher(catalogue);
+  return pending.map((l) => {
+    const suggestions = suggest(l.title);
+    return { listing: l, suggestions, clear: isClearSuggestion(suggestions) };
+  });
+}
+
+/** Links every waiting listing whose best suggestion is clear. Returns how many were linked. */
+export async function confirmClearSuggestions(): Promise<number> {
+  let linked = 0;
+  for (const { listing, suggestions, clear } of await matchingSuggestions()) {
+    if (!clear) continue;
+    await linkListing(listing.id, suggestions[0].productId);
+    linked++;
+  }
+  return linked;
 }
 
 /** Listings whose marketplace quantity differs from the master stock. */
@@ -184,8 +317,11 @@ export function pendingUpdatesFor(
     .map((r) => ({ listingId: r.listingId, externalId: r.externalId, sku: r.sku, ref: r.ref, quantity: Math.max(0, r.stock) }));
 }
 
-/** Sends master stock to one marketplace account (or only logs it in dry-run mode). */
-export async function runStockPush(accountId: string): Promise<{ pushed: number; dryRun: boolean }> {
+/**
+ * Sends master stock to one marketplace account (or only logs it in dry-run mode). Normally only
+ * listings whose last push differs; with force, every listing whose marketplace quantity differs.
+ */
+export async function runStockPush(accountId: string, opts: { force?: boolean } = {}): Promise<{ pushed: number; dryRun: boolean }> {
   const db = getDb();
   const account = await loadMarketplaceAccount(accountId);
   if (!account.stockSyncEnabled || !account.enabled) return { pushed: 0, dryRun: account.stockDryRun };
@@ -198,12 +334,18 @@ export async function runStockPush(accountId: string): Promise<{ pushed: number;
       ref: productListings.ref,
       stock: products.stock,
       lastPushedQty: productListings.lastPushedQty,
+      lastPushedAt: productListings.lastPushedAt,
+      lastSeenQty: productListings.lastSeenQty,
+      lastSeenAt: productListings.lastSeenAt,
     })
     .from(productListings)
     .innerJoin(products, eq(products.id, productListings.productId))
-    .where(eq(productListings.accountId, accountId))
+    // Only listings matched to a Shopify product; the rest wait under "Needs matching".
+    .where(and(eq(productListings.accountId, accountId), isNotNull(products.shopifyVariantId)))
     .orderBy(asc(productListings.id));
-  const updates = pendingUpdatesFor(rows);
+  const updates = opts.force
+    ? pendingUpdatesFor(rows.map((r) => ({ ...r, lastPushedQty: marketplaceQuantity(r) })))
+    : pendingUpdatesFor(rows);
   if (updates.length === 0) return { pushed: 0, dryRun: account.stockDryRun };
 
   if (account.stockDryRun) {
@@ -251,6 +393,28 @@ export async function runStockPush(accountId: string): Promise<{ pushed: number;
   return { pushed: updates.length, dryRun: false };
 }
 
+/**
+ * "Sync all stocks": re-reads every marketplace (Shopify first, as it defines the products), then
+ * sends the master stock wherever a marketplace shows a different number. Accounts in dry run only log.
+ */
+export async function syncAllStock(): Promise<void> {
+  const accounts = await getDb()
+    .select()
+    .from(marketplaceAccounts)
+    .where(eq(marketplaceAccounts.enabled, true))
+    .orderBy(sql`${marketplaceAccounts.type} = 'shopify' desc`);
+  for (const account of accounts) {
+    try {
+      await importListings(account.id);
+    } catch (err) {
+      console.error(`[stock sync] import ${account.name}:`, err);
+    }
+  }
+  for (const account of accounts.filter((a) => a.stockSyncEnabled)) {
+    await enqueue(JOBS.stockPush, { accountId: account.id, force: true });
+  }
+}
+
 /** Nightly: re-reads listing quantities so the inventory page can show drift. */
 export async function runReconcile(): Promise<void> {
   const accounts = await getDb()
@@ -277,14 +441,17 @@ export async function stockCoversOrder(db: Tx, orderId: string): Promise<boolean
   return rows.every((r) => r.stock >= 0);
 }
 
+/** Shopify products (the product list) with every listing linked to them. */
 export async function listProductsWithListings() {
   const db = getDb();
-  const productRows = await db.select().from(products).orderBy(asc(products.sku));
+  const productRows = await db.select().from(products).where(isNotNull(products.shopifyVariantId)).orderBy(asc(products.name));
   const listingRows = await db
     .select({
       id: productListings.id,
       productId: productListings.productId,
       accountId: productListings.accountId,
+      accountName: marketplaceAccounts.name,
+      marketplace: marketplaceAccounts.type,
       externalId: productListings.externalId,
       sku: productListings.sku,
       title: productListings.title,
@@ -295,7 +462,9 @@ export async function listProductsWithListings() {
       lastPushError: productListings.lastPushError,
     })
     .from(productListings)
-    .orderBy(asc(productListings.title));
+    .innerJoin(marketplaceAccounts, eq(marketplaceAccounts.id, productListings.accountId))
+    .where(isNotNull(productListings.productId))
+    .orderBy(asc(marketplaceAccounts.type), asc(productListings.title));
   return { products: productRows, listings: listingRows };
 }
 
@@ -303,14 +472,6 @@ export async function listProductsWithListings() {
 export function marketplaceQuantity(l: { lastSeenQty: number | null; lastSeenAt: Date | null; lastPushedQty: number | null; lastPushedAt: Date | null }): number | null {
   if (l.lastPushedAt && l.lastPushedQty !== null && (!l.lastSeenAt || l.lastPushedAt >= l.lastSeenAt)) return l.lastPushedQty;
   return l.lastSeenQty;
-}
-
-export async function unmatchedListings() {
-  return getDb()
-    .select()
-    .from(productListings)
-    .where(or(isNull(productListings.productId), isNull(productListings.sku)))
-    .orderBy(asc(productListings.title));
 }
 
 export async function recentStockLog(limit = 50) {

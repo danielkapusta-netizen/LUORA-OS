@@ -36,6 +36,13 @@
       "when": 1790932783358,
       "tag": "0004_accounting",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790939385512,
+      "tag": "0005_inventory_shopify",
+      "breakpoints": true
     }
   ]
 }

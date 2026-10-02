@@ -238,7 +238,14 @@ export class EmpikAdapter implements MarketplaceAdapter {
   async *listListings(): AsyncIterable<Listing> {
     for (let offset = 0; ; offset += PAGE) {
       const page = await this.client.call<{
-        offers: { offer_id: number; shop_sku: string; product_title: string; quantity: number; active?: boolean }[];
+        offers: {
+          offer_id: number;
+          shop_sku: string;
+          product_title: string;
+          quantity: number;
+          active?: boolean;
+          product_references?: { reference: string; reference_type: string }[];
+        }[];
         total_count: number;
       }>('GET', '/offers', { query: { max: PAGE, offset } });
       for (const offer of page.offers) {
@@ -247,6 +254,7 @@ export class EmpikAdapter implements MarketplaceAdapter {
           sku: offer.shop_sku || null,
           title: offer.product_title,
           quantity: offer.quantity,
+          ean: offer.product_references?.find((r) => /^(EAN|GTIN|EAN13)$/i.test(r.reference_type))?.reference ?? null,
           ref: { shopSku: offer.shop_sku },
         };
       }

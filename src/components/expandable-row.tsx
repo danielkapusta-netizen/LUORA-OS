@@ -5,7 +5,19 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /** A table row with a +/− button in its first cell that shows `details` in a full-width row below. */
-export function ExpandableRow({ children, details, colSpan, className }: { children: React.ReactNode; details: React.ReactNode; colSpan: number; className?: string }) {
+export function ExpandableRow({
+  children,
+  details,
+  colSpan,
+  className,
+  label = 'order details',
+}: {
+  children: React.ReactNode;
+  details: React.ReactNode;
+  colSpan: number;
+  className?: string;
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
   const Icon = open ? Minus : Plus;
   return (
@@ -16,7 +28,7 @@ export function ExpandableRow({ children, details, colSpan, className }: { child
             type="button"
             onClick={() => setOpen(!open)}
             aria-expanded={open}
-            aria-label={open ? 'Hide order details' : 'Show order details'}
+            aria-label={open ? `Hide ${label}` : `Show ${label}`}
             className="flex size-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
           >
             <Icon className="size-3.5" />

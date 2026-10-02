@@ -3,10 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireUser } from '@/server/auth';
-import { getDb } from '@/server/db/client';
-import { products, stockMovements } from '@/server/db/schema';
 import { enqueue, JOBS } from '@/server/jobs/queue';
-import { adjustStock, linkListing } from '@/server/services/inventory';
+import { adjustStock, confirmClearSuggestions, linkListing } from '@/server/services/inventory';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 
 export async function adjustStockAction(productId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -21,31 +19,32 @@ export async function adjustStockAction(productId: string, _prev: ActionResult, 
   });
 }
 
-export async function createProductAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
-  const user = await requireUser();
-  const sku = String(formData.get('sku') ?? '').trim();
-  const name = String(formData.get('name') ?? '').trim();
-  const stock = Number(formData.get('stock') ?? 0);
-  return attempt(async () => {
-    if (!sku || !name) throw new Error('SKU and name are required');
-    if (!Number.isInteger(stock) || stock < 0) throw new Error('Stock must be a whole number ≥ 0');
-    const db = getDb();
-    const id = crypto.randomUUID();
-    await db.batch([
-      db.insert(products).values({ id, sku, name, stock }),
-      ...(stock ? [db.insert(stockMovements).values({ productId: id, delta: stock, reason: 'manual', userId: user.id, note: 'Created' })] : []),
-    ] as unknown as Parameters<typeof db.batch>[0]);
-    revalidatePath('/inventory');
-    return `Product ${sku} created`;
-  });
-}
-
 export async function linkListingAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   await requireUser();
   return attempt(async () => {
-    await linkListing(listingId, String(formData.get('productId') ?? '') || null);
+    const productId = String(formData.get('productId') ?? '');
+    if (!productId) throw new Error('Choose the Shopify product first');
+    await linkListing(listingId, productId);
     revalidatePath('/inventory');
-    return 'Listing linked';
+    return 'Linked';
+  });
+}
+
+export async function unlinkListingAction(listingId: string): Promise<ActionResult> {
+  await requireUser();
+  return attempt(async () => {
+    await linkListing(listingId, null);
+    revalidatePath('/inventory');
+    return 'Unlinked; it is back under “Needs matching”';
+  });
+}
+
+export async function confirmClearSuggestionsAction(): Promise<ActionResult> {
+  await requireUser();
+  return attempt(async () => {
+    const linked = await confirmClearSuggestions();
+    revalidatePath('/inventory');
+    return `Linked ${linked} listing(s)`;
   });
 }
 
@@ -58,11 +57,20 @@ export async function importListingsAction(): Promise<ActionResult> {
   });
 }
 
-export async function pushStockNowAction(): Promise<ActionResult> {
+export async function syncAllStockAction(): Promise<ActionResult> {
   await requireUser();
   return attempt(async () => {
-    const accounts = (await listMarketplaceAccounts()).filter((a) => a.enabled && a.stockSyncEnabled);
-    for (const a of accounts) await enqueue(JOBS.stockPush, { accountId: a.id });
-    return accounts.length ? `Stock push queued for ${accounts.length} account(s)` : 'Stock sync is off for every account (see Settings → Integrations)';
+    const accounts = (await listMarketplaceAccounts()).filter((a) => a.enabled);
+    await enqueue(JOBS.stockSyncAll, {});
+    const off = accounts.filter((a) => !a.stockSyncEnabled).map((a) => a.name);
+    const dry = accounts.filter((a) => a.stockSyncEnabled && a.stockDryRun).map((a) => a.name);
+    const live = accounts.filter((a) => a.stockSyncEnabled && !a.stockDryRun).map((a) => a.name);
+    return [
+      live.length ? `Re-reading every platform and sending stock to ${live.join(', ')}.` : 'Re-reading every platform, but nothing is sent:',
+      dry.length ? `${dry.join(', ')} ${dry.length > 1 ? 'are' : 'is'} in dry run (only logged); switch it off in Settings → Integrations to really send.` : '',
+      off.length ? `Stock sync is off for ${off.join(', ')}.` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
   });
 }

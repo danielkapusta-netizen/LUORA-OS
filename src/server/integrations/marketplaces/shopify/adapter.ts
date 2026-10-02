@@ -48,7 +48,7 @@ const VARIANTS_QUERY = `query Variants($first: Int!, $after: String) {
   productVariants(first: $first, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id sku displayName inventoryQuantity inventoryItem { id }
+      id sku barcode displayName inventoryQuantity inventoryItem { id }
       image { url(transform: { maxWidth: 240 }) }
       product { featuredImage { url(transform: { maxWidth: 240 }) } }
     }
@@ -152,6 +152,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           nodes: {
             id: string;
             sku: string | null;
+            barcode?: string | null;
             displayName: string;
             inventoryQuantity: number | null;
             inventoryItem: { id: string };
@@ -166,6 +167,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           sku: v.sku || null,
           title: v.displayName,
           quantity: v.inventoryQuantity,
+          ean: v.barcode?.trim() || null,
           ref: { inventoryItemId: v.inventoryItem.id },
           imageUrl: v.image?.url ?? v.product?.featuredImage?.url ?? null,
         };
