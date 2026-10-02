@@ -281,6 +281,15 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(linkedLine.productId).toBe(night.id);
     expect((await db.select().from(s.products).where(orm.eq(s.products.id, night.id)))[0].stock).toBe(7); // Shopify's stock is kept
 
+    // An Allegro offer with the same EAN as the Empik one follows when the Empik offer gives the product its barcode.
+    await db.update(s.productListings).set({ ean: '5909990000017' }).where(orm.eq(s.productListings.id, empikListing.id));
+    await db.update(s.productListings).set({ ean: '5909990000017' }).where(orm.eq(s.productListings.id, allegroListing.id));
+    await m.inventory.linkListing(allegroListing.id, null);
+    await m.inventory.linkListing(empikListing.id, null);
+    await db.update(s.products).set({ ean: null }).where(orm.eq(s.products.id, night.id));
+    await m.inventory.linkListing(empikListing.id, night.id);
+    expect((await db.select().from(s.products).where(orm.eq(s.products.id, night.id)))[0].ean).toBe('5909990000017');
+    expect((await db.select().from(s.productListings).where(orm.eq(s.productListings.id, allegroListing.id)))[0].productId).toBe(night.id);
     // "Sync all": re-reads every platform, then pushes wherever a platform shows another number.
     queue.length = 0;
     await m.inventory.syncAllStock();

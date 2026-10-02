@@ -185,17 +185,26 @@ export class AllegroAdapter implements MarketplaceAdapter {
       params?.find((p) => p.id === EAN_PARAMETER_ID || /\b(ean|gtin)\b/i.test(p.name ?? ''))?.values?.[0] ?? null;
     const out = new Map<string, string | null>();
     for (const offerId of offerIds) {
-      const offer = await this.client.call<{ productSet?: { product?: { id?: string; parameters?: Parameter[] } }[] }>(
-        'GET',
-        `/sale/product-offers/${offerId}`,
-      );
-      const product = offer.productSet?.[0]?.product;
-      let ean = eanOf(product?.parameters);
-      if (!ean && product?.id) {
-        const full = await this.client.call<{ parameters?: Parameter[] }>('GET', `/sale/products/${product.id}`);
-        ean = eanOf(full.parameters);
+      // One offer failing (e.g. no access to its catalogue product) must not stop the others.
+      try {
+        const offer = await this.client.call<{ productSet?: { product?: { id?: string; parameters?: Parameter[] } }[] }>(
+          'GET',
+          `/sale/product-offers/${offerId}`,
+        );
+        const product = offer.productSet?.[0]?.product;
+        let ean = eanOf(product?.parameters);
+        if (!ean && product?.id) {
+          try {
+            const full = await this.client.call<{ parameters?: Parameter[] }>('GET', `/sale/products/${product.id}`);
+            ean = eanOf(full.parameters);
+          } catch (err) {
+            console.error(`[allegro] catalogue product ${product.id} of offer ${offerId}: ${err instanceof Error ? err.message : err}`);
+          }
+        }
+        out.set(offerId, ean);
+      } catch (err) {
+        console.error(`[allegro] barcode of offer ${offerId}: ${err instanceof Error ? err.message : err}`);
       }
-      out.set(offerId, ean);
     }
     return out;
   }

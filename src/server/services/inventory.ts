@@ -268,6 +268,19 @@ export async function linkListing(listingId: string, productId: string | null): 
   if (!listing) throw new Error('Listing not found');
   await db.update(productListings).set({ productId }).where(eq(productListings.id, listingId));
   if (productId) {
+    // A Shopify product without a barcode takes the one from the offer it was just matched to,
+    // so other offers with that EAN (Allegro) match it too.
+    if (listing.ean) {
+      const filled = await db
+        .update(products)
+        .set({ ean: listing.ean })
+        .where(and(eq(products.id, productId), isNull(products.ean)))
+        .returning({ id: products.id });
+      if (filled.length) {
+        const sameEan = (await needsMatching()).filter((l) => l.ean === listing.ean && l.id !== listingId);
+        for (const l of sameEan) await linkListing(l.id, productId);
+      }
+    }
     // Order lines bought from this offer now count against the product.
     await db.run(sql`
       update order_items set product_id = ${productId}
