@@ -9,7 +9,7 @@ import {
   stockMovements,
   stockSyncLog,
 } from '../db/schema';
-import { cleanShopifyTitle, hasRealSku, placeholderSku } from '../../lib/sku';
+import { cleanShopifyTitle, hasRealSku, normalizeEan, placeholderSku } from '../../lib/sku';
 import type { Listing, StockUpdate } from '../integrations/types';
 import { enqueue, JOBS } from '../jobs/queue';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
@@ -127,7 +127,7 @@ export async function importListings(accountId: string): Promise<{ listings: num
         externalId: listing.externalId,
         sku: listing.sku,
         title: isShopify ? cleanShopifyTitle(listing.title) : listing.title,
-        ean: listing.ean ?? null,
+        ean: normalizeEan(listing.ean),
         ref: listing.ref,
         productId,
         lastSeenQty: listing.quantity,
@@ -138,7 +138,8 @@ export async function importListings(accountId: string): Promise<{ listings: num
         set: {
           sku: listing.sku,
           title: isShopify ? cleanShopifyTitle(listing.title) : listing.title,
-          ean: listing.ean ?? null,
+          // Allegro's list has no barcode; keep the one read from the offer earlier.
+          ean: sql`coalesce(${normalizeEan(listing.ean)}, ${productListings.ean})`,
           ref: listing.ref,
           lastSeenQty: listing.quantity,
           lastSeenAt: new Date(),
@@ -148,6 +149,7 @@ export async function importListings(accountId: string): Promise<{ listings: num
       });
   }
 
+  if (adapter.listingEans) await readMissingEans(accountId, adapter.listingEans.bind(adapter));
   await autoLinkListings();
   // Link order lines that arrived before their product (or listing link) existed.
   await db.run(sql`
@@ -184,7 +186,7 @@ async function upsertShopifyProduct(listing: Listing): Promise<{ productId: stri
     const update = {
       name,
       shopifyVariantId: listing.externalId,
-      ean: listing.ean ?? existing.ean,
+      ean: normalizeEan(listing.ean) ?? existing.ean,
       imageUrl: listing.imageUrl ?? existing.imageUrl,
     };
     try {
@@ -203,12 +205,40 @@ async function upsertShopifyProduct(listing: Listing): Promise<{ productId: stri
       name,
       stock,
       imageUrl: listing.imageUrl ?? null,
-      ean: listing.ean ?? null,
+      ean: normalizeEan(listing.ean),
       shopifyVariantId: listing.externalId,
     })
     .returning({ id: products.id });
   await db.insert(stockMovements).values({ productId: inserted.id, delta: stock, reason: 'import' });
   return { productId: inserted.id, created: true };
+}
+
+/** Offers asked per import; the rest follow on the next import. */
+const EAN_LOOKUPS_PER_IMPORT = 100;
+
+/**
+ * Fills in barcodes the listing call doesn't return (Allegro). An offer without one is stored as
+ * '' so it isn't asked again.
+ */
+async function readMissingEans(accountId: string, lookup: (ids: string[]) => Promise<Map<string, string | null>>): Promise<void> {
+  const db = getDb();
+  const missing = await db
+    .select({ id: productListings.id, externalId: productListings.externalId })
+    .from(productListings)
+    .where(and(eq(productListings.accountId, accountId), isNull(productListings.ean)))
+    .limit(EAN_LOOKUPS_PER_IMPORT);
+  if (missing.length === 0) return;
+  let found: Map<string, string | null>;
+  try {
+    found = await lookup(missing.map((l) => l.externalId));
+  } catch (err) {
+    console.error(`[import] reading barcodes for ${accountId}:`, err);
+    return;
+  }
+  for (const l of missing) {
+    if (!found.has(l.externalId)) continue;
+    await db.update(productListings).set({ ean: normalizeEan(found.get(l.externalId)) ?? '' }).where(eq(productListings.id, l.id));
+  }
 }
 
 /** Links Allegro / Empik listings that aren't on a Shopify product yet to the one with the same SKU or barcode. */

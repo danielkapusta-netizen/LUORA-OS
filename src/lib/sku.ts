@@ -14,3 +14,13 @@ export function hasRealSku(sku: string): boolean {
 export function cleanShopifyTitle(title: string): string {
   return title.replace(/ - Default Title$/, '');
 }
+
+/**
+ * Barcodes compared across platforms: digits only, and a 14-digit GTIN with a leading 0 is the
+ * same product as its 13-digit EAN. Returns null for anything that isn't a barcode.
+ */
+export function normalizeEan(value: string | null | undefined): string | null {
+  const digits = (value ?? '').replace(/\D/g, '');
+  const ean = digits.length === 14 && digits.startsWith('0') ? digits.slice(1) : digits;
+  return ean.length >= 8 && ean.length <= 14 ? ean : null;
+}

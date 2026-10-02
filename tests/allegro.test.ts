@@ -189,3 +189,19 @@ describe('AllegroAdapter', () => {
     expect(files).toHaveLength(1);
   });
 });
+
+describe('AllegroAdapter.listingEans', () => {
+  it('reads the EAN from the offer\'s product, or from the catalogue product when the offer has none', async () => {
+    server.use(
+      http.get(`${API}/sale/product-offers/1`, () =>
+        HttpResponse.json({ productSet: [{ product: { id: 'p1', parameters: [{ id: '225693', name: 'EAN (GTIN)', values: ['8809652580050'] }] } }] }),
+      ),
+      http.get(`${API}/sale/product-offers/2`, () => HttpResponse.json({ productSet: [{ product: { id: 'p2' } }] })),
+      http.get(`${API}/sale/products/p2`, () => HttpResponse.json({ parameters: [{ id: '1', name: 'Marka', values: ['Anua'] }, { id: '225693', name: 'EAN (GTIN)', values: ['8809640733123'] }] })),
+      http.get(`${API}/sale/product-offers/3`, () => HttpResponse.json({ productSet: [] })),
+    );
+    const eans = await new AllegroAdapter(store()).listingEans(['1', '2', '3']);
+    expect(Object.fromEntries(eans)).toEqual({ 1: '8809652580050', 2: '8809640733123', 3: null });
+  });
+});
+

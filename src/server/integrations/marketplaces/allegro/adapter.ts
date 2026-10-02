@@ -22,6 +22,9 @@ const EVENTS_LIMIT = 1000;
 /** Cursor used when the account has no order events yet. */
 const NO_EVENTS = 'none';
 
+/** Allegro's catalogue parameter "EAN (GTIN)". */
+const EAN_PARAMETER_ID = '225693';
+
 export class AllegroAdapter implements MarketplaceAdapter {
   readonly marketplace = 'allegro' as const;
   readonly client: AllegroClient;
@@ -174,6 +177,27 @@ export class AllegroAdapter implements MarketplaceAdapter {
       }
       if (page.offers.length < 1000 || offset + 1000 >= page.totalCount) return;
     }
+  }
+
+  async listingEans(offerIds: string[]): Promise<Map<string, string | null>> {
+    type Parameter = { id?: string; name?: string; values?: string[] };
+    const eanOf = (params: Parameter[] | undefined) =>
+      params?.find((p) => p.id === EAN_PARAMETER_ID || /\b(ean|gtin)\b/i.test(p.name ?? ''))?.values?.[0] ?? null;
+    const out = new Map<string, string | null>();
+    for (const offerId of offerIds) {
+      const offer = await this.client.call<{ productSet?: { product?: { id?: string; parameters?: Parameter[] } }[] }>(
+        'GET',
+        `/sale/product-offers/${offerId}`,
+      );
+      const product = offer.productSet?.[0]?.product;
+      let ean = eanOf(product?.parameters);
+      if (!ean && product?.id) {
+        const full = await this.client.call<{ parameters?: Parameter[] }>('GET', `/sale/products/${product.id}`);
+        ean = eanOf(full.parameters);
+      }
+      out.set(offerId, ean);
+    }
+    return out;
   }
 
   async setStock(updates: StockUpdate[]): Promise<void> {

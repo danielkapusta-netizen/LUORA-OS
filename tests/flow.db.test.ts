@@ -220,8 +220,15 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
 
     // Every demo product comes from Shopify, and the other platforms are linked to it by SKU.
     const catalogue = await db.select().from(s.products);
-    expect(catalogue.every((p) => p.shopifyVariantId)).toBe(true);
+    expect(catalogue.every((p) => p.shopifyVariantId && p.ean)).toBe(true);
     expect(await m.inventory.needsMatching()).toHaveLength(0);
+    // Allegro offers have no SKU: their EAN was read from the offer and matched to the Shopify barcode.
+    const allegroListings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, allegro.id));
+    expect(allegroListings.length).toBe(catalogue.length);
+    for (const l of allegroListings) {
+      expect(l.sku).toBeNull();
+      expect(catalogue.find((p) => p.id === l.productId)?.ean).toBe(l.ean);
+    }
 
     // A Shopify variant without a SKU still becomes a product.
     const { MockMarketplaceAdapter } = await import('@/server/integrations/marketplaces/mock/adapter');
@@ -292,6 +299,28 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     queue.length = 0;
     // Not a demo product, so the demo clean-up below would leave it.
     await db.delete(s.products).where(orm.eq(s.products.id, night.id));
+  });
+
+  it('rates products by units sold in the period, ignoring cancelled orders', async () => {
+    const { productStats } = await import('@/server/services/product-stats');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const lines = await db
+      .select({ productId: s.orderItems.productId, quantity: s.orderItems.quantity, status: s.orders.status, placedAt: s.orders.placedAt, marketplace: s.orders.marketplace })
+      .from(s.orderItems)
+      .innerJoin(s.orders, orm.eq(s.orders.id, s.orderItems.orderId));
+    const since = Date.now() - 90 * 86_400_000;
+    const expected = new Map<string, number>();
+    for (const l of lines) {
+      if (!l.productId || l.status === 'cancelled' || l.placedAt.getTime() < since) continue;
+      expected.set(l.productId, (expected.get(l.productId) ?? 0) + l.quantity);
+    }
+    expect(expected.size).toBeGreaterThan(0);
+    const { byProduct } = await productStats(90);
+    for (const [id, units] of expected) expect(byProduct.get(id)?.units).toBe(units);
+    const ranked = [...byProduct.values()].filter((p) => p.rank === 1);
+    expect(ranked.length).toBeGreaterThan(0);
+    expect(Math.max(...[...byProduct.values()].map((p) => p.units))).toBe(ranked[0].units);
   });
 
   it('reports analytics over the stored orders', async () => {

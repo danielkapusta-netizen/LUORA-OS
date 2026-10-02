@@ -39,6 +39,12 @@ export interface MarketplaceAdapter {
 
   listListings(): AsyncIterable<Listing>;
 
+  /**
+   * Barcodes for listings whose list call doesn't include them (Allegro: read from the offer's
+   * catalogue product). Returns externalId → EAN, or null when the offer has none.
+   */
+  listingEans?(externalIds: string[]): Promise<Map<string, string | null>>;
+
   /** Sets absolute stock quantities. */
   setStock(updates: StockUpdate[]): Promise<void>;
 }

@@ -70,6 +70,11 @@ function prng(seed: number) {
   };
 }
 
+/** A stable 13-digit demo barcode per SKU. */
+function mockEan(sku: string): string {
+  return `590${String(hash(sku)).padStart(10, '0').slice(-10)}`;
+}
+
 function hash(text: string): number {
   let h = 2166136261;
   for (const ch of text) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
@@ -201,14 +206,21 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
 
   async *listListings(): AsyncIterable<Listing> {
     for (const p of MOCK_CATALOG) {
+      // Like the real platforms: Allegro offers carry no SKU (matched by EAN), the others do.
       yield {
         externalId: `${this.marketplace}-${p.sku}`,
-        sku: p.sku,
+        sku: this.marketplace === 'allegro' ? null : p.sku,
         title: p.name,
         quantity: 60 + (hash(`${this.marketplace}${p.sku}`) % 60),
+        ean: this.marketplace === 'allegro' ? undefined : mockEan(p.sku),
         ref: { sku: p.sku },
       };
     }
+  }
+
+  async listingEans(externalIds: string[]): Promise<Map<string, string | null>> {
+    const sku = (id: string) => id.slice(`${this.marketplace}-`.length);
+    return new Map(externalIds.map((id) => [id, MOCK_CATALOG.some((p) => p.sku === sku(id)) ? mockEan(sku(id)) : null]));
   }
 
   async setStock(updates: StockUpdate[]): Promise<void> {
