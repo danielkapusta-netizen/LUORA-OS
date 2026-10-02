@@ -14,7 +14,7 @@ import type { Listing, StockUpdate } from '../integrations/types';
 import { enqueue, JOBS } from '../jobs/queue';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
-import { createMatcher, isClearSuggestion } from './matching';
+import { createMatcher, isClearSuggestion, type MatchSuggestion } from './matching';
 
 /** Seconds to wait so a burst of orders becomes one stock push per account. */
 const PUSH_DEBOUNCE_SECONDS = 30;
@@ -327,26 +327,58 @@ export async function needsMatching() {
     .orderBy(asc(marketplaceAccounts.name), asc(productListings.title));
 }
 
-/** Listings waiting to be matched, each with up to three Shopify products suggested by name. */
-export async function matchingSuggestions() {
+export type PendingListing = Awaited<ReturnType<typeof needsMatching>>[number];
+
+export interface MatchGroup {
+  /** The shared barcode, or the listing id for an offer without one. */
+  key: string;
+  ean: string | null;
+  listings: PendingListing[];
+  /** Up to three Shopify products, scored on the best of the group's titles. */
+  suggestions: MatchSuggestion[];
+  clear: boolean;
+  /** The top suggestion already has another barcode, so linking would not carry over to the rest by EAN. */
+  eanDiffers: boolean;
+}
+
+/**
+ * Listings waiting to be matched. Offers on Allegro and Empik that share a barcode are one
+ * product, so they form one group; each group gets Shopify suggestions by name.
+ */
+export async function matchingGroups(): Promise<MatchGroup[]> {
   const [pending, catalogue] = await Promise.all([
     needsMatching(),
-    getDb().select({ id: products.id, name: products.name }).from(products).where(isNotNull(products.shopifyVariantId)),
+    getDb().select({ id: products.id, name: products.name, ean: products.ean }).from(products).where(isNotNull(products.shopifyVariantId)),
   ]);
   const suggest = createMatcher(catalogue);
-  return pending.map((l) => {
-    const suggestions = suggest(l.title);
-    return { listing: l, suggestions, clear: isClearSuggestion(suggestions) };
+  const eanOfProduct = new Map(catalogue.map((p) => [p.id, p.ean]));
+  const groups = new Map<string, PendingListing[]>();
+  for (const l of pending) {
+    const key = l.ean ? `ean:${l.ean}` : `listing:${l.id}`;
+    groups.set(key, [...(groups.get(key) ?? []), l]);
+  }
+  return [...groups].map(([key, listings]) => {
+    const best = new Map<string, number>();
+    for (const l of listings) for (const sg of suggest(l.title)) best.set(sg.productId, Math.max(best.get(sg.productId) ?? 0, sg.score));
+    const suggestions = [...best].map(([productId, score]) => ({ productId, score })).sort((a, b) => b.score - a.score).slice(0, 3);
+    const ean = listings[0].ean || null;
+    const topEan = suggestions[0] ? eanOfProduct.get(suggestions[0].productId) : null;
+    return { key, ean, listings, suggestions, clear: isClearSuggestion(suggestions), eanDiffers: Boolean(ean && topEan && topEan !== ean) };
   });
 }
 
-/** Links every waiting listing whose best suggestion is clear. Returns how many were linked. */
+/** Links all offers of a group (same barcode) to one Shopify product. */
+export async function linkGroup(listingIds: string[], productId: string): Promise<void> {
+  for (const id of listingIds) await linkListing(id, productId);
+}
+
+/** Links every group whose best suggestion is clear. Returns how many offers were linked. */
 export async function confirmClearSuggestions(): Promise<number> {
   let linked = 0;
-  for (const { listing, suggestions, clear } of await matchingSuggestions()) {
-    if (!clear) continue;
-    await linkListing(listing.id, suggestions[0].productId);
-    linked++;
+  for (const g of await matchingGroups()) {
+    if (!g.clear || g.eanDiffers) continue;
+    await linkGroup(g.listings.map((l) => l.id), g.suggestions[0].productId);
+    linked += g.listings.length;
   }
   return linked;
 }

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireUser } from '@/server/auth';
 import { enqueue, JOBS } from '@/server/jobs/queue';
-import { adjustStock, confirmClearSuggestions, linkListing } from '@/server/services/inventory';
+import { adjustStock, confirmClearSuggestions, linkGroup, linkListing } from '@/server/services/inventory';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 
 export async function adjustStockAction(productId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -19,12 +19,13 @@ export async function adjustStockAction(productId: string, _prev: ActionResult, 
   });
 }
 
-export async function linkListingAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+/** Links every offer of a group (the same barcode on Allegro and Empik) to the chosen Shopify product. */
+export async function linkGroupAction(listingIds: string[], _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   await requireUser();
   return attempt(async () => {
     const productId = String(formData.get('productId') ?? '');
     if (!productId) throw new Error('Choose the Shopify product first');
-    await linkListing(listingId, productId);
+    await linkGroup(listingIds, productId);
     revalidatePath('/inventory');
     return 'Linked';
   });

@@ -203,5 +203,14 @@ describe('AllegroAdapter.listingEans', () => {
     const eans = await new AllegroAdapter(store()).listingEans(['1', '2', '3']);
     expect(Object.fromEntries(eans)).toEqual({ 1: '8809652580050', 2: '8809640733123', 3: null });
   });
-});
 
+  it('falls back to the older offer endpoint when the offer has no catalogue product (404)', async () => {
+    server.use(
+      http.get(`${API}/sale/product-offers/9`, () => HttpResponse.json({ errors: [{ code: 'NotFoundException', message: 'Offer 9 does not exist.' }] }, { status: 404 })),
+      http.get(`${API}/sale/offers/9`, () => HttpResponse.json({ parameters: [{ id: '225693', name: 'EAN (GTIN)', values: ['8809640734946'] }] })),
+      http.get(`${API}/sale/product-offers/8`, () => HttpResponse.json({ errors: [{ message: 'nope' }] }, { status: 500 })),
+    );
+    const eans = await new AllegroAdapter(store()).listingEans(['9', '8']);
+    expect(Object.fromEntries(eans)).toEqual({ 9: '8809640734946' }); // the failing offer is skipped, not fatal
+  });
+});

@@ -1,7 +1,7 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import type { CredentialsStore, Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
 import { invoiceFileName, type MarketplaceAdapter, type SyncResult } from '../types';
-import { AllegroClient, type AllegroCredentials } from './client';
+import { AllegroApiError, AllegroClient, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
 
 interface OrderEvent {
@@ -181,27 +181,34 @@ export class AllegroAdapter implements MarketplaceAdapter {
 
   async listingEans(offerIds: string[]): Promise<Map<string, string | null>> {
     type Parameter = { id?: string; name?: string; values?: string[] };
+    type Offer = { productSet?: { product?: { id?: string; parameters?: Parameter[] } }[]; parameters?: Parameter[] };
     const eanOf = (params: Parameter[] | undefined) =>
       params?.find((p) => p.id === EAN_PARAMETER_ID || /\b(ean|gtin)\b/i.test(p.name ?? ''))?.values?.[0] ?? null;
+    const readOffer = async (offerId: string): Promise<string | null> => {
+      let offer: Offer;
+      try {
+        offer = await this.client.call<Offer>('GET', `/sale/product-offers/${offerId}`);
+      } catch (err) {
+        // Offers created without a catalogue product 404 here; the older endpoint still knows them.
+        if (!(err instanceof AllegroApiError) || err.status !== 404) throw err;
+        offer = await this.client.call<Offer>('GET', `/sale/offers/${offerId}`);
+      }
+      const product = offer.productSet?.[0]?.product;
+      let ean = eanOf(product?.parameters) ?? eanOf(offer.parameters);
+      if (!ean && product?.id) {
+        try {
+          ean = eanOf((await this.client.call<{ parameters?: Parameter[] }>('GET', `/sale/products/${product.id}`)).parameters);
+        } catch (err) {
+          console.error(`[allegro] catalogue product ${product.id} of offer ${offerId}: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+      return ean;
+    };
     const out = new Map<string, string | null>();
     for (const offerId of offerIds) {
-      // One offer failing (e.g. no access to its catalogue product) must not stop the others.
+      // One offer failing must not stop the others.
       try {
-        const offer = await this.client.call<{ productSet?: { product?: { id?: string; parameters?: Parameter[] } }[] }>(
-          'GET',
-          `/sale/product-offers/${offerId}`,
-        );
-        const product = offer.productSet?.[0]?.product;
-        let ean = eanOf(product?.parameters);
-        if (!ean && product?.id) {
-          try {
-            const full = await this.client.call<{ parameters?: Parameter[] }>('GET', `/sale/products/${product.id}`);
-            ean = eanOf(full.parameters);
-          } catch (err) {
-            console.error(`[allegro] catalogue product ${product.id} of offer ${offerId}: ${err instanceof Error ? err.message : err}`);
-          }
-        }
-        out.set(offerId, ean);
+        out.set(offerId, await readOffer(offerId));
       } catch (err) {
         console.error(`[allegro] barcode of offer ${offerId}: ${err instanceof Error ? err.message : err}`);
       }

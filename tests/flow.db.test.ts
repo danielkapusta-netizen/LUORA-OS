@@ -265,11 +265,11 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       .values({ orderId: allegroOrder.id, externalLineId: 'night-1', name: 'Luora Night Cream', quantity: 1, unitPrice: '50.00', externalProductId: '18800000001' })
       .returning();
 
-    const suggestions = await m.inventory.matchingSuggestions();
-    expect(suggestions.map((x) => [x.listing.id, x.suggestions[0]?.productId, x.clear])).toEqual(
+    const groups = await m.inventory.matchingGroups();
+    expect(groups.map((g) => [g.listings.map((l) => l.id).sort(), g.suggestions[0]?.productId, g.clear])).toEqual(
       expect.arrayContaining([
-        [empikListing.id, night.id, true],
-        [allegroListing.id, night.id, true],
+        [[empikListing.id], night.id, true],
+        [[allegroListing.id], night.id, true],
       ]),
     );
     expect(await m.inventory.confirmClearSuggestions()).toBe(2);
@@ -308,6 +308,35 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     queue.length = 0;
     // Not a demo product, so the demo clean-up below would leave it.
     await db.delete(s.products).where(orm.eq(s.products.id, night.id));
+  });
+
+  it('groups Allegro and Empik offers that share an EAN and links them to a Shopify product in one step', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const acct = async (type: 'allegro' | 'empik') => (await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, type)))[0];
+    const [allegro, empik] = [await acct('allegro'), await acct('empik')];
+    const [serum] = await db
+      .insert(s.products)
+      .values({ sku: 'shopify:5001', name: 'Luora Azelaic Serum 30 ml', stock: 4, shopifyVariantId: 'gid://shopify/ProductVariant/5001' })
+      .returning();
+    const [a, e] = await db
+      .insert(s.productListings)
+      .values([
+        { accountId: allegro.id, externalId: '18800000777', title: 'Luora Azelaic Acid 10+ Serum 30 ml', ean: '8809640737190', lastSeenQty: 3 },
+        { accountId: empik.id, externalId: '88777', sku: 'S777', title: 'LUORA Azelaic Acid Serum 30ml – kojące serum', ean: '8809640737190', lastSeenQty: 5 },
+      ])
+      .returning();
+    const group = (await m.inventory.matchingGroups()).find((g) => g.ean === '8809640737190')!;
+    expect(group.listings.map((l) => l.id).sort()).toEqual([a.id, e.id].sort());
+    expect(group.suggestions[0].productId).toBe(serum.id);
+    expect(group.clear).toBe(true);
+
+    expect(await m.inventory.confirmClearSuggestions()).toBe(2);
+    const linked = await db.select().from(s.productListings).where(orm.inArray(s.productListings.id, [a.id, e.id]));
+    expect(linked.map((l) => l.productId)).toEqual([serum.id, serum.id]);
+    expect((await db.select().from(s.products).where(orm.eq(s.products.id, serum.id)))[0].ean).toBe('8809640737190');
+    expect((await m.inventory.matchingGroups()).find((g) => g.ean === '8809640737190')).toBeUndefined();
+    await db.delete(s.products).where(orm.eq(s.products.id, serum.id));
   });
 
   it('rates products by units sold in the period, ignoring cancelled orders', async () => {

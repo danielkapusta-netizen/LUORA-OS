@@ -11,11 +11,11 @@ import { hasRealSku } from '@/lib/sku';
 import { cn, formatDate, timeAgo } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import type { Product } from '@/server/db/schema';
-import { listProductsWithListings, marketplaceQuantity, matchingSuggestions, recentStockLog } from '@/server/services/inventory';
+import { listProductsWithListings, marketplaceQuantity, matchingGroups, recentStockLog } from '@/server/services/inventory';
 import { SUGGESTION_THRESHOLD } from '@/server/services/matching';
 import { emptyPerformance, productStats, type PerformanceLevel, type ProductPerformance } from '@/server/services/product-stats';
 import { listMarketplaceAccounts } from '@/server/services/settings';
-import { adjustStockAction, confirmClearSuggestionsAction, importListingsAction, linkListingAction, syncAllStockAction, unlinkListingAction } from './actions';
+import { adjustStockAction, confirmClearSuggestionsAction, importListingsAction, linkGroupAction, syncAllStockAction, unlinkListingAction } from './actions';
 
 export const metadata: Metadata = { title: 'Inventory' };
 
@@ -157,7 +157,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const [{ products, listings }, accounts, matching, log, stats] = await Promise.all([
     listProductsWithListings(),
     listMarketplaceAccounts(),
-    matchingSuggestions(),
+    matchingGroups(),
     recentStockLog(30),
     productStats(days),
   ]);
@@ -186,7 +186,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const page = Math.min(pages, Math.max(1, Number(params.page) || 1));
   const shown = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const clear = matching.filter((m) => m.clear).length;
+  const clear = matching.filter((m) => m.clear && !m.eanDiffers).length;
+  const offerCount = matching.reduce((n, g) => n + g.listings.length, 0);
   const busy = listings.some((l) => {
     const acct = accounts.find((a) => a.id === l.accountId);
     const p = products.find((x) => x.id === l.productId);
@@ -260,8 +261,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <details className="group mb-5 rounded-2xl border border-amber-200 bg-amber-50/40" open={matching.length <= 10}>
           <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-5 py-3">
             <span className="text-sm">
-              <span className="font-semibold">Needs matching ({matching.length})</span>
-              <span className="ml-2 text-slate-500">Allegro / Empik offers without a matching EAN. Their stock isn’t synced until linked.</span>
+              <span className="font-semibold">
+                Needs matching ({matching.length} product{matching.length === 1 ? '' : 's'}, {offerCount} offer{offerCount === 1 ? '' : 's'})
+              </span>
+              <span className="ml-2 text-slate-500">Offers sharing an EAN are one product. Their Shopify product has no barcode, so pick it once. Stock isn’t synced until linked.</span>
             </span>
             <span className="text-xs font-medium text-brand-700 group-open:hidden">Show</span>
           </summary>
@@ -269,7 +272,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             {clear > 0 && (
               <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-2.5 text-sm text-slate-600">
                 <span>
-                  {clear} offer{clear === 1 ? ' has a' : 's have a'} clear match by name.
+                  {clear} product{clear === 1 ? ' has a' : 's have a'} clear match by name.
                 </span>
                 <ActionForm action={confirmClearSuggestionsAction}>
                   <SubmitButton size="sm" variant="secondary" pendingText="Linking…">
@@ -279,34 +282,37 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
               </div>
             )}
             <ul className="divide-y divide-slate-100">
-              {matching.map(({ listing: l, suggestions, clear: isClear }) => {
-                const top = suggestions[0] && suggestions[0].score >= SUGGESTION_THRESHOLD ? suggestions[0] : null;
-                const suggestedIds = new Set(suggestions.map((s) => s.productId));
+              {matching.map((g) => {
+                const top = g.suggestions[0] && g.suggestions[0].score >= SUGGESTION_THRESHOLD ? g.suggestions[0] : null;
+                const suggestedIds = new Set(g.suggestions.map((s) => s.productId));
                 return (
-                  <li key={l.id} className="grid grid-cols-1 items-center gap-2 px-5 py-3 lg:grid-cols-[1fr_minmax(0,28rem)]">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                        <MarketplaceBadge marketplace={l.marketplace} />
-                        <span>stock {l.lastSeenQty ?? '?'}</span>
-                        <span>· {l.ean ? `EAN ${l.ean}` : 'no EAN'}</span>
-                      </div>
-                      <p className="mt-1 text-sm">{l.title}</p>
+                  <li key={g.key} className="grid grid-cols-1 items-center gap-2 px-5 py-3 lg:grid-cols-[1fr_minmax(0,28rem)]">
+                    <div className="min-w-0 space-y-1.5">
+                      <p className="text-xs text-slate-500">{g.ean ? `EAN ${g.ean}` : 'no EAN'}</p>
+                      {g.listings.map((l) => (
+                        <div key={l.id} className="flex items-start gap-2 text-sm">
+                          <MarketplaceBadge marketplace={l.marketplace} />
+                          <span className="min-w-0 flex-1">{l.title}</span>
+                          <span className="shrink-0 text-xs text-slate-500">stock {l.lastSeenQty ?? '?'}</span>
+                        </div>
+                      ))}
                       <p className="text-xs">
                         {top ? (
-                          <span className={isClear ? 'text-emerald-700' : 'text-amber-700'}>
-                            {isClear ? 'Clear match by name' : 'Possible match'} ({Math.round(top.score * 100)}%) – check it
+                          <span className={g.clear ? 'text-emerald-700' : 'text-amber-700'}>
+                            {g.clear ? 'Clear match by name' : 'Possible match'} ({Math.round(top.score * 100)}%) – check it
                           </span>
                         ) : (
                           <span className="text-slate-500">No close match: choose the Shopify product</span>
                         )}
+                        {g.eanDiffers && <span className="ml-2 text-amber-700">Shopify has another barcode for it</span>}
                       </p>
                     </div>
-                    <ActionForm action={linkListingAction.bind(null, l.id)} className="flex gap-1.5" showOk={false}>
+                    <ActionForm action={linkGroupAction.bind(null, g.listings.map((l) => l.id))} className="flex gap-1.5" showOk={false}>
                       <Select name="productId" className="h-9 min-w-0 flex-1 text-xs" defaultValue={top?.productId ?? ''}>
                         <option value="">Choose Shopify product…</option>
-                        {suggestions.length > 0 && (
+                        {g.suggestions.length > 0 && (
                           <optgroup label="Closest by name">
-                            {suggestions.map((s) => (
+                            {g.suggestions.map((s) => (
                               <option key={s.productId} value={s.productId}>
                                 {productName.get(s.productId)}
                               </option>
@@ -324,7 +330,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         </optgroup>
                       </Select>
                       <SubmitButton size="sm" pendingText="…">
-                        Link
+                        Link{g.listings.length > 1 ? ` ${g.listings.length}` : ''}
                       </SubmitButton>
                     </ActionForm>
                   </li>
