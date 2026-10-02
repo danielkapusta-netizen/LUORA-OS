@@ -45,6 +45,32 @@ describe('mapAllegroCheckoutForm', () => {
     expect(o.items[0]).toMatchObject({ sku: 'LUO-CND-01', quantity: 2, unitPrice: '57.23', externalProductId: '10000000001' });
   });
 
+  it('reads an invoice request for a company, splitting a prefixed tax number', () => {
+    expect(mapAllegroCheckoutForm(form).invoiceRequest).toBeNull();
+    const o = mapAllegroCheckoutForm({
+      ...form,
+      invoice: {
+        required: true,
+        address: { street: 'Prosta 1/2', city: 'Warszawa', zipCode: '00001', countryCode: 'PL', company: { name: 'Kosmetyki Sp. z o.o.', taxId: 'PL 525-000-10-09' }, naturalPerson: null },
+      },
+    });
+    expect(o.invoiceRequest).toEqual({
+      name: 'Kosmetyki Sp. z o.o.',
+      taxId: '5250001009',
+      euPrefix: 'PL',
+      street: 'Prosta 1/2',
+      postalCode: '00-001',
+      city: 'Warszawa',
+      countryCode: 'PL',
+      email: form.buyer.email,
+    });
+    const person = mapAllegroCheckoutForm({
+      ...form,
+      invoice: { required: true, address: { street: 'Na Svahu 277', city: 'Český Krumlov', zipCode: '381 01', countryCode: 'CZ', company: null, naturalPerson: { firstName: 'Jana', lastName: 'Nováková' } } },
+    });
+    expect(person.invoiceRequest).toMatchObject({ name: 'Jana Nováková', taxId: null, countryCode: 'CZ' });
+  });
+
   it('marks cash on delivery and cancellation', () => {
     const cod = mapAllegroCheckoutForm({ ...form, payment: { ...form.payment, type: 'CASH_ON_DELIVERY' } });
     expect(cod.codAmount).toBe('123.45');
@@ -134,5 +160,32 @@ describe('AllegroAdapter', () => {
     await adapter.pushTracking(ref, tracking);
     expect(posted).toHaveLength(1);
     expect(fulfillment).toEqual([{ status: 'SENT' }, { status: 'SENT' }]);
+  });
+
+  it('attaches the invoice in two steps, and skips one already uploaded', async () => {
+    const created: unknown[] = [];
+    const files: { type: string | null; body: string }[] = [];
+    let existing: { id: string; invoiceNumber: string; file: { uploadedAt: string | null } }[] = [];
+    server.use(
+      http.get(`${API}/order/checkout-forms/:id/invoices`, () => HttpResponse.json({ invoices: existing })),
+      http.post(`${API}/order/checkout-forms/:id/invoices`, async ({ request }) => {
+        created.push(await request.json());
+        return HttpResponse.json({ id: 'inv-1' }, { status: 201 });
+      }),
+      http.put(`${API}/order/checkout-forms/:id/invoices/inv-1/file`, async ({ request }) => {
+        files.push({ type: request.headers.get('content-type'), body: await request.text() });
+        return new HttpResponse(null, { status: 200 });
+      }),
+    );
+    const adapter = new AllegroAdapter(store());
+    const ref = { externalId: form.id, externalNumber: '29738E61', raw: form, items: [] };
+    await adapter.uploadInvoice(ref, { number: '12/10/2026', pdf: Buffer.from('%PDF-1.4') });
+    expect(created).toEqual([{ file: { name: 'faktura-12-10-2026.pdf' }, invoiceNumber: '12/10/2026' }]);
+    expect(files).toEqual([{ type: 'application/pdf', body: '%PDF-1.4' }]);
+
+    existing = [{ id: 'inv-1', invoiceNumber: '12/10/2026', file: { uploadedAt: '2026-10-02T10:00:00Z' } }];
+    await adapter.uploadInvoice(ref, { number: '12/10/2026', pdf: Buffer.from('%PDF-1.4') });
+    expect(created).toHaveLength(1);
+    expect(files).toHaveLength(1);
   });
 });

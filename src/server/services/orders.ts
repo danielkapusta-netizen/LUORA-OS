@@ -112,6 +112,7 @@ export async function upsertOrders(
             paidAt: n.paidAt ?? null,
             shippedAt: n.fulfilled ? new Date() : null,
             revision: n.revision ?? null,
+            invoiceRequest: n.invoiceRequest ?? null,
             raw: n.raw as object,
           });
         await tx.batch([
@@ -132,6 +133,8 @@ export async function upsertOrders(
           readyToShip: n.readyToShip,
           revision: n.revision ?? null,
           paidAt: n.paidAt ?? existing.paidAt,
+          // Buyers can add invoice details after buying, so this always follows the marketplace.
+          invoiceRequest: n.invoiceRequest ?? null,
           raw: n.raw as object,
           ...(EDITABLE.includes(existing.status)
             ? {
@@ -275,6 +278,7 @@ const BACKFILL_LIMIT = 20;
 /**
  * Re-reads orders whose stored data is incomplete. Regular sync only revisits orders with new
  * marketplace events, so these would otherwise stay incomplete:
+ * - orders that asked for an invoice before invoice requests were stored;
  * - open Empik Paczkomat orders without a pickup point (imported before the point was read);
  * - items without a photo, or with a relative Empik photo path: the per-item lookup (e.g. Allegro's
  *   offer photo, a separate call per offer) can fail or get rate-limited during a big sync.
@@ -307,7 +311,22 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
     )
     .orderBy(desc(orders.placedAt))
     .limit(limit);
-  const ids = [...new Set([...lockers, ...photos].map((r) => r.orderId))].slice(0, limit);
+  // Orders that asked for an invoice before invoice requests were stored.
+  const invoices = await db
+    .select({ orderId: orders.id })
+    .from(orders)
+    .where(
+      and(
+        isNull(orders.invoiceRequest),
+        ne(orders.status, 'cancelled'),
+        or(
+          sql`${orders.marketplace} = 'allegro' and json_extract(${orders.raw}, '$.invoice.required') = 1`,
+          sql`${orders.marketplace} = 'empik' and exists (select 1 from json_each(${orders.raw}, '$.order_additional_fields') f where json_extract(f.value, '$.code') = 'nip')`,
+        ),
+      ),
+    )
+    .limit(limit);
+  const ids = [...new Set([...invoices, ...lockers, ...photos].map((r) => r.orderId))].slice(0, limit);
 
   let refreshed = 0;
   for (const orderId of ids) {
@@ -346,6 +365,8 @@ export interface OrderFilters {
   assigneeId?: string;
   tag?: string;
   carrier?: string;
+  /** Only orders whose buyer asked for an invoice. */
+  invoiceRequested?: boolean;
   from?: string;
   to?: string;
   page?: number;
@@ -361,6 +382,7 @@ function filterConditions(f: OrderFilters): SQL[] {
   if (f.marketplace) where.push(sql`${orders.marketplace} = ${f.marketplace}`);
   if (f.accountId) where.push(eq(orders.accountId, f.accountId));
   if (f.assigneeId) where.push(eq(orders.assigneeId, f.assigneeId));
+  if (f.invoiceRequested) where.push(isNotNull(orders.invoiceRequest));
   if (f.tag) where.push(sql`exists (select 1 from json_each(${orders.tags}) t where t.value = ${f.tag})`);
   if (f.from) where.push(gte(orders.placedAt, new Date(f.from)));
   if (f.to) where.push(lte(orders.placedAt, new Date(`${f.to}T23:59:59`)));

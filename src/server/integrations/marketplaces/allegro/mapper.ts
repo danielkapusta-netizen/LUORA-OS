@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { formatPostalCode } from '../../address';
-import type { NormalizedOrder } from '../../types';
+import { splitTaxId, type InvoiceRequest, type NormalizedOrder } from '../../types';
 
 const amount = z.object({ amount: z.string(), currency: z.string() });
 
@@ -36,6 +36,21 @@ export const checkoutFormSchema = z.object({
     })
     .nullish(),
   fulfillment: z.object({ status: z.string().nullish() }).nullish(),
+  invoice: z
+    .object({
+      required: z.boolean().nullish(),
+      address: z
+        .object({
+          street: z.string().nullish(),
+          city: z.string().nullish(),
+          zipCode: z.string().nullish(),
+          countryCode: z.string().nullish(),
+          company: z.object({ name: z.string().nullish(), taxId: z.string().nullish() }).nullish(),
+          naturalPerson: z.object({ firstName: z.string().nullish(), lastName: z.string().nullish() }).nullish(),
+        })
+        .nullish(),
+    })
+    .nullish(),
   delivery: z
     .object({
       address: deliveryAddress.nullish(),
@@ -63,6 +78,25 @@ export const checkoutFormSchema = z.object({
 export type CheckoutForm = z.infer<typeof checkoutFormSchema>;
 
 const SHIPPED_FULFILLMENT = new Set(['SENT', 'PICKED_UP', 'READY_FOR_PICKUP']);
+
+function invoiceRequest(f: CheckoutForm, fallbackName: string): InvoiceRequest | null {
+  const inv = f.invoice;
+  if (!inv?.required || !inv.address) return null;
+  const a = inv.address;
+  const countryCode = (a.countryCode ?? 'PL').toUpperCase();
+  const person = [a.naturalPerson?.firstName, a.naturalPerson?.lastName].filter(Boolean).join(' ');
+  const { taxId, euPrefix } = splitTaxId(a.company?.taxId);
+  return {
+    name: a.company?.name || person || fallbackName,
+    taxId,
+    euPrefix,
+    street: a.street ?? '',
+    postalCode: formatPostalCode(a.zipCode ?? '', countryCode),
+    city: a.city ?? '',
+    countryCode,
+    email: f.buyer.email ?? null,
+  };
+}
 
 export function mapAllegroCheckoutForm(raw: unknown): NormalizedOrder {
   const f = checkoutFormSchema.parse(raw);
@@ -114,6 +148,7 @@ export function mapAllegroCheckoutForm(raw: unknown): NormalizedOrder {
       unitPrice: li.price.amount,
       externalProductId: li.offer.id,
     })),
+    invoiceRequest: invoiceRequest(f, buyerName),
     revision: f.revision ?? null,
     raw,
   };

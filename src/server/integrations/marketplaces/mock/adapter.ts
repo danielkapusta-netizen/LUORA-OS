@@ -193,6 +193,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
 
   async markProcessing(): Promise<void> {}
 
+  async uploadInvoice(): Promise<void> {}
+
   async pushTracking(order: OrderRef, tracking: TrackingInfo): Promise<void> {
     console.log(`[mock ${this.marketplace}] tracking ${tracking.trackingNumber} added to ${order.externalNumber}`);
   }

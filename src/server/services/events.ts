@@ -1,7 +1,7 @@
 import type { Tx } from '../db/client';
 import { orderEvents } from '../db/schema';
 
-export type OrderEventType = 'status' | 'note' | 'sync' | 'label' | 'tracking' | 'stock' | 'error' | 'edit';
+export type OrderEventType = 'status' | 'note' | 'sync' | 'label' | 'tracking' | 'stock' | 'error' | 'edit' | 'invoice';
 
 export async function logEvent(
   db: Tx,

@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { marketplaceAccounts } from '../db/schema';
 import { importListings, runReconcile, runStockPush } from '../services/inventory';
+import { autoInvoice, runCreateInvoice, runSendKsef, runUploadInvoice } from '../services/invoicing';
 import { backfillOrderDetails, syncAccount } from '../services/orders';
 import { runCreateShipment, runPollShipment, runPendingSweep } from '../services/shipping';
 import { runDeliveryCheck, runMarketplaceProcessing, runPushTracking } from '../services/tracking';
@@ -29,6 +30,10 @@ export const handlers: Handlers = {
   [JOBS.stockPush]: ({ accountId }) => runStockPush(accountId),
   [JOBS.stockReconcile]: () => runReconcile(),
   [JOBS.orderBackfill]: () => backfillOrderDetails(),
+  [JOBS.invoiceAuto]: ({ orderId }) => autoInvoice(orderId),
+  [JOBS.invoiceCreate]: ({ invoiceId }) => runCreateInvoice(invoiceId),
+  [JOBS.invoiceUpload]: ({ invoiceId }) => runUploadInvoice(invoiceId),
+  [JOBS.invoiceKsef]: ({ invoiceId }) => runSendKsef(invoiceId),
 };
 
 export function runJob<K extends JobName>(name: K, data: JobPayloads[K]): Promise<unknown> {

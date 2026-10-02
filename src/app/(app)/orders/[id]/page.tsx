@@ -39,6 +39,7 @@ const EVENT_DOT: Record<string, string> = {
   stock: 'bg-slate-400',
   sync: 'bg-slate-300',
   edit: 'bg-slate-400',
+  invoice: 'bg-teal-500',
 };
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {

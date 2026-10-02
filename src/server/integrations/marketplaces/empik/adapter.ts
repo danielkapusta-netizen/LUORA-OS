@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import type { Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
-import type { MarketplaceAdapter, SyncResult } from '../types';
+import { invoiceFileName, type MarketplaceAdapter, type SyncResult } from '../types';
 import { MiraklClient, type EmpikCredentials, type MiraklCarrier } from './client';
 import { mapMiraklOrder } from './mapper';
 
@@ -207,6 +207,31 @@ export class EmpikAdapter implements MarketplaceAdapter {
     }
     // A carrier Empik has no code for: send it as an "unregistered" carrier with the tracking link.
     return { carrier_name: tracking.carrierName, carrier_url: tracking.trackingUrl ?? undefined, tracking_number: tracking.trackingNumber };
+  }
+
+  /** OR74: attaches the invoice to the order as a CUSTOMER_INVOICE document; skipped if OR72 already lists it. */
+  async uploadInvoice(order: OrderRef, invoice: { number: string; pdf: Buffer }): Promise<void> {
+    const fileName = invoiceFileName(invoice.number);
+    const listed = await this.client.call<{ order_documents?: { file_name: string }[] }>('GET', '/orders/documents', {
+      query: { order_ids: order.externalId },
+    });
+    if (listed.order_documents?.some((d) => d.file_name === fileName)) return;
+
+    const form = new FormData();
+    form.append('files', new Blob([new Uint8Array(invoice.pdf)], { type: 'application/pdf' }), fileName);
+    form.append(
+      'order_documents',
+      new Blob([JSON.stringify({ order_documents: [{ file_name: fileName, type_code: 'CUSTOMER_INVOICE' }] })], { type: 'application/json' }),
+    );
+    const result = await this.client.call<{ errors_count?: number; order_documents?: { errors?: { message?: string }[] }[] }>(
+      'POST',
+      `/orders/${encodeURIComponent(order.externalId)}/documents`,
+      { body: form },
+    );
+    if (result?.errors_count) {
+      const reasons = (result.order_documents ?? []).flatMap((d) => d.errors ?? []).map((e) => e.message).filter(Boolean);
+      throw new Error(`Empik rejected the invoice (OR74): ${reasons.join('; ') || 'unknown error'}`);
+    }
   }
 
   /** OF21 */

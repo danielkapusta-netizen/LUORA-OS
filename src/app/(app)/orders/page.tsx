@@ -48,6 +48,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     assigneeId: params.assignee,
     tag: params.tag,
     carrier: params.carrier,
+    invoiceRequested: params.invoice === 'requested',
     from: params.from,
     to: params.to,
     page: Number(params.page ?? 1) || 1,
@@ -63,7 +64,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const openCount = (counts.new ?? 0) + (counts.processing ?? 0) + (counts.label_created ?? 0) + (counts.on_hold ?? 0);
   const errors = accounts.filter((a) => a.enabled && a.lastError);
   const lastSync = accounts.map((a) => a.lastSyncedAt).filter(Boolean).sort().at(-1);
-  const filtersActive = Boolean(params.marketplace || params.account || params.assignee || params.tag || params.from || params.to);
+  const filtersActive = Boolean(params.marketplace || params.account || params.assignee || params.tag || params.invoice || params.from || params.to);
   // The details panel shows the chosen order, or the first one on the page.
   const selectedId = params.order ?? rows[0]?.order.id ?? null;
 
@@ -179,6 +180,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
                   {t}
                 </option>
               ))}
+            </Select>
+            <Select name="invoice" defaultValue={params.invoice ?? ''} className="col-span-2">
+              <option value="">Invoice requested or not</option>
+              <option value="requested">Invoice requested</option>
             </Select>
             <Input type="date" name="from" defaultValue={params.from} aria-label="Placed from" />
             <Input type="date" name="to" defaultValue={params.to} aria-label="Placed until" />

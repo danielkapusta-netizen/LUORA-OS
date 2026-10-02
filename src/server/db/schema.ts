@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { Address, Buyer, ParcelSpec, SenderSettings } from '../integrations/types';
+import type { Address, Buyer, InvoiceRequest, ParcelSpec, SenderSettings } from '../integrations/types';
 
 // SQLite on D1: ids are UUID text, timestamps are integer milliseconds, JSON is text.
 const id = () => text('id').primaryKey().$defaultFn(() => crypto.randomUUID());
@@ -29,6 +29,8 @@ export const orderStatusValues = [
 export const shipmentStateValues = ['pending', 'created', 'failed', 'cancelled'] as const;
 export const labelFormatValues = ['pdf', 'zpl'] as const;
 export const labelSizeValues = ['A4', 'A6'] as const;
+export const invoiceStateValues = ['pending', 'issued', 'failed', 'manual'] as const;
+export const invoiceKindValues = ['domestic', 'oss'] as const;
 
 // ---------------------------------------------------------------- users
 
@@ -154,6 +156,8 @@ export const orders = sqliteTable(
     revision: text('revision'),
     /** Stock was decremented for this order (and must be returned if it is cancelled). */
     stockApplied: bool('stock_applied').notNull().default(false),
+    /** Who the invoice is made out to, when the buyer asked for one. */
+    invoiceRequest: json<InvoiceRequest>('invoice_request'),
     raw: json<unknown>('raw'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -389,6 +393,71 @@ export const stockSyncLog = sqliteTable(
   (t) => [index('stock_sync_log_created_idx').on(t.createdAt)],
 );
 
+// ---------------------------------------------------------------- accounting
+
+export interface AccountingSettings {
+  /** Create the invoice automatically once a requested order is shipped. */
+  autoOnShipped?: boolean;
+  uploadAllegro?: boolean;
+  uploadEmpik?: boolean;
+  /** Send invoices for companies (with a NIP) to KSeF through ifirma. */
+  sendB2bToKsef?: boolean;
+  /** ifirma numbering series name; empty = the account's default. */
+  numberingSeries?: string;
+  placeOfIssue?: string;
+  issuerSignature?: string;
+  /** Polish VAT rate for products and shipping, as a fraction (0.23). */
+  defaultVatRate?: number;
+  /** OSS: destination-country VAT rates overriding the built-in standard rates, e.g. { CZ: 0.21 }. */
+  ossRates?: Record<string, number>;
+}
+
+/** Single row: the ifirma connection and invoicing options. */
+export const accountingSettings = sqliteTable('accounting_settings', {
+  id: text('id').primaryKey().$defaultFn(() => 'main'),
+  enabled: bool('enabled').notNull().default(false),
+  /** AES-256-GCM encrypted JSON { login, invoiceKey }; see src/server/crypto.ts. */
+  credentials: text('credentials'),
+  settings: json<AccountingSettings>('settings').notNull().$defaultFn(() => ({})),
+  updatedAt: updatedAt(),
+});
+
+export const invoices = sqliteTable(
+  'invoices',
+  {
+    id: id(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: invoiceKindValues }).notNull(),
+    state: text('state', { enum: invoiceStateValues }).notNull().default('pending'),
+    /** ifirma's invoice id. */
+    externalId: text('external_id'),
+    /** Full invoice number, e.g. "12/10/2026". */
+    number: text('number'),
+    grossAmount: text('gross_amount').notNull(),
+    currency: text('currency').notNull(),
+    /** R2 key of the PDF in the LABELS bucket. */
+    r2Key: text('r2_key'),
+    error: text('error'),
+    uploadedAt: ts('uploaded_at'),
+    uploadError: text('upload_error'),
+    ksefSentAt: ts('ksef_sent_at'),
+    ksefStatus: text('ksef_status'),
+    ksefError: text('ksef_error'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('invoices_order_idx').on(t.orderId),
+    // At most one live invoice per order; failed ones can be retried.
+    uniqueIndex('invoices_one_live_per_order')
+      .on(t.orderId)
+      .where(sql`state in ('pending', 'issued')`),
+  ],
+);
+
 /** Singleton/debounce keys for queued jobs (Cloudflare Queues has no built-in dedupe). */
 export const jobLocks = sqliteTable('job_locks', {
   key: text('key').primaryKey(),
@@ -406,3 +475,5 @@ export type ShippingRule = typeof shippingRules.$inferSelect;
 export type PackagePreset = typeof packagePresets.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type ProductListing = typeof productListings.$inferSelect;
+export type Invoice = typeof invoices.$inferSelect;
+export type AccountingSettingsRow = typeof accountingSettings.$inferSelect;

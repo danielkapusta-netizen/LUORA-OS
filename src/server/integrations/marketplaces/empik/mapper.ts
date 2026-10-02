@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { formatPostalCode } from '../../address';
-import type { NormalizedOrder } from '../../types';
+import { splitTaxId, type InvoiceRequest, type NormalizedOrder } from '../../types';
 
 export const miraklOrderSchema = z.object({
   order_id: z.string(),
@@ -21,6 +21,18 @@ export const miraklOrderSchema = z.object({
   customer: z.object({
     firstname: z.string().nullish(),
     lastname: z.string().nullish(),
+    billing_address: z
+      .object({
+        firstname: z.string().nullish(),
+        lastname: z.string().nullish(),
+        company: z.string().nullish(),
+        street_1: z.string().nullish(),
+        street_2: z.string().nullish(),
+        zip_code: z.string().nullish(),
+        city: z.string().nullish(),
+        country_iso_code: z.string().nullish(),
+      })
+      .nullish(),
     shipping_address: z
       .object({
         firstname: z.string().nullish(),
@@ -70,6 +82,25 @@ export function toAlpha2(code: string | null | undefined): string {
 function pickupPoint(o: MiraklOrder): string | null {
   const field = o.order_additional_fields?.find((f) => f.code === 'delivery-point-name')?.value;
   return o.shipping_pudo_id || field?.trim().toUpperCase() || null;
+}
+
+/** Empik signals an invoice request with the "nip" order field; the company is on the billing address. */
+function invoiceRequest(o: MiraklOrder, fallbackName: string): InvoiceRequest | null {
+  const nip = o.order_additional_fields?.find((f) => f.code === 'nip')?.value?.trim();
+  if (!nip) return null;
+  const b = o.customer.billing_address ?? o.customer.shipping_address;
+  const countryCode = toAlpha2(b?.country_iso_code);
+  const { taxId, euPrefix } = splitTaxId(nip);
+  return {
+    name: b?.company || [b?.firstname, b?.lastname].filter(Boolean).join(' ') || fallbackName,
+    taxId,
+    euPrefix,
+    street: [b?.street_1, b?.street_2].filter(Boolean).join(' '),
+    postalCode: formatPostalCode(b?.zip_code ?? '', countryCode),
+    city: b?.city ?? '',
+    countryCode,
+    email: o.customer_notification_email ?? null,
+  };
 }
 
 function money(value: number): string {
@@ -137,6 +168,7 @@ export function mapMiraklOrder(raw: unknown, mediaBase?: string): NormalizedOrde
       externalProductId: l.offer_id != null ? String(l.offer_id) : null,
       imageUrl: absoluteUrl((l.product_medias?.find((m) => m.type?.toLowerCase() === 'small') ?? l.product_medias?.[0])?.media_url, mediaBase),
     })),
+    invoiceRequest: invoiceRequest(o, buyerName || recipient || 'Empik buyer'),
     revision: o.last_updated_date,
     raw,
   };

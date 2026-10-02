@@ -27,6 +27,29 @@ export interface Buyer {
   login?: string | null;
 }
 
+/** The buyer asked for an invoice; who it is made out to. */
+export interface InvoiceRequest {
+  /** Company name, or the person's name for a private buyer. */
+  name: string;
+  /** Tax number without the country prefix (NIP for Polish companies); null for private buyers. */
+  taxId: string | null;
+  /** EU VAT prefix when the tax number came with one (e.g. "CZ"); null otherwise. */
+  euPrefix: string | null;
+  street: string;
+  postalCode: string;
+  city: string;
+  countryCode: string;
+  email?: string | null;
+}
+
+/** Splits "PL1234567890" / "CZ 12345678" into prefix and digits; plain numbers have no prefix. */
+export function splitTaxId(raw: string | null | undefined): { taxId: string | null; euPrefix: string | null } {
+  const clean = (raw ?? '').replace(/[\s-]/g, '').toUpperCase();
+  if (!clean) return { taxId: null, euPrefix: null };
+  const m = clean.match(/^([A-Z]{2})(\w+)$/);
+  return m ? { taxId: m[2], euPrefix: m[1] } : { taxId: clean, euPrefix: null };
+}
+
 export interface NormalizedOrderItem {
   externalLineId: string;
   sku: string | null;
@@ -62,6 +85,8 @@ export interface NormalizedOrder {
   placedAt: Date;
   paidAt?: Date | null;
   items: NormalizedOrderItem[];
+  /** Set when the buyer asked for an invoice. */
+  invoiceRequest?: InvoiceRequest | null;
   revision?: string | null;
   raw: unknown;
 }

@@ -1,5 +1,10 @@
 import type { Listing, Marketplace, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../types';
 
+/** File name marketplaces accept for an invoice: ASCII only, e.g. "faktura-12-10-2026.pdf". */
+export function invoiceFileName(number: string): string {
+  return `faktura-${number.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')}.pdf`;
+}
+
 export interface SyncResult {
   orders: NormalizedOrder[];
   /** Saved after the orders are stored, and passed to the next call. */
@@ -28,6 +33,9 @@ export interface MarketplaceAdapter {
 
   /** Accepts an order that waits for the seller's decision (Empik). */
   acceptOrder?(order: OrderRef): Promise<void>;
+
+  /** Attaches the invoice PDF to the order. Must be safe to call twice (skips an invoice already there). */
+  uploadInvoice?(order: OrderRef, invoice: { number: string; pdf: Buffer }): Promise<void>;
 
   listListings(): AsyncIterable<Listing>;
 

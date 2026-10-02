@@ -1,4 +1,4 @@
-import { BadgeCheck, ExternalLink, Hash, MapPin, Printer, Store, Truck } from 'lucide-react';
+import { BadgeCheck, ExternalLink, FileText, Hash, MapPin, Printer, Store, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { PrintLabelButton } from '@/components/print-label-button';
@@ -7,9 +7,11 @@ import { ActionForm, SubmitButton } from '@/components/forms';
 import { CustomerSummary, OrderItemsList } from '@/components/order-summary';
 import { buttonClass, Card } from '@/components/ui';
 import { CARRIER_LABELS, cn, formatDate, formatMoney, SERVICE_LABELS } from '@/lib/utils';
+import { invoicesForOrder } from '@/server/services/invoicing';
 import { getOrderDetail } from '@/server/services/orders';
 import { loadRoutingData, routeOrder } from '@/server/services/shipping';
 import { PackedToggle } from '../shipments/packed-toggle';
+import { createInvoiceAction } from '../accounting/actions';
 import { pollShipmentAction, quickLabelAction, retryTrackingAction } from './actions';
 
 function InfoRow({ icon: Icon, label, children }: { icon: typeof Store; label: string; children: React.ReactNode }) {
@@ -40,6 +42,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
   const liveCarrier = live ? (await loadRoutingData()).carriers.find((c) => c.id === live.carrierAccountId) : null;
   const waiting = shipments.some((s) => s.state === 'pending') || Boolean(live && live.state === 'created' && !live.trackingPushedAt && !live.trackingPushError);
   const a = order.shippingAddress;
+  const [invoice] = order.invoiceRequest ? await invoicesForOrder(order.id) : [];
 
   return (
     <Card className="p-5">
@@ -167,6 +170,40 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
             <span className="text-xs text-slate-400">{account.name}: {order.marketplaceStatus}</span>
           </span>
         </InfoRow>
+        {order.invoiceRequest && (
+          <InfoRow icon={FileText} label="Invoice requested">
+            <p>
+              <span className="font-medium">{order.invoiceRequest.name}</span>
+              {order.invoiceRequest.taxId && <span className="text-slate-500"> · NIP {order.invoiceRequest.taxId}</span>}
+            </p>
+            {invoice?.state === 'issued' ? (
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-emerald-700">Invoice {invoice.number ?? invoice.externalId}{invoice.uploadedAt ? ` sent to ${account.name}` : ''}</span>
+                {invoice.r2Key && (
+                  <a href={`/api/invoices/${invoice.id}`} target="_blank" rel="noreferrer" className="font-medium text-brand-700 underline underline-offset-2">
+                    PDF
+                  </a>
+                )}
+              </p>
+            ) : invoice?.state === 'pending' ? (
+              <p className="mt-1 text-xs text-slate-500">Invoice being issued…</p>
+            ) : invoice ? (
+              <p className="mt-1 text-xs text-red-700">
+                {invoice.state === 'manual' ? 'Issue by hand: ' : 'Not issued: '}
+                {invoice.error}{' '}
+                <Link href="/accounting?tab=attention" className="underline">
+                  Accounting
+                </Link>
+              </p>
+            ) : order.status !== 'cancelled' && (order.marketplace === 'allegro' || order.marketplace === 'empik') ? (
+              <ActionForm action={createInvoiceAction.bind(null, order.id)} showOk={false}>
+                <SubmitButton size="sm" variant="secondary" className="mt-1.5 bg-white" pendingText="Requesting…">
+                  <FileText className="size-3.5" /> Create invoice
+                </SubmitButton>
+              </ActionForm>
+            ) : null}
+          </InfoRow>
+        )}
       </div>
 
 

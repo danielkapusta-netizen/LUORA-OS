@@ -251,6 +251,46 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     queue.length = 0;
   });
 
+  it('issues the invoice a buyer asked for once the order ships, attaches it and sends it to KSeF', async () => {
+    const invoicing = await import('@/server/services/invoicing');
+    const db = m.db.getDb();
+    const userId = await adminId();
+    await invoicing.saveAccounting({
+      enabled: true,
+      login: '',
+      invoiceKey: null,
+      settings: { autoOnShipped: true, uploadAllegro: true, uploadEmpik: true, sendB2bToKsef: true, defaultVatRate: 0.23 },
+    });
+    const candidates = (await allOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount);
+    const order = candidates[0];
+    const other = candidates[1];
+    await db
+      .update(m.schema.orders)
+      .set({ invoiceRequest: { name: 'Kosmetyki Sp. z o.o.', taxId: '5250001009', euPrefix: null, street: 'Prosta 1', postalCode: '00-001', city: 'Warszawa', countryCode: 'PL' } })
+      .where(m.orm.eq(m.schema.orders.id, order.id));
+    await expect(invoicing.requestInvoice(other.id, userId)).rejects.toThrow('did not ask for an invoice');
+
+    const form = await m.shipping.shippingFormData(order.id);
+    const shipmentId = await m.shipping.requestShipment(
+      { orderId: order.id, carrierAccountId: form.route!.carrierAccountId, service: form.route!.service, parcel: m.shipping.presetToParcel(form.defaultPreset!), options: {} },
+      userId,
+    );
+    await drain();
+    expect(await invoicing.invoicesForOrder(order.id)).toHaveLength(0); // not shipped until packed
+    await m.shipping.setPacked(shipmentId, true, userId);
+    await drain();
+
+    const [invoice] = await invoicing.invoicesForOrder(order.id);
+    expect(invoice).toMatchObject({ state: 'issued', kind: 'domestic', grossAmount: order.totalAmount, error: null, uploadError: null, ksefError: null });
+    expect(invoice.number).toMatch(/MOCK/);
+    expect(invoice.uploadedAt).toBeInstanceOf(Date);
+    expect(invoice.ksefSentAt).toBeInstanceOf(Date);
+    expect((await invoicing.getInvoicePdf(invoice.id))?.content.subarray(0, 4).toString()).toBe('%PDF');
+    await expect(invoicing.requestInvoice(order.id, userId)).rejects.toThrow('already has an invoice');
+    const awaiting = await invoicing.ordersAwaitingInvoice();
+    expect(awaiting.map((r) => r.order.id)).not.toContain(order.id);
+  });
+
   it('removes demo accounts with their orders, labels and rules', async () => {
     const settings = await import('@/server/services/settings');
     expect(await settings.demoAccountCount()).toBe(5);

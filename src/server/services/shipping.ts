@@ -110,7 +110,7 @@ export function labelReference(orderNumber: string, items: { name: string; quant
 }
 
 /** D1/SQLite reports unique index violations only in the error message. */
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   for (let e = err as { message?: string; cause?: unknown } | undefined; e; e = e.cause as typeof e) {
     if (e.message?.includes('UNIQUE constraint failed')) return true;
   }

@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import type { CredentialsStore, Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
-import type { MarketplaceAdapter, SyncResult } from '../types';
+import { invoiceFileName, type MarketplaceAdapter, type SyncResult } from '../types';
 import { AllegroClient, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
 
@@ -137,6 +137,22 @@ export class AllegroAdapter implements MarketplaceAdapter {
     }
     await this.client.call('PUT', `/order/checkout-forms/${order.externalId}/fulfillment`, {
       body: { status: 'SENT' },
+      responseType: 'none',
+    });
+  }
+
+  /** Two steps: create the invoice entry, then upload its PDF. An entry already holding the file is left alone. */
+  async uploadInvoice(order: OrderRef, invoice: { number: string; pdf: Buffer }): Promise<void> {
+    const path = `/order/checkout-forms/${order.externalId}/invoices`;
+    const existing = await this.client.call<{ invoices: { id: string; invoiceNumber?: string | null; file?: { uploadedAt?: string | null } | null }[] }>('GET', path);
+    const same = existing.invoices.find((i) => i.invoiceNumber === invoice.number);
+    if (same?.file?.uploadedAt) return;
+    const id =
+      same?.id ??
+      (await this.client.call<{ id: string }>('POST', path, { body: { file: { name: invoiceFileName(invoice.number) }, invoiceNumber: invoice.number } })).id;
+    await this.client.call('PUT', `${path}/${id}/file`, {
+      body: invoice.pdf,
+      headers: { 'Content-Type': 'application/pdf' },
       responseType: 'none',
     });
   }

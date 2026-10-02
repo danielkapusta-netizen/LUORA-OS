@@ -57,6 +57,16 @@ describe('mapMiraklOrder', () => {
     expect(o.pickupPointId).toBe('WAW102BAPP');
   });
 
+  it('reads an invoice request from the "nip" field and the billing company', () => {
+    expect(mapMiraklOrder(order).invoiceRequest).toBeNull();
+    const o = mapMiraklOrder({
+      ...order,
+      customer: { ...order.customer, billing_address: { company: 'Salon Urody Anna', street_1: 'Długa 5', zip_code: '31147', city: 'Kraków', country_iso_code: 'POL' } },
+      order_additional_fields: [{ code: 'nip', type: 'STRING', value: '6770065406' }],
+    });
+    expect(o.invoiceRequest).toMatchObject({ name: 'Salon Urody Anna', taxId: '6770065406', euPrefix: null, street: 'Długa 5', postalCode: '31-147', city: 'Kraków', countryCode: 'PL' });
+  });
+
   it('turns Empik’s relative photo paths into full URLs', () => {
     const withMedia = {
       ...order,
@@ -183,6 +193,32 @@ describe('EmpikAdapter', () => {
       http.put(`${BASE}/api/orders/:id/tracking`, () => HttpResponse.json({ message: "Invalid value for field 'carrierCode'", status: 400 }, { status: 400 })),
     );
     await expect(new EmpikAdapter(creds).pushTracking(ref, locker)).rejects.toThrow(/OR23.*paczkomatyinpost.*Empik \(HTTP 400\): Invalid value/);
+  });
+
+  it('attaches the invoice as a CUSTOMER_INVOICE document (OR74), once', async () => {
+    const uploads: { files: string[]; documents: unknown }[] = [];
+    let listed: { file_name: string }[] = [];
+    server.use(
+      http.get(`${BASE}/api/orders/documents`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get('order_ids')).toBe('210045-A');
+        return HttpResponse.json({ order_documents: listed, total_count: listed.length });
+      }),
+      http.post(`${BASE}/api/orders/:id/documents`, async ({ request, params }) => {
+        expect(params.id).toBe('210045-A');
+        const form = await request.formData();
+        const files = form.getAll('files').map((f) => (f as File).name);
+        uploads.push({ files, documents: JSON.parse(await (form.get('order_documents') as Blob).text()) });
+        return HttpResponse.json({ errors_count: 0, order_documents: [] });
+      }),
+    );
+    const ref = { externalId: '210045-A', externalNumber: '210045', raw: order, items: [] };
+    await new EmpikAdapter(creds).uploadInvoice(ref, { number: 'FV 7/10/2026', pdf: Buffer.from('%PDF-1.4') });
+    expect(uploads).toEqual([
+      { files: ['faktura-FV-7-10-2026.pdf'], documents: { order_documents: [{ file_name: 'faktura-FV-7-10-2026.pdf', type_code: 'CUSTOMER_INVOICE' }] } },
+    ]);
+    listed = [{ file_name: 'faktura-FV-7-10-2026.pdf' }];
+    await new EmpikAdapter(creds).uploadInvoice(ref, { number: 'FV 7/10/2026', pdf: Buffer.from('%PDF-1.4') });
+    expect(uploads).toHaveLength(1);
   });
 
   it('accepts every order line (OR21)', async () => {

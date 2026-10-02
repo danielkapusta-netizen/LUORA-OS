@@ -1,6 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client';
-import { orders, shipments, type OrderStatus } from '../db/schema';
+import { invoices, orders, shipments, type OrderStatus } from '../db/schema';
 import { enqueue, JOBS } from '../jobs/queue';
 import { logEvent } from './events';
 import { applyOrderStock, restockOrder, scheduleStockPush } from './inventory';
@@ -106,5 +106,18 @@ export async function changeStatus(
   }
   if (to === 'processing' && order.marketplace === 'allegro') {
     await enqueue(JOBS.marketplaceProcessing, { orderId });
+  }
+  if (to === 'shipped' && order.invoiceRequest) {
+    // Issues the invoice the buyer asked for, if automatic invoicing is on (checked by the job).
+    await enqueue(JOBS.invoiceAuto, { orderId });
+  }
+  if (to === 'cancelled') {
+    const [issued] = await db
+      .select({ number: invoices.number, externalId: invoices.externalId })
+      .from(invoices)
+      .where(and(eq(invoices.orderId, orderId), eq(invoices.state, 'issued')));
+    if (issued) {
+      await logEvent(db, orderId, 'invoice', `Order cancelled after invoice ${issued.number ?? issued.externalId} was issued: issue a correction invoice in ifirma`);
+    }
   }
 }

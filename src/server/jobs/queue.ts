@@ -16,6 +16,10 @@ export const JOBS = {
   stockPush: 'stock-push',
   stockReconcile: 'stock-reconcile',
   orderBackfill: 'order-backfill',
+  invoiceAuto: 'invoice-auto',
+  invoiceCreate: 'invoice-create',
+  invoiceUpload: 'invoice-upload',
+  invoiceKsef: 'invoice-ksef',
 } as const;
 
 export interface JobPayloads {
@@ -31,6 +35,10 @@ export interface JobPayloads {
   [JOBS.stockPush]: { accountId: string };
   [JOBS.stockReconcile]: Record<string, never>;
   [JOBS.orderBackfill]: Record<string, never>;
+  [JOBS.invoiceAuto]: { orderId: string };
+  [JOBS.invoiceCreate]: { invoiceId: string };
+  [JOBS.invoiceUpload]: { invoiceId: string };
+  [JOBS.invoiceKsef]: { invoiceId: string };
 }
 
 export type JobName = keyof JobPayloads;
@@ -68,6 +76,11 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.stockPush]: { retries: 3, delaySeconds: 60 },
   [JOBS.stockReconcile]: { retries: 0, delaySeconds: 0 },
   [JOBS.orderBackfill]: { retries: 0, delaySeconds: 0 },
+  [JOBS.invoiceAuto]: { retries: 2, delaySeconds: 60 },
+  // Issuing is not retried automatically: the invoice id is saved first, but a lost response could still issue twice.
+  [JOBS.invoiceCreate]: { retries: 0, delaySeconds: 0 },
+  [JOBS.invoiceUpload]: { retries: 5, delaySeconds: 60 },
+  [JOBS.invoiceKsef]: { retries: 3, delaySeconds: 120 },
 };
 
 /** A singleton lock is dropped after this long even if its job never reports back. */
