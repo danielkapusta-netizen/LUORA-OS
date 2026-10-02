@@ -7,6 +7,11 @@ import { saveAccountingAction, testAccountingAction } from '../../accounting/act
 
 export const metadata: Metadata = { title: 'Accounting settings' };
 
+const MODES = [
+  { value: 'manual', label: 'Manual', hint: 'Nothing is issued until you press “Create invoice” on the Accounting page or on the order.' },
+  { value: 'auto', label: 'Automatic', hint: 'The invoice is issued as soon as a requested order becomes Shipped (packed + tracking sent).' },
+] as const;
+
 const percent = (v: number | undefined) => (v === undefined ? '' : String(Math.round(v * 10000) / 100));
 
 export default async function AccountingSettingsPage() {
@@ -50,9 +55,27 @@ export default async function AccountingSettingsPage() {
               <Checkbox name="enabled" label="Invoicing is on" defaultChecked={enabled} />
             </fieldset>
 
+            <fieldset>
+              <legend className="mb-1 text-sm font-semibold">Invoicing mode</legend>
+              <p className="mb-2 text-xs text-slate-500">Start with Manual and check the first few invoices in ifirma, then switch to Automatic.</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {MODES.map((m) => (
+                  <label
+                    key={m.value}
+                    className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 p-3 has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50"
+                  >
+                    <input type="radio" name="mode" value={m.value} defaultChecked={(s.autoOnShipped ? 'auto' : 'manual') === m.value} className="mt-0.5 size-4 text-brand-600" />
+                    <span>
+                      <span className="block text-sm font-medium text-slate-900">{m.label}</span>
+                      <span className="block text-xs text-slate-500">{m.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
             <fieldset className="flex flex-col items-start gap-2">
-              <legend className="mb-1 text-sm font-semibold">What happens automatically</legend>
-              <Checkbox name="autoOnShipped" label="Issue the invoice when a requested order becomes Shipped (packed + tracking sent)" defaultChecked={s.autoOnShipped} />
+              <legend className="mb-1 text-sm font-semibold">After an invoice is issued</legend>
               <Checkbox name="uploadAllegro" label="Attach the invoice to the Allegro order" defaultChecked={s.uploadAllegro} />
               <Checkbox name="uploadEmpik" label="Attach the invoice to the Empik order" defaultChecked={s.uploadEmpik} />
               <Checkbox name="sendB2bToKsef" label="Send invoices for companies (with a NIP) to KSeF" defaultChecked={s.sendB2bToKsef} />

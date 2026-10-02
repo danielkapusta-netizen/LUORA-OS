@@ -185,6 +185,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
                   </a>
                 )}
               </p>
+            ) : invoice?.state === 'external' ? (
+              <p className="mt-1 text-xs text-slate-500">Invoiced outside Luora</p>
             ) : invoice?.state === 'pending' ? (
               <p className="mt-1 text-xs text-slate-500">Invoice being issued…</p>
             ) : invoice ? (

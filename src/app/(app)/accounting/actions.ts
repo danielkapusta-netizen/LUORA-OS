@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
 import type { AccountingSettings } from '@/server/db/schema';
-import { checkAccountingConnection, requestInvoice, retryInvoice, saveAccounting } from '@/server/services/invoicing';
+import { checkAccountingConnection, markInvoicedElsewhere, requestInvoice, retryInvoice, saveAccounting, undoInvoicedElsewhere } from '@/server/services/invoicing';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const bool = (fd: FormData, name: string) => fd.get(name) === 'on';
@@ -32,6 +32,24 @@ export async function retryInvoiceAction(invoiceId: string): Promise<ActionResul
   });
 }
 
+export async function markInvoicedElsewhereAction(orderId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  return attempt(async () => {
+    await markInvoicedElsewhere(orderId, user.id);
+    refresh();
+    return 'Marked as already invoiced';
+  });
+}
+
+export async function undoInvoicedElsewhereAction(invoiceId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  return attempt(async () => {
+    await undoInvoicedElsewhere(invoiceId, user.id);
+    refresh();
+    return 'Back in “To issue”';
+  });
+}
+
 /** Percent ("23" or "23%") → fraction (0.23); empty → undefined. */
 function rate(value: string): number | undefined {
   const n = Number(value.replace('%', '').replace(',', '.'));
@@ -54,7 +72,7 @@ function ossRates(value: string): Record<string, number> | undefined {
 export async function saveAccountingAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   const settings: AccountingSettings = {
-    autoOnShipped: bool(fd, 'autoOnShipped'),
+    autoOnShipped: fd.get('mode') === 'auto',
     uploadAllegro: bool(fd, 'uploadAllegro'),
     uploadEmpik: bool(fd, 'uploadEmpik'),
     sendB2bToKsef: bool(fd, 'sendB2bToKsef'),

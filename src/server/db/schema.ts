@@ -29,7 +29,8 @@ export const orderStatusValues = [
 export const shipmentStateValues = ['pending', 'created', 'failed', 'cancelled'] as const;
 export const labelFormatValues = ['pdf', 'zpl'] as const;
 export const labelSizeValues = ['A4', 'A6'] as const;
-export const invoiceStateValues = ['pending', 'issued', 'failed', 'manual'] as const;
+// 'external' = invoiced outside Luora (marked by hand), so the order leaves "To issue".
+export const invoiceStateValues = ['pending', 'issued', 'failed', 'manual', 'external'] as const;
 export const invoiceKindValues = ['domestic', 'oss'] as const;
 
 // ---------------------------------------------------------------- users

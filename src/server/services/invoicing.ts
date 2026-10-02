@@ -110,6 +110,7 @@ export async function requestInvoice(orderId: string, userId: string | null): Pr
   if (!order.invoiceRequest) throw new InvoicingError(`The buyer of order ${order.externalNumber} did not ask for an invoice`);
   if (order.status === 'cancelled') throw new InvoicingError(`Order ${order.externalNumber} is cancelled`);
   if (await liveInvoice(orderId)) throw new InvoicingError(`Order ${order.externalNumber} already has an invoice`);
+  if (await invoicedElsewhere(orderId)) throw new InvoicingError(`Order ${order.externalNumber} is marked as invoiced outside Luora`);
 
   const plan = planInvoice(order, await orderLines(orderId), order.invoiceRequest);
   // A previous "manual" entry is replaced, so the list shows only the latest reason.
@@ -272,6 +273,36 @@ export async function runSendKsef(invoiceId: string): Promise<void> {
   }
 }
 
+async function invoicedElsewhere(orderId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(and(eq(invoices.orderId, orderId), eq(invoices.state, 'external')));
+  return Boolean(row);
+}
+
+/** For orders invoiced outside Luora (e.g. by hand in ifirma): takes them off "To issue" without issuing anything. */
+export async function markInvoicedElsewhere(orderId: string, userId: string | null): Promise<void> {
+  const db = getDb();
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
+  if (!order) throw new InvoicingError('Order not found');
+  if (await liveInvoice(orderId)) throw new InvoicingError(`Order ${order.externalNumber} already has an invoice from Luora`);
+  if (await invoicedElsewhere(orderId)) return;
+  // Earlier "issue by hand" / failed attempts are settled by this.
+  await db.delete(invoices).where(and(eq(invoices.orderId, orderId), inArray(invoices.state, ['manual', 'failed'])));
+  await db.insert(invoices).values({ orderId, kind: 'domestic', state: 'external', grossAmount: order.totalAmount, currency: order.currency, createdBy: userId });
+  await logEvent(db, orderId, 'invoice', 'Marked as invoiced outside Luora', { userId });
+}
+
+/** Undoes markInvoicedElsewhere: the order goes back to "To issue". */
+export async function undoInvoicedElsewhere(invoiceId: string, userId: string | null): Promise<void> {
+  const db = getDb();
+  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
+  if (!invoice || invoice.state !== 'external') throw new InvoicingError('Only orders marked as invoiced outside Luora can be undone');
+  await db.delete(invoices).where(eq(invoices.id, invoiceId));
+  await logEvent(db, invoice.orderId, 'invoice', 'No longer marked as invoiced outside Luora', { userId });
+}
+
 /** Re-queues whatever is unfinished for an invoice: a failed issue, a missing upload or KSeF send. */
 export async function retryInvoice(invoiceId: string, userId: string): Promise<void> {
   const db = getDb();
@@ -281,6 +312,7 @@ export async function retryInvoice(invoiceId: string, userId: string): Promise<v
     await requestInvoice(invoice.orderId, userId);
     return;
   }
+  if (invoice.state === 'external') throw new InvoicingError('This order is marked as invoiced outside Luora');
   if (invoice.state === 'pending') {
     await enqueue(JOBS.invoiceCreate, { invoiceId });
     return;

@@ -291,6 +291,45 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(awaiting.map((r) => r.order.id)).not.toContain(order.id);
   });
 
+  it('in manual mode issues nothing on Shipped, and lets an order be marked as invoiced elsewhere', async () => {
+    const invoicing = await import('@/server/services/invoicing');
+    const db = m.db.getDb();
+    const userId = await adminId();
+    await invoicing.saveAccounting({ enabled: true, login: '', invoiceKey: null, settings: { ...invoicing.DEFAULT_ACCOUNTING_SETTINGS } });
+    expect((await invoicing.loadAccounting()).settings.autoOnShipped).toBe(false);
+    const order = (await allOrders()).find((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount)!;
+    await db
+      .update(m.schema.orders)
+      .set({ invoiceRequest: { name: 'Hygge Twist', taxId: '9512513434', euPrefix: null, street: 'Prosta 2', postalCode: '00-001', city: 'Warszawa', countryCode: 'PL' } })
+      .where(m.orm.eq(m.schema.orders.id, order.id));
+
+    const form = await m.shipping.shippingFormData(order.id);
+    const shipmentId = await m.shipping.requestShipment(
+      { orderId: order.id, carrierAccountId: form.route!.carrierAccountId, service: form.route!.service, parcel: m.shipping.presetToParcel(form.defaultPreset!), options: {} },
+      userId,
+    );
+    await drain();
+    await m.shipping.setPacked(shipmentId, true, userId);
+    await drain();
+    expect(await invoicing.invoicesForOrder(order.id)).toHaveLength(0);
+    const awaitingIds = async () => (await invoicing.ordersAwaitingInvoice()).map((r) => r.order.id);
+    expect(await awaitingIds()).toContain(order.id);
+
+    await invoicing.markInvoicedElsewhere(order.id, userId);
+    await invoicing.markInvoicedElsewhere(order.id, userId); // twice is harmless
+    const marked = await invoicing.invoicesForOrder(order.id);
+    expect(marked).toHaveLength(1);
+    expect(marked[0].state).toBe('external');
+    expect(await awaitingIds()).not.toContain(order.id);
+    expect((await invoicing.listInvoices('attention')).map((r) => r.invoice.id)).not.toContain(marked[0].id);
+    await expect(invoicing.requestInvoice(order.id, userId)).rejects.toThrow('invoiced outside Luora');
+    await drain();
+    expect(await invoicing.invoicesForOrder(order.id)).toHaveLength(1);
+
+    await invoicing.undoInvoicedElsewhere(marked[0].id, userId);
+    expect(await awaitingIds()).toContain(order.id);
+  });
+
   it('removes demo accounts with their orders, labels and rules', async () => {
     const settings = await import('@/server/services/settings');
     expect(await settings.demoAccountCount()).toBe(5);

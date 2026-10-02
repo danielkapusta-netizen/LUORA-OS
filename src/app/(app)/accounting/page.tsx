@@ -1,4 +1,4 @@
-import { FileText } from 'lucide-react';
+import { Check, FileText, Undo2 } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AutoRefresh } from '@/components/auto-refresh';
@@ -10,7 +10,7 @@ import { requireUser } from '@/server/auth';
 import type { Invoice } from '@/server/db/schema';
 import type { InvoiceRequest } from '@/server/integrations/types';
 import { accountingCounts, listInvoices, loadAccounting, ordersAwaitingInvoice, type AccountingTab } from '@/server/services/invoicing';
-import { createInvoiceAction, retryInvoiceAction } from './actions';
+import { createInvoiceAction, markInvoicedElsewhereAction, retryInvoiceAction, undoInvoicedElsewhereAction } from './actions';
 
 export const metadata: Metadata = { title: 'Accounting' };
 
@@ -37,6 +37,7 @@ function InvoiceState({ invoice, cancelled }: { invoice: Invoice; cancelled: boo
   if (invoice.state === 'pending') return <Badge tone="blue">Being issued</Badge>;
   if (invoice.state === 'failed') return <Badge tone="red">Not issued</Badge>;
   if (invoice.state === 'manual') return <Badge tone="amber">Issue by hand</Badge>;
+  if (invoice.state === 'external') return <Badge tone="gray">Invoiced outside Luora</Badge>;
   return cancelled ? <Badge tone="red">Order cancelled</Badge> : <Badge tone="green">Issued</Badge>;
 }
 
@@ -66,8 +67,14 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
           </Alert>
         </div>
       )}
-      {accounting.enabled && !accounting.settings.autoOnShipped && (
-        <p className="mb-3 text-sm text-slate-500">Automatic invoicing is off: press “Create invoice” on each order, or switch it on in Settings → Accounting.</p>
+      {accounting.enabled && (
+        <p className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+          <Badge tone={accounting.settings.autoOnShipped ? 'green' : 'gray'}>Mode: {accounting.settings.autoOnShipped ? 'Automatic' : 'Manual'}</Badge>
+          {accounting.settings.autoOnShipped ? 'Invoices are issued when a requested order becomes Shipped.' : 'Press “Create invoice” on each order.'}
+          <Link href="/settings/accounting" className="font-medium text-brand-700 underline underline-offset-2">
+            Change
+          </Link>
+        </p>
       )}
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -122,11 +129,18 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                       </td>
                       <td className={cn(td, 'text-right tabular-nums whitespace-nowrap')}>{formatMoney(order.totalAmount, order.currency)}</td>
                       <td className={cn(td, 'text-right')}>
-                        <ActionForm action={createInvoiceAction.bind(null, order.id)}>
-                          <SubmitButton size="sm" pendingText="Requesting…">
-                            <FileText className="size-3.5" /> Create invoice
-                          </SubmitButton>
-                        </ActionForm>
+                        <div className="flex flex-wrap justify-end gap-1.5">
+                          <ActionForm action={markInvoicedElsewhereAction.bind(null, order.id)}>
+                            <SubmitButton size="sm" variant="secondary" pendingText="…">
+                              <Check className="size-3.5" /> Already invoiced
+                            </SubmitButton>
+                          </ActionForm>
+                          <ActionForm action={createInvoiceAction.bind(null, order.id)}>
+                            <SubmitButton size="sm" pendingText="Requesting…">
+                              <FileText className="size-3.5" /> Create invoice
+                            </SubmitButton>
+                          </ActionForm>
+                        </div>
                         {!['shipped', 'delivered'].includes(order.status) && <p className="mt-1 text-xs text-slate-400">Not shipped yet</p>}
                       </td>
                     </tr>
@@ -203,6 +217,13 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                             <a className={buttonClass('secondary', 'sm')} href={`/api/invoices/${i.id}`} target="_blank" rel="noreferrer">
                               <FileText className="size-3.5" /> PDF
                             </a>
+                          )}
+                          {i.state === 'external' && (
+                            <ActionForm action={undoInvoicedElsewhereAction.bind(null, i.id)}>
+                              <SubmitButton size="sm" variant="secondary" pendingText="…">
+                                <Undo2 className="size-3.5" /> Undo
+                              </SubmitButton>
+                            </ActionForm>
                           )}
                           {retry && !cancelled && (
                             <ActionForm action={retryInvoiceAction.bind(null, i.id)}>
