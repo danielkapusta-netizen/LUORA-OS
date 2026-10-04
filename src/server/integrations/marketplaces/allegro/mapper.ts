@@ -106,14 +106,17 @@ export function mapAllegroCheckoutForm(raw: unknown): NormalizedOrder {
   const countryCode = a?.countryCode ?? 'PL';
   const cod = f.payment?.type === 'CASH_ON_DELIVERY';
   const boughtAt = f.lineItems.map((li) => li.boughtAt).filter(Boolean).sort()[0];
+  const fulfilmentCancelled = f.fulfillment?.status === 'CANCELLED';
 
   return {
     externalId: f.id,
     // Allegro has no short order number; the first block of the UUID is what sellers quote.
     externalNumber: f.id.split('-')[0].toUpperCase(),
     marketplaceStatus: `${f.status} / ${f.fulfillment?.status ?? 'NEW'}`,
-    readyToShip: f.status === 'READY_FOR_PROCESSING',
-    cancelled: f.status === 'CANCELLED',
+    // A paid order that is cancelled afterwards keeps the payment status READY_FOR_PROCESSING; only
+    // its fulfilment status says CANCELLED.
+    readyToShip: f.status === 'READY_FOR_PROCESSING' && !fulfilmentCancelled,
+    cancelled: f.status === 'CANCELLED' || fulfilmentCancelled,
     fulfilled: SHIPPED_FULFILLMENT.has(f.fulfillment?.status ?? ''),
     buyer: {
       name: buyerName,

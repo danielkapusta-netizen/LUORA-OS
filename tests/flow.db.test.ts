@@ -394,6 +394,29 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     await db.delete(s.products).where(orm.eq(s.products.id, serum.id));
   });
 
+  it('imports an order that Allegro cancelled before we ever saw it as Cancelled: no stock taken, no label', async () => {
+    const { mapAllegroCheckoutForm } = await import('@/server/integrations/marketplaces/allegro/mapper');
+    const form = (await import('./fixtures/allegro/checkout-form.json')).default;
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [account] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'allegro'));
+    const stockBefore = await productStock();
+
+    const late = mapAllegroCheckoutForm({ ...form, id: '04c89f70-a846-11f1-b5ab-250f33abf7a1', status: 'READY_FOR_PROCESSING', fulfillment: { status: 'CANCELLED' } });
+    const result = await m.orders.upsertOrders(account, [late]);
+    expect(result.created).toBe(1);
+    const [order] = await db.select().from(s.orders).where(orm.eq(s.orders.externalId, late.externalId));
+    expect(order).toMatchObject({ status: 'cancelled', readyToShip: false, stockApplied: false, marketplaceStatus: 'READY_FOR_PROCESSING / CANCELLED' });
+    expect(await productStock()).toEqual(stockBefore);
+    const events = await db.select().from(s.orderEvents).where(orm.eq(s.orderEvents.orderId, order.id));
+    expect(events[0].message).toMatch(/Imported from .* \(placed \d+ days ago\)/);
+
+    const carrier = (await db.select().from(s.carrierAccounts))[0];
+    await expect(
+      m.shipping.requestShipment({ orderId: order.id, carrierAccountId: carrier.id, service: 'x', parcel: { weightKg: 1, lengthCm: 10, widthCm: 10, heightCm: 10 } as never, options: {} }, null),
+    ).rejects.toThrow('is cancelled');
+  });
+
   it('rates products by units sold in the period, ignoring cancelled orders', async () => {
     const { productStats } = await import('@/server/services/product-stats');
     const db = m.db.getDb();

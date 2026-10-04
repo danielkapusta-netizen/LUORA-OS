@@ -29,6 +29,15 @@ function store(overrides: Partial<AllegroCredentials> = {}) {
 }
 
 describe('mapAllegroCheckoutForm', () => {
+  it('treats a paid order whose fulfilment was cancelled as cancelled, not ready to ship', () => {
+    const cancelled = mapAllegroCheckoutForm({ ...form, status: 'READY_FOR_PROCESSING', fulfillment: { status: 'CANCELLED' } });
+    expect(cancelled).toMatchObject({ cancelled: true, readyToShip: false, marketplaceStatus: 'READY_FOR_PROCESSING / CANCELLED' });
+    // Still an active order while its fulfilment is NEW or being processed.
+    expect(mapAllegroCheckoutForm({ ...form, fulfillment: { status: 'PROCESSING' } })).toMatchObject({ cancelled: false, readyToShip: true });
+    // A cancelled checkout form stays cancelled as before.
+    expect(mapAllegroCheckoutForm({ ...form, status: 'CANCELLED' })).toMatchObject({ cancelled: true, readyToShip: false });
+  });
+
   it('normalises a paid parcel-locker order', () => {
     const o = mapAllegroCheckoutForm(form);
     expect(o).toMatchObject({

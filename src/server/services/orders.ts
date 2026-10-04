@@ -68,6 +68,12 @@ function initialStatus(n: NormalizedOrder): OrderStatus {
   return 'new';
 }
 
+/** The import event. An order that reaches us days after it was placed says so, so it doesn't look new. */
+export function importMessage(accountName: string, placedAt: Date, now = new Date()): string {
+  const days = Math.floor((now.getTime() - placedAt.getTime()) / 86_400_000);
+  return days > 3 ? `Imported from ${accountName} (placed ${days} days ago)` : `Imported from ${accountName}`;
+}
+
 /** Statuses in which the buyer's data may still be refreshed from the marketplace. */
 const EDITABLE: OrderStatus[] = ['new', 'processing', 'on_hold'];
 
@@ -119,7 +125,7 @@ export async function upsertOrders(
         await tx.batch([
           insertOrder,
           ...(await itemStatements(tx, account.id, id, n)),
-          tx.insert(orderEvents).values({ orderId: id, type: 'sync', message: `Imported from ${account.name}` }),
+          tx.insert(orderEvents).values({ orderId: id, type: 'sync', message: importMessage(account.name, n.placedAt) }),
         ] as unknown as Parameters<Tx['batch']>[0]);
         if (!n.cancelled && !n.fulfilled) stockChanged = (await applyOrderStock(tx, id)) || stockChanged;
         newOrderIds.push(id);
