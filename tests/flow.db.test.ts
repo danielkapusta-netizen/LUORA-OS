@@ -356,6 +356,11 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect((await invoicing.invoicesByOrder([shopifyOrder.id])).get(shopifyOrder.id)).toMatchObject({ uploadError: null, state: 'issued' });
     await expect(invoicing.requestInvoice(shopifyOrder.id, userId, { anyOrder: true })).rejects.toThrow('already has an invoice');
     expect((await invoicing.ordersAwaitingInvoice()).map((r) => r.order.id)).not.toContain(shopifyOrder.id);
+    // The Shipments page asks for up to 100 orders at once; D1 allows 100 bound values per query, so
+    // the lookup goes in chunks and must still find invoices on both sides of a chunk boundary.
+    const filler = Array.from({ length: 250 }, (_, i) => `no-such-order-${i}`);
+    const many = await invoicing.invoicesByOrder([...filler.slice(0, 120), shopifyOrder.id, ...filler.slice(120), allegroOrder.id]);
+    expect([...many.keys()].sort()).toEqual([shopifyOrder.id, allegroOrder.id].sort());
     expect(invoicing.uploadEnabled('shopify', invoicing.DEFAULT_ACCOUNTING_SETTINGS)).toBe(false);
     expect(invoicing.uploadEnabled('allegro', invoicing.DEFAULT_ACCOUNTING_SETTINGS)).toBe(true);
   });

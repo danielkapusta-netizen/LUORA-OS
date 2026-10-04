@@ -3,7 +3,7 @@
 import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { getCfEnv } from '../cf';
 import { encryptJson } from '../crypto';
-import { getDb } from '../db/client';
+import { chunk, getDb } from '../db/client';
 import {
   accountingSettings,
   invoices,
@@ -426,13 +426,15 @@ export async function accountingCounts() {
 /** The newest invoice of each order (for the Shipments page); orders marked as invoiced elsewhere have none. */
 export async function invoicesByOrder(orderIds: string[]): Promise<Map<string, Invoice>> {
   const out = new Map<string, Invoice>();
-  if (orderIds.length === 0) return out;
-  const rows = await getDb()
-    .select()
-    .from(invoices)
-    .where(and(inArray(invoices.orderId, orderIds), ne(invoices.state, 'external')))
-    .orderBy(desc(invoices.createdAt));
-  for (const row of rows) if (!out.has(row.orderId)) out.set(row.orderId, row);
+  // D1 allows 100 bound parameters per query, so the ids go in chunks.
+  for (const ids of chunk([...new Set(orderIds)])) {
+    const rows = await getDb()
+      .select()
+      .from(invoices)
+      .where(and(inArray(invoices.orderId, ids), ne(invoices.state, 'external')))
+      .orderBy(desc(invoices.createdAt));
+    for (const row of rows) if (!out.has(row.orderId)) out.set(row.orderId, row);
+  }
   return out;
 }
 
