@@ -153,6 +153,12 @@ export class AllegroShippingAdapter implements CarrierAdapter {
         };
       }
     }
+    if (req.insuranceAmount) {
+      // Kept in the Worker logs so the insurance rules of each delivery service can be checked.
+      const methodId = req.service === BUYER_CHOICE ? req.deliveryMethodId : req.service;
+      const service = (await this.loadDeliveryServices()).find((s) => s.id.deliveryMethodId === methodId);
+      console.log('[allegro-shipping] insured label', req.insuranceAmount, req.currency, JSON.stringify(service ?? { deliveryMethodId: methodId }));
+    }
     // Our shipment id doubles as the command id, so a retried request can't create a second shipment.
     const body = buildCreateCommand(req, this.settings, req.shipmentId, requireIban);
     const response = await this.client.callWithHeaders('POST', '/shipment-management/shipments/create-commands', { body });

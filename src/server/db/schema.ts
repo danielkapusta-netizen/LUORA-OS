@@ -108,6 +108,8 @@ export interface CarrierSettings {
   /** Allegro: bank account for cash on delivery payouts. */
   codIban?: string;
   codOwnerName?: string;
+  /** Allegro Delivery: delivery methods that refused a label without insurance (learned automatically). */
+  insuranceMethods?: string[];
 }
 
 export const carrierAccounts = sqliteTable('carrier_accounts', {

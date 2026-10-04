@@ -417,6 +417,58 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     ).rejects.toThrow('is cancelled');
   });
 
+  it('insures Allegro Delivery parcels the service requires insurance for, and learns which methods those are', async () => {
+    const { MockCarrierAdapter } = await import('@/server/integrations/carriers/mock/adapter');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [carrier] = await db.select().from(s.carrierAccounts).where(orm.eq(s.carrierAccounts.type, 'allegro_shipping'));
+    const withShipment = new Set((await db.select({ id: s.shipments.orderId }).from(s.shipments)).map((r) => r.id));
+    const free = (await allOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !withShipment.has(o.id));
+    expect(free.length).toBeGreaterThanOrEqual(3);
+    const [packeta, other, later] = free;
+    const parcel = { weightKg: 1, lengthCm: 20, widthCm: 15, heightCm: 5 } as never;
+    const label = (orderId: string) => m.shipping.requestShipment({ orderId, carrierAccountId: carrier.id, service: 'buyer_choice', parcel, options: {} }, null);
+    const shipmentsOf = (orderId: string) => db.select().from(s.shipments).where(orm.eq(s.shipments.orderId, orderId)).orderBy(s.shipments.createdAt);
+
+    // Packeta / ORLEN Paczka: insured from the start, for what the buyer paid.
+    await db.update(s.orders).set({ deliveryMethodId: 'dm-packeta', deliveryMethodName: 'Allegro Wysyłka z Polski do Czech - Automaty Paczkowe Packeta, ORLEN Paczka' }).where(orm.eq(s.orders.id, packeta.id));
+    await label(packeta.id);
+    expect((await shipmentsOf(packeta.id))[0].options.insuranceAmount).toBe(Number(packeta.totalAmount).toFixed(2));
+
+    // Any other method is untouched, until Allegro refuses it for missing insurance.
+    await db.update(s.orders).set({ deliveryMethodId: 'dm-other', deliveryMethodName: 'Allegro Something New' }).where(orm.eq(s.orders.id, other.id));
+    const original = MockCarrierAdapter.prototype.createShipment;
+    MockCarrierAdapter.prototype.createShipment = async function (this: InstanceType<typeof MockCarrierAdapter>, req) {
+      if (req.deliveryMethodId === 'dm-other' && !req.insuranceAmount) {
+        return { state: 'failed', externalId: '', error: 'insurance: Ubezpieczenie jest wymagane w celu utworzenia przesyłki (Insurance is required to create a parcel)' };
+      }
+      return original.call(this, req);
+    };
+    try {
+      await label(other.id);
+      expect((await shipmentsOf(other.id))[0].options.insuranceAmount).toBeUndefined();
+      await drain(['tracking-push']);
+      const [first, retry] = await shipmentsOf(other.id);
+      expect(first).toMatchObject({ state: 'failed' });
+      expect(first.error).toMatch(/retried automatically with insurance/);
+      expect(retry.options.insuranceAmount).toBe(Number(other.totalAmount).toFixed(2));
+      expect(retry.state).toBe('created');
+      expect((await shipmentsOf(other.id)).length).toBe(2); // exactly one retry
+
+      // Learned: the next order with this method is insured on the first try.
+      const [learned] = await db.select().from(s.carrierAccounts).where(orm.eq(s.carrierAccounts.id, carrier.id));
+      expect(learned.settings.insuranceMethods).toEqual(['dm-other']);
+      await db.update(s.orders).set({ deliveryMethodId: 'dm-other', deliveryMethodName: 'Allegro Something New' }).where(orm.eq(s.orders.id, later.id));
+      await label(later.id);
+      expect((await shipmentsOf(later.id))[0].options.insuranceAmount).toBe(Number(later.totalAmount).toFixed(2));
+      await drain(['tracking-push']);
+      expect((await shipmentsOf(later.id)).map((x) => x.state)).toEqual(['created']);
+    } finally {
+      MockCarrierAdapter.prototype.createShipment = original;
+      queue.length = 0;
+    }
+  });
+
   it('rates products by units sold in the period, ignoring cancelled orders', async () => {
     const { productStats } = await import('@/server/services/product-stats');
     const db = m.db.getDb();

@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { declaredValue, deliveryMethodOf, isInsuranceRequiredError, isPacketaMethod } from '@/server/integrations/carriers/allegro-shipping/insurance';
 import { allegroPhone, allegroReferenceNumber, AllegroShippingAdapter, buildCreateCommand } from '@/server/integrations/carriers/allegro-shipping/adapter';
 import { buildShipxPayload, InpostAdapter, sendingMethodFor } from '@/server/integrations/carriers/inpost/adapter';
 import type { ShipmentRequest } from '@/server/integrations/carriers/types';
@@ -275,3 +276,27 @@ describe('Allegro Delivery (Wysyłam z Allegro)', () => {
     });
   });
 });
+
+describe('Allegro Delivery insurance', () => {
+  it('recognises the Packeta / ORLEN Paczka methods and the insurance-required error', () => {
+    expect(isPacketaMethod('Allegro Wysyłka z Polski do Słowacji - Odbiór w Punkcie Packeta pobranie, ORLEN Paczka')).toBe(true);
+    expect(isPacketaMethod('Allegro Wysyłka z Polski do Czech - Automaty Paczkowe Packeta, ORLEN Paczka')).toBe(true);
+    expect(isPacketaMethod('Allegro International Automaty Paczkowe Czechy, InPost')).toBe(false);
+    expect(isPacketaMethod(null)).toBe(false);
+    expect(isInsuranceRequiredError('insurance: Ubezpieczenie jest wymagane w celu utworzenia przesyłki (Insurance is required to create a parcel)')).toBe(true);
+    expect(isInsuranceRequiredError('receiver.street: Długość podanego tekstu przekracza 35 znaków')).toBe(false);
+  });
+
+  it('insures for what the buyer paid, in the order currency', () => {
+    expect(declaredValue({ totalAmount: '19.6' })).toBe('19.60');
+    expect(deliveryMethodOf('buyer_choice', { deliveryMethodId: 'dm-1' })).toBe('dm-1');
+    expect(deliveryMethodOf('dm-2', { deliveryMethodId: 'dm-1' })).toBe('dm-2');
+  });
+
+  it('puts the insurance in the create command', () => {
+    const cmd = buildCreateCommand({ ...request, service: 'buyer_choice', insuranceAmount: '19.60', currency: 'EUR' }, {}, request.shipmentId);
+    expect(cmd.input.insurance).toEqual({ amount: '19.60', currency: 'EUR' });
+    expect(buildCreateCommand({ ...request, service: 'buyer_choice', insuranceAmount: null }, {}, request.shipmentId).input.insurance).toBeUndefined();
+  });
+});
+

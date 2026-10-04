@@ -18,6 +18,7 @@ import {
   type Shipment,
   type ShipmentOptions,
 } from '../db/schema';
+import { declaredValue, deliveryMethodOf, isInsuranceRequiredError, isPacketaMethod } from '../integrations/carriers/allegro-shipping/insurance';
 import type { CarrierService, ShipmentStatus } from '../integrations/carriers/types';
 import type { LabelFormat, LabelSize, ParcelSpec } from '../integrations/types';
 import { enqueue, JOBS } from '../jobs/queue';
@@ -139,6 +140,13 @@ export async function requestShipment(input: ShipmentInput, userId: string | nul
     .where(eq(orderItems.orderId, order.id))
     .orderBy(asc(orderItems.externalLineId));
 
+  // Allegro's Packeta services (and any method it has refused before) need the parcel insured.
+  const method = deliveryMethodOf(input.service, order);
+  const insure =
+    carrier.type === 'allegro_shipping' &&
+    !input.options.insuranceAmount &&
+    ((input.service === 'buyer_choice' && isPacketaMethod(order.deliveryMethodName)) || Boolean(method && carrier.settings.insuranceMethods?.includes(method)));
+
   let id: string;
   try {
     const [row] = await db
@@ -152,6 +160,7 @@ export async function requestShipment(input: ShipmentInput, userId: string | nul
         options: {
           reference: carrier.settings.productsInReference === false ? order.externalNumber : labelReference(order.externalNumber, items),
           ...input.options,
+          ...(insure ? { insuranceAmount: declaredValue(order) } : {}),
         },
         labelFormat: input.labelFormat ?? carrier.settings.labelFormat ?? 'pdf',
         labelSize: input.labelSize ?? carrier.settings.labelSize ?? 'A6',
@@ -190,6 +199,47 @@ async function failShipment(shipment: Shipment, error: string): Promise<void> {
   const db = getDb();
   await db.update(shipments).set({ state: 'failed', error }).where(eq(shipments.id, shipment.id));
   await logEvent(db, shipment.orderId, 'error', `Label failed: ${error}`);
+  await retryWithInsurance(shipment, error);
+}
+
+/**
+ * Allegro refused the label because the delivery service requires insurance: remember the method,
+ * so the next label for it is insured from the start, and request this label once more insured.
+ * (A new shipment is needed: Allegro keeps the result of the failed command.)
+ */
+async function retryWithInsurance(shipment: Shipment, error: string): Promise<void> {
+  if (!isInsuranceRequiredError(error) || shipment.options.insuranceAmount) return;
+  const row = await findShipment(shipment.id);
+  if (!row || row.carrier.type !== 'allegro_shipping') return;
+  const { order, carrier } = row;
+  const db = getDb();
+  const method = deliveryMethodOf(shipment.service, order);
+  const known = carrier.settings.insuranceMethods ?? [];
+  if (method && !known.includes(method)) {
+    await db
+      .update(carrierAccounts)
+      .set({ settings: { ...carrier.settings, insuranceMethods: [...known, method] } })
+      .where(eq(carrierAccounts.id, carrier.id));
+  }
+  try {
+    await requestShipment(
+      {
+        orderId: order.id,
+        carrierAccountId: carrier.id,
+        service: shipment.service,
+        parcel: shipment.parcel,
+        options: { ...shipment.options, insuranceAmount: declaredValue(order) },
+        labelFormat: shipment.labelFormat,
+        labelSize: shipment.labelSize,
+        batchId: shipment.batchId,
+      },
+      null,
+    );
+    await db.update(shipments).set({ error: `${error} (retried automatically with insurance)` }).where(eq(shipments.id, shipment.id));
+    await logEvent(db, order.id, 'label', `Allegro requires insurance for this delivery method: label requested again with insurance ${declaredValue(order)} ${order.currency}`);
+  } catch (err) {
+    await logEvent(db, order.id, 'error', `Could not retry with insurance: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 /** Job: calls the carrier to create the shipment. */
