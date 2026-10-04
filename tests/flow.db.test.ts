@@ -310,6 +310,56 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     await db.delete(s.products).where(orm.eq(s.products.id, night.id));
   });
 
+  it('issues an invoice for any order from the Shipments page: attached on Allegro, PDF only on Shopify', async () => {
+    const invoicing = await import('@/server/services/invoicing');
+    const db = m.db.getDb();
+    const userId = await adminId();
+    await invoicing.saveAccounting({
+      enabled: true,
+      login: '',
+      invoiceKey: null,
+      settings: { ...invoicing.DEFAULT_ACCOUNTING_SETTINGS },
+    });
+    const taken = new Set((await db.select({ id: m.schema.invoices.orderId }).from(m.schema.invoices)).map((r) => r.id));
+    const free = (marketplace: string) =>
+      allOrders().then((rows) => rows.find((o) => o.marketplace === marketplace && o.status !== 'cancelled' && !o.invoiceRequest && !taken.has(o.id) && o.shippingAddress.countryCode === 'PL' && o.currency === 'PLN'));
+    const shopifyOrder = (await free('shopify'))!;
+    const allegroOrder = (await free('allegro'))!;
+    expect(shopifyOrder && allegroOrder).toBeTruthy();
+
+    // The Accounting page's rule is unchanged: a buyer who didn't ask gets no invoice from there.
+    await expect(invoicing.requestInvoice(shopifyOrder.id, userId)).rejects.toThrow('only issued for Allegro and Empik');
+    await expect(invoicing.requestInvoice(allegroOrder.id, userId)).rejects.toThrow('did not ask for an invoice');
+
+    // Made out to the delivery address as a private buyer.
+    expect(invoicing.invoiceRequestFor(shopifyOrder)).toMatchObject({ name: shopifyOrder.shippingAddress.name, taxId: null, countryCode: 'PL' });
+
+    queue.length = 0;
+    const shopifyInvoiceId = await invoicing.requestInvoice(shopifyOrder.id, userId, { anyOrder: true });
+    const allegroInvoiceId = await invoicing.requestInvoice(allegroOrder.id, userId, { anyOrder: true });
+    await drain();
+    const byOrder = await invoicing.invoicesByOrder([shopifyOrder.id, allegroOrder.id]);
+    const shopify = byOrder.get(shopifyOrder.id)!;
+    const allegro = byOrder.get(allegroOrder.id)!;
+    expect([shopify.id, allegro.id]).toEqual([shopifyInvoiceId, allegroInvoiceId]);
+
+    // Shopify: issued and downloadable, nothing to upload.
+    expect(shopify).toMatchObject({ state: 'issued', error: null, uploadedAt: null, uploadError: null });
+    expect((await invoicing.getInvoicePdf(shopify.id))?.content.subarray(0, 4).toString()).toBe('%PDF');
+    // Allegro: also attached to the order.
+    expect(allegro).toMatchObject({ state: 'issued', error: null, uploadError: null });
+    expect(allegro.uploadedAt).toBeInstanceOf(Date);
+
+    // Retrying a Shopify invoice never tries to upload it.
+    await invoicing.retryInvoice(shopify.id, userId);
+    await drain();
+    expect((await invoicing.invoicesByOrder([shopifyOrder.id])).get(shopifyOrder.id)).toMatchObject({ uploadError: null, state: 'issued' });
+    await expect(invoicing.requestInvoice(shopifyOrder.id, userId, { anyOrder: true })).rejects.toThrow('already has an invoice');
+    expect((await invoicing.ordersAwaitingInvoice()).map((r) => r.order.id)).not.toContain(shopifyOrder.id);
+    expect(invoicing.uploadEnabled('shopify', invoicing.DEFAULT_ACCOUNTING_SETTINGS)).toBe(false);
+    expect(invoicing.uploadEnabled('allegro', invoicing.DEFAULT_ACCOUNTING_SETTINGS)).toBe(true);
+  });
+
   it('groups Allegro and Empik offers that share an EAN and links them to a Shopify product in one step', async () => {
     const db = m.db.getDb();
     const { schema: s, orm } = m;

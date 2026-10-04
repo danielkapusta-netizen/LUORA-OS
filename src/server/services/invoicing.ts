@@ -20,6 +20,7 @@ import { buildDomesticPayload, buildOssPayload, planInvoice, warsawDate } from '
 import { MockInvoicingAdapter } from '../integrations/accounting/mock';
 import { nbpRateBefore } from '../integrations/accounting/nbp';
 import type { InvoiceKind, InvoicingAdapter } from '../integrations/accounting/types';
+import type { InvoiceRequest } from '../integrations/types';
 import { enqueue, JOBS } from '../jobs/queue';
 import { getMarketplaceAdapter, loadMarketplaceAccount, readCredentials } from './accounts';
 import { logEvent } from './events';
@@ -96,23 +97,57 @@ async function orderLines(orderId: string) {
     .orderBy(orderItems.externalLineId);
 }
 
+/** Only Allegro and Empik can receive an invoice; Shopify's invoice stays a PDF to download. */
+export function isUploadable(marketplace: string): boolean {
+  return (INVOICED_MARKETPLACES as readonly string[]).includes(marketplace);
+}
+
+/** Is a new invoice for this marketplace attached to the order automatically? (Shopify never is.) */
+export function uploadEnabled(marketplace: string, settings: Pick<AccountingSettings, 'uploadAllegro' | 'uploadEmpik'>): boolean {
+  return marketplace === 'allegro' ? Boolean(settings.uploadAllegro) : marketplace === 'empik' ? Boolean(settings.uploadEmpik) : false;
+}
+
+/**
+ * Who an invoice is made out to: the buyer's invoice request, or, for an order whose buyer didn't
+ * ask for one, the delivery name and address as a private buyer.
+ */
+export function invoiceRequestFor(order: Pick<Order, 'invoiceRequest' | 'shippingAddress' | 'buyer'>): InvoiceRequest {
+  if (order.invoiceRequest) return order.invoiceRequest;
+  const a = order.shippingAddress;
+  return {
+    name: a.name || order.buyer.name,
+    taxId: null,
+    euPrefix: null,
+    street: a.street,
+    postalCode: a.postalCode,
+    city: a.city,
+    countryCode: a.countryCode,
+    email: a.email ?? order.buyer.email ?? undefined,
+  };
+}
+
 /**
  * Queues the invoice for one order. Orders that need a person (foreign company, discount, …) get a
  * "manual" entry with the reason instead. Returns the invoice id.
+ *
+ * Normally only for Allegro / Empik orders whose buyer asked for an invoice (the Accounting page);
+ * with `anyOrder` for every order, as the button on the Shipments page does.
  */
-export async function requestInvoice(orderId: string, userId: string | null): Promise<string> {
+export async function requestInvoice(orderId: string, userId: string | null, opts: { anyOrder?: boolean } = {}): Promise<string> {
   const db = getDb();
   const accounting = await loadAccounting();
   if (!accounting.enabled) throw new InvoicingError('Invoicing is switched off in Settings → Accounting');
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!order) throw new InvoicingError('Order not found');
-  if (!(INVOICED_MARKETPLACES as readonly string[]).includes(order.marketplace)) throw new InvoicingError('Invoices are only issued for Allegro and Empik orders');
-  if (!order.invoiceRequest) throw new InvoicingError(`The buyer of order ${order.externalNumber} did not ask for an invoice`);
+  if (!opts.anyOrder) {
+    if (!isUploadable(order.marketplace)) throw new InvoicingError('Invoices are only issued for Allegro and Empik orders');
+    if (!order.invoiceRequest) throw new InvoicingError(`The buyer of order ${order.externalNumber} did not ask for an invoice`);
+  }
   if (order.status === 'cancelled') throw new InvoicingError(`Order ${order.externalNumber} is cancelled`);
   if (await liveInvoice(orderId)) throw new InvoicingError(`Order ${order.externalNumber} already has an invoice`);
   if (await invoicedElsewhere(orderId)) throw new InvoicingError(`Order ${order.externalNumber} is marked as invoiced outside Luora`);
 
-  const plan = planInvoice(order, await orderLines(orderId), order.invoiceRequest);
+  const plan = planInvoice(order, await orderLines(orderId), invoiceRequestFor(order));
   // A previous "manual" entry is replaced, so the list shows only the latest reason.
   await db.delete(invoices).where(and(eq(invoices.orderId, orderId), eq(invoices.state, 'manual')));
   if (plan.kind === 'manual') {
@@ -152,7 +187,7 @@ export async function autoInvoice(orderId: string): Promise<void> {
 }
 
 async function payloadFor(order: Order, kind: InvoiceKind, adapter: InvoicingAdapter, settings: AccountingSettings) {
-  const req = order.invoiceRequest!;
+  const req = invoiceRequestFor(order);
   const issueDate = warsawDate(new Date());
   const saleDate = warsawDate(order.shippedAt ?? new Date());
   const items = await orderLines(order.id);
@@ -193,8 +228,7 @@ export async function runCreateInvoice(invoiceId: string): Promise<void> {
   const [fresh] = await db.select().from(invoices).where(eq(invoices.id, invoice.id));
   await logEvent(db, order.id, 'invoice', `Invoice ${fresh.number ?? fresh.externalId} issued in ifirma`);
 
-  const marketplaceOn = order.marketplace === 'allegro' ? accounting.settings.uploadAllegro : order.marketplace === 'empik' ? accounting.settings.uploadEmpik : false;
-  if (marketplaceOn) await enqueue(JOBS.invoiceUpload, { invoiceId: invoice.id });
+  if (uploadEnabled(order.marketplace, accounting.settings)) await enqueue(JOBS.invoiceUpload, { invoiceId: invoice.id });
   if (invoice.kind === 'domestic' && order.invoiceRequest?.taxId && accounting.settings.sendB2bToKsef) {
     await enqueue(JOBS.invoiceKsef, { invoiceId: invoice.id });
   }
@@ -231,6 +265,8 @@ export async function runUploadInvoice(invoiceId: string): Promise<void> {
   const db = getDb();
   let [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
   if (!invoice || invoice.state !== 'issued' || invoice.uploadedAt) return;
+  const [target] = await db.select({ marketplace: orders.marketplace }).from(orders).where(eq(orders.id, invoice.orderId));
+  if (!target || !isUploadable(target.marketplace)) return;
   if (!invoice.r2Key || !invoice.number) {
     await fetchDocument(invoice, await getInvoicingAdapter());
     [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
@@ -309,7 +345,8 @@ export async function retryInvoice(invoiceId: string, userId: string): Promise<v
   const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
   if (!invoice) throw new InvoicingError('Invoice not found');
   if (invoice.state === 'failed' || invoice.state === 'manual') {
-    await requestInvoice(invoice.orderId, userId);
+    // The invoice already exists, so the order was eligible (it may have come from the Shipments page).
+    await requestInvoice(invoice.orderId, userId, { anyOrder: true });
     return;
   }
   if (invoice.state === 'external') throw new InvoicingError('This order is marked as invoiced outside Luora');
@@ -318,6 +355,11 @@ export async function retryInvoice(invoiceId: string, userId: string): Promise<v
     return;
   }
   const [order] = await db.select().from(orders).where(eq(orders.id, invoice.orderId));
+  if (!isUploadable(order.marketplace)) {
+    // Shopify can't receive an invoice: all that can be unfinished is the PDF.
+    if (!invoice.r2Key) await fetchDocument(invoice, await getInvoicingAdapter());
+    return;
+  }
   if (!invoice.uploadedAt) {
     await db.update(invoices).set({ uploadError: null }).where(eq(invoices.id, invoiceId));
     await enqueue(JOBS.invoiceUpload, { invoiceId });
@@ -379,6 +421,19 @@ export async function listInvoices(tab: Exclude<AccountingTab, 'to_issue'>) {
 export async function accountingCounts() {
   const [toIssue, attention] = await Promise.all([ordersAwaitingInvoice(), listInvoices('attention')]);
   return { toIssue: toIssue.length, attention: attention.length };
+}
+
+/** The newest invoice of each order (for the Shipments page); orders marked as invoiced elsewhere have none. */
+export async function invoicesByOrder(orderIds: string[]): Promise<Map<string, Invoice>> {
+  const out = new Map<string, Invoice>();
+  if (orderIds.length === 0) return out;
+  const rows = await getDb()
+    .select()
+    .from(invoices)
+    .where(and(inArray(invoices.orderId, orderIds), ne(invoices.state, 'external')))
+    .orderBy(desc(invoices.createdAt));
+  for (const row of rows) if (!out.has(row.orderId)) out.set(row.orderId, row);
+  return out;
 }
 
 export async function invoicesForOrder(orderId: string) {

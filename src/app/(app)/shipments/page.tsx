@@ -8,9 +8,11 @@ import { MarketplaceBadge, ShipmentBadge } from '@/components/badges';
 import { buttonClass, Card, CardHeader, EmptyState, PageHeader, td, th } from '@/components/ui';
 import { cn, formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
+import { invoicesByOrder, loadAccounting, uploadEnabled } from '@/server/services/invoicing';
 import { itemsByOrder } from '@/server/services/orders';
 import { recentBatches, recentShipments } from '@/server/services/shipping';
 import { ShipmentOrderDetails } from './order-details';
+import { InvoiceCell } from './invoice-cell';
 import { PackedToggle } from './packed-toggle';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { retryFailedTrackingAction } from './actions';
@@ -29,14 +31,16 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
   await requireUser();
   const { state = '' } = await searchParams;
   const [rows, batches] = await Promise.all([recentShipments({ state: state || undefined }), recentBatches(10)]);
-  const items = await itemsByOrder(rows.map((r) => r.order.id));
+  const orderIds = rows.map((r) => r.order.id);
+  const [items, invoices, accounting] = await Promise.all([itemsByOrder(orderIds), invoicesByOrder(orderIds), loadAccounting()]);
+  const invoiceBusy = [...invoices.values()].some((i) => i.state === 'pending' || (i.state === 'issued' && !i.r2Key));
 
   return (
     <>
-      <AutoRefresh active={rows.some((r) => r.shipment.state === 'pending')} />
+      <AutoRefresh active={rows.some((r) => r.shipment.state === 'pending') || invoiceBusy} />
       <PageHeader
         title="Shipments"
-        description="Labels bought through InPost and Allegro Delivery. To create labels in bulk, select orders on the Orders page."
+        description="Labels bought through InPost and Allegro Delivery, and an invoice for any order. To create labels in bulk, select orders on the Orders page."
         actions={
           rows.some((r) => r.shipment.trackingPushError && !r.shipment.trackingPushedAt) && (
             <ActionForm action={retryFailedTrackingAction}>
@@ -69,6 +73,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                     <th className="w-10" />
                     <th className={th}>Buyer</th>
                     <th className={th}>State</th>
+                    <th className={th}>Invoice</th>
                     <th className={th}>Packed</th>
                     <th className={cn(th, 'text-right')}>Label</th>
                   </tr>
@@ -77,7 +82,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                   {rows.map(({ shipment: s, order, carrierName }) => (
                     <ExpandableRow
                       key={s.id}
-                      colSpan={5}
+                      colSpan={6}
                       className="hover:bg-slate-50"
                       details={<ShipmentOrderDetails order={order} shipment={s} carrierName={carrierName} items={items.get(order.id) ?? []} />}
                     >
@@ -103,6 +108,16 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                             <span className="text-slate-500">Sending tracking…</span>
                           ) : null}
                         </div>
+                      </td>
+                      <td className={td}>
+                        {order.status !== 'cancelled' && (
+                          <InvoiceCell
+                            orderId={order.id}
+                            marketplace={order.marketplace}
+                            invoice={invoices.get(order.id)}
+                            uploads={uploadEnabled(order.marketplace, accounting.settings)}
+                          />
+                        )}
                       </td>
                       <td className={td}>
                         {s.state === 'created' && <PackedToggle shipmentId={s.id} packed={Boolean(s.packedAt)} />}

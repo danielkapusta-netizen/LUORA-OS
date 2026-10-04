@@ -9,7 +9,7 @@ import { cn, formatDate, formatMoney } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import type { Invoice } from '@/server/db/schema';
 import type { InvoiceRequest } from '@/server/integrations/types';
-import { accountingCounts, listInvoices, loadAccounting, ordersAwaitingInvoice, type AccountingTab } from '@/server/services/invoicing';
+import { accountingCounts, invoiceRequestFor, listInvoices, loadAccounting, ordersAwaitingInvoice, uploadEnabled, type AccountingTab } from '@/server/services/invoicing';
 import { createInvoiceAction, markInvoicedElsewhereAction, retryInvoiceAction, undoInvoicedElsewhereAction } from './actions';
 
 export const metadata: Metadata = { title: 'Accounting' };
@@ -48,7 +48,12 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
   const [accounting, counts] = await Promise.all([loadAccounting(), accountingCounts()]);
   const awaiting = tab === 'to_issue' ? await ordersAwaitingInvoice() : [];
   const rows = tab === 'to_issue' ? [] : await listInvoices(tab);
-  const busy = rows.some((r) => r.invoice.state === 'pending' || (r.invoice.state === 'issued' && !r.invoice.uploadedAt && !r.invoice.uploadError));
+  const busy = rows.some(
+    (r) =>
+      r.invoice.state === 'pending' ||
+      (r.invoice.state === 'issued' && !r.invoice.r2Key) ||
+      (r.invoice.state === 'issued' && uploadEnabled(r.order.marketplace, accounting.settings) && !r.invoice.uploadedAt && !r.invoice.uploadError),
+  );
 
   return (
     <>
@@ -180,7 +185,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                         {cancelled && i.state === 'issued' && <p className="mt-1 max-w-96 text-xs text-red-700">Issue a correction invoice in ifirma.</p>}
                       </td>
                       <td className={td}>
-                        <Buyer req={order.invoiceRequest} />
+                        <Buyer req={invoiceRequestFor(order)} />
                       </td>
                       <td className={td}>
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -198,6 +203,8 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                           <>
                             {i.uploadedAt ? (
                               <p className="text-emerald-700">Sent to {accountName}</p>
+                            ) : !uploadEnabled(order.marketplace, accounting.settings) ? (
+                              <p className="text-slate-500">PDF only{order.marketplace === 'shopify' ? ' (Shopify can’t receive invoices)' : ''}</p>
                             ) : i.uploadError ? (
                               <p className="max-w-72 text-red-700">Not sent to {accountName}: {i.uploadError}</p>
                             ) : (

@@ -42,7 +42,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
   const liveCarrier = live ? (await loadRoutingData()).carriers.find((c) => c.id === live.carrierAccountId) : null;
   const waiting = shipments.some((s) => s.state === 'pending') || Boolean(live && live.state === 'created' && !live.trackingPushedAt && !live.trackingPushError);
   const a = order.shippingAddress;
-  const [invoice] = order.invoiceRequest ? await invoicesForOrder(order.id) : [];
+  const [invoice] = await invoicesForOrder(order.id);
 
   return (
     <Card className="p-5">
@@ -170,6 +170,25 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
             <span className="text-xs text-slate-400">{account.name}: {order.marketplaceStatus}</span>
           </span>
         </InfoRow>
+        {!order.invoiceRequest && invoice && (invoice.state === 'issued' || invoice.state === 'pending') && (
+          <InfoRow icon={FileText} label="Invoice">
+            {invoice.state === 'pending' ? (
+              <p className="text-xs text-slate-500">Being issued…</p>
+            ) : (
+              <p className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-emerald-700">
+                  Invoice {invoice.number ?? invoice.externalId}
+                  {invoice.uploadedAt ? ` sent to ${account.name}` : ''}
+                </span>
+                {invoice.r2Key && (
+                  <a href={`/api/invoices/${invoice.id}`} target="_blank" rel="noreferrer" className="font-medium text-brand-700 underline underline-offset-2">
+                    PDF
+                  </a>
+                )}
+              </p>
+            )}
+          </InfoRow>
+        )}
         {order.invoiceRequest && (
           <InfoRow icon={FileText} label="Invoice requested">
             <p>
