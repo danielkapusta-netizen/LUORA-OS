@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import { httpConfig } from '../../../http';
-import type { CredentialsStore, Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
+import type { CredentialsStore, Listing, NormalizedOrder, StockUpdate } from '../../types';
 import type { MarketplaceAdapter, SyncResult } from '../types';
 import { VonHalskyApiError, VonHalskyClient, type VonHalskyCredentials } from './client';
 import { isImportable, mapVonHalskyOrder, vonHalskyOrderSchema } from './mapper';
@@ -93,7 +93,7 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
    * Nothing to send: the label is made in InPost's shipping system and linked to the order by the
    * buyer's e-mail address; the order list then shows the parcel.
    */
-  async pushTracking(_order: OrderRef, _tracking: TrackingInfo): Promise<void> {}
+  async pushTracking(): Promise<void> {}
 
   async *listListings(): AsyncIterable<Listing> {
     let offset = 0;

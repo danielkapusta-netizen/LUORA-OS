@@ -142,7 +142,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                 </div>
                 <Checkbox name="sandbox" label="Use InPost's stage (test) environment" defaultChecked={pub.sandbox === true} />
                 <p className="text-xs text-slate-500">
-                  Shipments are made with your InPost account (labels), not here: InPost links the label to the order through the buyer's e-mail.
+                  Shipments are made with your InPost account (labels), not here: InPost links the label to the order through the buyer’s e-mail.
                 </p>
               </fieldset>
             )}
