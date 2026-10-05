@@ -1,5 +1,6 @@
 // InPost Von Halsky merchant API (https://inpsa-api-portal.inpost-group.com): OAuth2 client
 // credentials, JSON over HTTPS, everything inside the merchant organisation's path.
+import { createHash, randomBytes } from 'node:crypto';
 import { HttpError, request, type RequestOptions } from '../../../http';
 import type { CredentialsStore } from '../../types';
 
@@ -11,6 +12,8 @@ export interface VonHalskyCredentials {
   /** Use InPost's stage environment instead of production. */
   sandbox?: boolean;
   accessToken?: string;
+  /** Set after "Connect Von Halsky" (Authorization Code flow); valid 30 days, replaced on every refresh. */
+  refreshToken?: string;
   /** ISO date */
   expiresAt?: string;
 }
@@ -22,6 +25,29 @@ export function vonHalskyHosts(sandbox?: boolean) {
   return sandbox
     ? { api: 'https://stage-api.inpost-group.com/inpsa', token: 'https://stage-account.inpost-group.com/oauth2/token' }
     : { api: 'https://api.inpost-group.com/inpsa', token: 'https://account.inpost-group.com/oauth2/token' };
+}
+
+/** Register exactly this path (prefixed with the app's URL) as a redirect URL of the Merchant Portal application. */
+export const VON_HALSKY_REDIRECT_PATH = '/api/oauth/vonhalsky/callback';
+
+const base64url = (bytes: Buffer) => bytes.toString('base64url');
+
+/** PKCE: a random verifier and its S256 challenge. */
+export function pkcePair(): { verifier: string; challenge: string } {
+  const verifier = base64url(randomBytes(32));
+  return { verifier, challenge: base64url(createHash('sha256').update(verifier).digest()) };
+}
+
+export function vonHalskyAuthorizeUrl(creds: Pick<VonHalskyCredentials, 'clientId' | 'sandbox'>, redirectUri: string, state: string, challenge: string): string {
+  const url = new URL(vonHalskyHosts(creds.sandbox).token.replace(/\/token$/, '/authorize'));
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', creds.clientId);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('scope', VON_HALSKY_SCOPES);
+  url.searchParams.set('state', state);
+  url.searchParams.set('code_challenge', challenge);
+  url.searchParams.set('code_challenge_method', 'S256');
+  return url.toString();
 }
 
 /** An API error with the reason InPost gave ({ errorCode, errorMessage, details }), readable for staff. */
@@ -63,7 +89,70 @@ const TOKEN_MARGIN_MS = 60_000;
 
 interface TokenResponse {
   access_token: string;
+  refresh_token?: string;
   expires_in: number;
+}
+
+/**
+ * Posts to the token endpoint. Servers differ in how a client proves itself, so the variants in
+ * `order` are tried until one is accepted: "basic" (secret in an Authorization header), "body"
+ * (secret in the form) and "public" (only the client id, which PKCE makes sufficient).
+ */
+async function postToken(creds: VonHalskyCredentials, params: Record<string, string>, order: ('basic' | 'body' | 'public')[]): Promise<TokenResponse> {
+  const url = vonHalskyHosts(creds.sandbox).token;
+  let last: unknown;
+  for (const how of order) {
+    const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' };
+    const form = new URLSearchParams(params);
+    if (how === 'basic') headers.Authorization = `Basic ${Buffer.from(`${encodeURIComponent(creds.clientId)}:${encodeURIComponent(creds.clientSecret)}`).toString('base64')}`;
+    else form.set('client_id', creds.clientId);
+    if (how === 'body') form.set('client_secret', creds.clientSecret);
+    try {
+      return (await request<TokenResponse>(url, { method: 'POST', headers, body: form, retries: 1 })).data;
+    } catch (err) {
+      last = err;
+      if (!(err instanceof HttpError) || ![400, 401].includes(err.status)) break;
+    }
+  }
+  throw describeTokenError(last);
+}
+
+function describeTokenError(err: unknown): unknown {
+  const described = describeVonHalskyError(err);
+  if (described instanceof VonHalskyApiError && /unauthorized_client/.test(described.message)) {
+    return new VonHalskyApiError(
+      described.status,
+      `${described.message}. This InPost application isn’t allowed to sign in with client credentials (an Authorization Code app): press “Connect Von Halsky” on the Integrations page instead.`,
+    );
+  }
+  if (described instanceof VonHalskyApiError && /invalid_grant/.test(described.message)) {
+    return new VonHalskyApiError(described.status, `${described.message}. The InPost login has expired (30 days without use): press “Connect Von Halsky” again.`);
+  }
+  return described;
+}
+
+function withTokens(creds: VonHalskyCredentials, data: TokenResponse): VonHalskyCredentials {
+  return {
+    ...creds,
+    accessToken: data.access_token,
+    // A refresh token is replaced every time; keep the old one if the answer carries none.
+    refreshToken: data.refresh_token ?? creds.refreshToken,
+    expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+  };
+}
+
+function clientCredentialsToken(creds: VonHalskyCredentials): Promise<VonHalskyCredentials> {
+  return postToken(creds, { grant_type: 'client_credentials', scope: VON_HALSKY_SCOPES }, ['basic', 'body']).then((d) => withTokens(creds, d));
+}
+
+function refreshVonHalskyToken(creds: VonHalskyCredentials): Promise<VonHalskyCredentials> {
+  return postToken(creds, { grant_type: 'refresh_token', refresh_token: creds.refreshToken! }, ['public', 'basic', 'body']).then((d) => withTokens(creds, d));
+}
+
+/** Exchanges the code from the login redirect for tokens (Authorization Code flow with PKCE). */
+export async function exchangeVonHalskyCode(creds: VonHalskyCredentials, code: string, redirectUri: string, verifier: string): Promise<VonHalskyCredentials> {
+  const data = await postToken(creds, { grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: verifier }, ['public', 'basic', 'body']);
+  return withTokens(creds, data);
 }
 
 export class VonHalskyClient {
@@ -82,30 +171,9 @@ export class VonHalskyClient {
     return `/v1/organizations/${encodeURIComponent(this.organizationId)}${rest}`;
   }
 
-  private async fetchToken(): Promise<VonHalskyCredentials> {
+  private fetchToken(): Promise<VonHalskyCredentials> {
     const c = this.creds.get();
-    const url = vonHalskyHosts(c.sandbox).token;
-    const body = { grant_type: 'client_credentials', scope: VON_HALSKY_SCOPES };
-    const basic = Buffer.from(`${encodeURIComponent(c.clientId)}:${encodeURIComponent(c.clientSecret)}`).toString('base64');
-    const headers = { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' };
-    let data: TokenResponse;
-    try {
-      ({ data } = await request<TokenResponse>(url, { method: 'POST', headers: { ...headers, Authorization: `Basic ${basic}` }, body: new URLSearchParams(body), retries: 1 }));
-    } catch (err) {
-      // Some servers want the client id and secret in the form body instead of a Basic header.
-      if (!(err instanceof HttpError) || ![400, 401].includes(err.status)) throw describeVonHalskyError(err);
-      try {
-        ({ data } = await request<TokenResponse>(url, {
-          method: 'POST',
-          headers,
-          body: new URLSearchParams({ ...body, client_id: c.clientId, client_secret: c.clientSecret }),
-          retries: 1,
-        }));
-      } catch (second) {
-        throw describeVonHalskyError(second);
-      }
-    }
-    return { ...c, accessToken: data.access_token, expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString() };
+    return c.refreshToken ? refreshVonHalskyToken(c) : clientCredentialsToken(c);
   }
 
   private async accessToken(forceRefresh = false): Promise<string> {

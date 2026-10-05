@@ -10,6 +10,7 @@ import type { MarketplaceAccount } from '@/server/db/schema';
 import { env } from '@/server/env';
 import { ALLEGRO_REDIRECT_PATH } from '@/server/integrations/marketplaces/allegro/client';
 import { EMPIK_CARRIER_CODES, resolveEmpikCarrier } from '@/server/integrations/marketplaces/empik/adapter';
+import { VON_HALSKY_REDIRECT_PATH } from '@/server/integrations/marketplaces/vonhalsky/client';
 import { DEFAULT_SHOPIFY_API_VERSION } from '@/server/integrations/marketplaces/shopify/client';
 import { DEFAULT_PICKUP_POINT_KEYS } from '@/server/integrations/marketplaces/shopify/mapper';
 import { loadMarketplaceAccount } from '@/server/services/accounts';
@@ -131,7 +132,9 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                 <p className="text-xs text-slate-500">
                   In the InPost Merchant Portal open Integrations → API, press “Create App” and tick exactly these permissions: Categories (read),
                   Offers (read), Offers (write), Orders (read), Orders (write). Copy the organisation id, the Client ID and the Client secret here
-                  (the secret is shown only once). Orders arrive without a redirect or login: Luora signs in with the client credentials.
+                  (the secret is shown only once). Create the app with the “Authorization Code” method and register this exact Redirect URL:{' '}
+                  <code className="select-all">{`${env().APP_URL}${VON_HALSKY_REDIRECT_PATH}`}</code>. Save here, then press “Connect Von Halsky” on the
+                  Integrations page and approve access at InPost.
                 </p>
                 <Field label="Organisation ID" hint="The brand/store created for this integration (a UUID).">
                   <Input name="organizationId" defaultValue={str('organizationId')} placeholder="00000000-0000-0000-0000-000000000000" required />

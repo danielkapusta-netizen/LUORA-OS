@@ -2,7 +2,14 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { VonHalskyAdapter } from '@/server/integrations/marketplaces/vonhalsky/adapter';
-import { VonHalskyApiError, type VonHalskyCredentials } from '@/server/integrations/marketplaces/vonhalsky/client';
+import {
+  VonHalskyApiError,
+  VonHalskyClient,
+  exchangeVonHalskyCode,
+  pkcePair,
+  vonHalskyAuthorizeUrl,
+  type VonHalskyCredentials,
+} from '@/server/integrations/marketplaces/vonhalsky/client';
 import { isImportable, mapVonHalskyOrder, vonHalskyOrderSchema } from '@/server/integrations/marketplaces/vonhalsky/mapper';
 import { httpConfig } from '@/server/http';
 
@@ -276,5 +283,58 @@ describe('VonHalskyAdapter', () => {
     await expect(new VonHalskyAdapter(store()).setStock([{ externalId: 'offer-3', sku: null, ref: {}, quantity: 1 }])).rejects.toThrow(
       'InPost Von Halsky refused the stock update (offer offer-3: Offer is closed)',
     );
+  });
+});
+
+describe('Authorization Code sign-in', () => {
+  it('builds a PKCE authorize URL for the right environment', () => {
+    const { verifier, challenge } = pkcePair();
+    expect(verifier.length).toBeGreaterThanOrEqual(43);
+    expect(challenge).not.toBe(verifier);
+    const url = new URL(vonHalskyAuthorizeUrl({ clientId: 'cid', sandbox: true }, 'https://app.example/api/oauth/vonhalsky/callback', 'st', challenge));
+    expect(url.origin + url.pathname).toBe('https://stage-account.inpost-group.com/oauth2/authorize');
+    expect(url.searchParams.get('response_type')).toBe('code');
+    expect(url.searchParams.get('client_id')).toBe('cid');
+    expect(url.searchParams.get('redirect_uri')).toBe('https://app.example/api/oauth/vonhalsky/callback');
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(url.searchParams.get('code_challenge')).toBe(challenge);
+    expect(url.searchParams.get('scope')).toContain('api:orders:read');
+  });
+
+  it('exchanges the code with the PKCE verifier and keeps the refresh token', async () => {
+    const seen: URLSearchParams[] = [];
+    server.use(
+      http.post(TOKEN_URL, async ({ request }) => {
+        seen.push(new URLSearchParams(await request.text()));
+        return HttpResponse.json({ access_token: 'a1', refresh_token: 'r1', expires_in: 300 });
+      }),
+    );
+    const next = await exchangeVonHalskyCode({ organizationId: ORG, clientId: 'cid', clientSecret: '', sandbox: true }, 'the-code', 'https://app.example/cb', 'ver');
+    expect(seen[0].get('grant_type')).toBe('authorization_code');
+    expect(seen[0].get('code')).toBe('the-code');
+    expect(seen[0].get('code_verifier')).toBe('ver');
+    expect(seen[0].get('redirect_uri')).toBe('https://app.example/cb');
+    expect(next.accessToken).toBe('a1');
+    expect(next.refreshToken).toBe('r1');
+  });
+
+  it('refreshes with the rotating refresh token and saves the new one', async () => {
+    const seen: URLSearchParams[] = [];
+    server.use(
+      http.post(TOKEN_URL, async ({ request }) => {
+        seen.push(new URLSearchParams(await request.text()));
+        return HttpResponse.json({ access_token: 'a2', refresh_token: 'r2', expires_in: 300 });
+      }),
+      http.get(`${API}/offers`, ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer a2');
+        return HttpResponse.json({ items: [] });
+      }),
+    );
+    const creds = store({ refreshToken: 'r1', accessToken: 'old', expiresAt: new Date(Date.now() - 1000).toISOString() });
+    const client = new VonHalskyClient(creds);
+    await client.call('GET', client.org('/offers'));
+    expect(seen[0].get('grant_type')).toBe('refresh_token');
+    expect(seen[0].get('refresh_token')).toBe('r1');
+    expect(creds.get().refreshToken).toBe('r2');
   });
 });

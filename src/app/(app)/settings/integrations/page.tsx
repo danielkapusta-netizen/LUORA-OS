@@ -77,6 +77,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             {marketplaces.map((a) => {
               const keys = storedCredentialKeys(a.credentials);
               const allegroConnected = a.type === 'allegro' && keys.includes('refreshToken');
+              const vonHalskyConnected = a.type === 'vonhalsky' && (keys.includes('refreshToken') || keys.includes('accessToken'));
               return (
                 <li key={a.id} className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
                   <div className="min-w-0 space-y-1">
@@ -86,6 +87,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                       {!a.enabled && <Badge>Disabled</Badge>}
                       {a.stockSyncEnabled && <Badge tone={a.stockDryRun ? 'amber' : 'green'}>{a.stockDryRun ? 'Stock: dry run' : 'Stock sync on'}</Badge>}
                       {a.type === 'allegro' && !isMockMode() && (allegroConnected ? <Badge tone="green">Connected</Badge> : <Badge tone="red">Not connected</Badge>)}
+                      {a.type === 'vonhalsky' && !isMockMode() && (vonHalskyConnected ? <Badge tone="green">Connected</Badge> : <Badge tone="red">Not connected</Badge>)}
                     </div>
                     <p className="text-xs text-slate-500">Last sync {timeAgo(a.lastSyncedAt)}</p>
                     {a.lastError && <p className="text-xs text-red-700">Error: {a.lastError}</p>}
@@ -99,6 +101,11 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                     {a.type === 'allegro' && admin && !isMockMode() && (
                       <a className={buttonClass(allegroConnected ? 'secondary' : 'primary', 'sm')} href={`/api/oauth/allegro/start?accountId=${a.id}`}>
                         {allegroConnected ? 'Reconnect Allegro' : 'Connect Allegro'}
+                      </a>
+                    )}
+                    {a.type === 'vonhalsky' && admin && !isMockMode() && (
+                      <a className={buttonClass(vonHalskyConnected ? 'secondary' : 'primary', 'sm')} href={`/api/oauth/vonhalsky/start?accountId=${a.id}`}>
+                        {vonHalskyConnected ? 'Reconnect Von Halsky' : 'Connect Von Halsky'}
                       </a>
                     )}
                     <ActionForm action={syncAccountAction.bind(null, a.id)}>
