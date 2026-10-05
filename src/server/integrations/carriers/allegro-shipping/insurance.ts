@@ -9,12 +9,15 @@ export function isPacketaMethod(name: string | null | undefined): boolean {
 /** The error Allegro returns for a label sent without the insurance a service requires. */
 export function isInsuranceRequiredError(message: string | null | undefined): boolean {
   const text = message ?? '';
-  return /insurance/i.test(text) && /wymagane|required/i.test(text);
+  if (/insurance/i.test(text) && /wymagane|required/i.test(text)) return true;
+  // Cash on delivery abroad: "Invalid Insurance amount, must be greater or equal to COD amount".
+  return /insurance/i.test(text) && /COD|pobrania/i.test(text);
 }
 
 /** What to insure the parcel for: what the buyer paid, in the order's currency. */
-export function declaredValue(order: { totalAmount: string }): string {
-  return Number(order.totalAmount).toFixed(2);
+export function declaredValue(order: { totalAmount: string; codAmount?: string | null }): string {
+  // Allegro wants the insurance to be at least the cash-on-delivery amount.
+  return Math.max(Number(order.totalAmount), Number(order.codAmount ?? 0)).toFixed(2);
 }
 
 /** The delivery method a label is bought for: the buyer's, unless staff picked another service. */

@@ -293,6 +293,8 @@ describe('Allegro Delivery insurance', () => {
 
   it('insures for what the buyer paid, in the order currency', () => {
     expect(declaredValue({ totalAmount: '19.6' })).toBe('19.60');
+    expect(declaredValue({ totalAmount: '400', codAmount: '431.00' })).toBe('431.00');
+    expect(isInsuranceRequiredError('insurance.amount: Wartość ubezpieczenia musi być większa lub równa wartości kwoty pobrania. (Invalid Insurance amount, must be greater or equal to COD amount)')).toBe(true);
     expect(deliveryMethodOf('buyer_choice', { deliveryMethodId: 'dm-1' })).toBe('dm-1');
     expect(deliveryMethodOf('dm-2', { deliveryMethodId: 'dm-1' })).toBe('dm-2');
   });
