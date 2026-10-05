@@ -117,17 +117,17 @@ describe('IfirmaClient', () => {
 
 describe('planInvoice', () => {
   it('picks domestic for Poland and OSS for a private buyer elsewhere in the EU', () => {
-    expect(planInvoice(order(), items, company)).toEqual({ kind: 'domestic' });
+    expect(planInvoice(order(), items)).toEqual({ kind: 'domestic' });
     const cz = order({ currency: 'CZK', totalAmount: '630.00', shippingAmount: '0', shippingAddress: { ...order().shippingAddress, countryCode: 'CZ' } });
-    expect(planInvoice(cz, [{ name: 'Krem', quantity: 2, unitPrice: '315.00' }], person)).toEqual({ kind: 'oss' });
+    expect(planInvoice(cz, [{ name: 'Krem', quantity: 2, unitPrice: '315.00' }])).toEqual({ kind: 'oss' });
   });
 
   it('leaves non-EU buyers and totals that do not add up to a person', () => {
     const cz = order({ shippingAddress: { ...order().shippingAddress, countryCode: 'CZ' } });
     // Companies elsewhere in the EU get an OSS invoice too.
-    expect(planInvoice(cz, items, { ...company, euPrefix: 'CZ', countryCode: 'CZ' })).toEqual({ kind: 'oss' });
-    expect(planInvoice(order({ shippingAddress: { ...order().shippingAddress, countryCode: 'UA' } }), items, person)).toMatchObject({ kind: 'manual' });
-    expect(planInvoice(order({ totalAmount: '119.80' }), items, company)).toMatchObject({ kind: 'manual', reason: expect.stringContaining('discount') });
+    expect(planInvoice(cz, items)).toEqual({ kind: 'oss' });
+    expect(planInvoice(order({ shippingAddress: { ...order().shippingAddress, countryCode: 'UA' } }), items)).toMatchObject({ kind: 'manual' });
+    expect(planInvoice(order({ totalAmount: '119.80' }), items)).toMatchObject({ kind: 'manual', reason: expect.stringContaining('discount') });
   });
 });
 
@@ -169,7 +169,7 @@ describe('OSS invoice for a Hungarian order in HUF', () => {
   const huItems = [{ name: 'Krem', quantity: 1, unitPrice: '4130.00' }];
 
   it('is planned as OSS and carries the country name, the 27% VAT and the NBP rate', () => {
-    expect(planInvoice(hu, huItems, buyer)).toEqual({ kind: 'oss' });
+    expect(planInvoice(hu, huItems)).toEqual({ kind: 'oss' });
     const p = buildOssPayload(hu, huItems, buyer, { ...ctx, vatRate: 0.27, exchangeRate: 0.0116 });
     expect(p).toMatchObject({ Jezyk: 'hu', Waluta: 'HUF', KrajDostawy: 'HU', KrajWysylki: 'PL', KursWalutyZDniaPoprzedzajacegoDzienWystawieniaFaktury: 0.0116 });
     expect(p.Kontrahent).toMatchObject({ Kraj: 'Węgry', KodKraju: 'HU', KodPocztowy: '1011', OsobaFizyczna: true, NIP: null });
@@ -178,7 +178,7 @@ describe('OSS invoice for a Hungarian order in HUF', () => {
 
   it('keeps the VAT number of a company on the OSS invoice', () => {
     const company = { ...buyer, name: 'Nagy Kft.', taxId: '12345678', euPrefix: 'HU' };
-    expect(planInvoice(hu, huItems, company)).toEqual({ kind: 'oss' });
+    expect(planInvoice(hu, huItems)).toEqual({ kind: 'oss' });
     expect(buildOssPayload(hu, huItems, company, { ...ctx, vatRate: 0.27, exchangeRate: 0.0116 }).Kontrahent).toMatchObject({ PrefiksUE: 'HU', NIP: '12345678', OsobaFizyczna: false });
   });
 });

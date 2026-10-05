@@ -53,7 +53,7 @@ const cents = (v: string | number | null | undefined) => Math.round(Number(v ?? 
  * Poland → domestic invoice; any other EU country → OSS invoice (companies too, by choice).
  * Buyers outside the EU are left for a person.
  */
-export function planInvoice(order: InvoiceOrder, items: InvoiceLine[], req: InvoiceRequest): InvoicePlan {
+export function planInvoice(order: InvoiceOrder, items: InvoiceLine[]): InvoicePlan {
   const dest = order.shippingAddress.countryCode.toUpperCase();
   const lines = items.reduce((sum, i) => sum + cents(i.unitPrice) * i.quantity, 0) + cents(order.shippingAmount);
   if (Math.abs(lines - cents(order.totalAmount)) > 1) {

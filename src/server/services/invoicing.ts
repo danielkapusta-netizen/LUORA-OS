@@ -147,7 +147,7 @@ export async function requestInvoice(orderId: string, userId: string | null, opt
   if (await liveInvoice(orderId)) throw new InvoicingError(`Order ${order.externalNumber} already has an invoice`);
   if (await invoicedElsewhere(orderId)) throw new InvoicingError(`Order ${order.externalNumber} is marked as invoiced outside Luora`);
 
-  const plan = planInvoice(order, await orderLines(orderId), invoiceRequestFor(order));
+  const plan = planInvoice(order, await orderLines(orderId));
   // A previous "manual" entry is replaced, so the list shows only the latest reason.
   await db.delete(invoices).where(and(eq(invoices.orderId, orderId), eq(invoices.state, 'manual')));
   if (plan.kind === 'manual') {
