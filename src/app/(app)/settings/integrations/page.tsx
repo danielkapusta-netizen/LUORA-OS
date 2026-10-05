@@ -63,6 +63,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=empik">
                   + Empik
                 </Link>
+                <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=vonhalsky">
+                  + Von Halsky
+                </Link>
               </>
             )
           }

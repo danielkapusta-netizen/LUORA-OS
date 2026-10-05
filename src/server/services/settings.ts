@@ -124,7 +124,7 @@ export async function listMarketplaceAccounts() {
 
 export async function saveMarketplaceAccount(input: {
   id?: string;
-  type: 'shopify' | 'allegro' | 'empik';
+  type: 'shopify' | 'allegro' | 'empik' | 'vonhalsky';
   name: string;
   /** Only fields that were filled in; blank secrets keep their stored value. */
   credentials: Record<string, unknown>;

@@ -38,7 +38,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
       notFound();
     }
   }
-  const type = (account?.type ?? typeParam) as 'shopify' | 'allegro' | 'empik';
+  const type = (account?.type ?? typeParam) as 'shopify' | 'allegro' | 'empik' | 'vonhalsky';
   if (!MARKETPLACE_LABELS[type]) notFound();
   const stored = storedCredentialKeys(account?.credentials ?? null);
   const pub = publicCredentialFields(account?.credentials ?? null);
@@ -122,6 +122,28 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   <Secret name="clientSecret" label="Client secret" stored={stored.includes('clientSecret')} />
                 </div>
                 <Checkbox name="sandbox" label="Use the Allegro sandbox" defaultChecked={pub.sandbox === true} />
+              </fieldset>
+            )}
+
+            {type === 'vonhalsky' && (
+              <fieldset className="space-y-3">
+                <legend className="mb-1 text-sm font-semibold">InPost Von Halsky connection</legend>
+                <p className="text-xs text-slate-500">
+                  In the InPost Merchant Portal open Integrations → API, press “Create App” and tick exactly these permissions: Categories (read),
+                  Offers (read), Offers (write), Orders (read), Orders (write). Copy the organisation id, the Client ID and the Client secret here
+                  (the secret is shown only once). Orders arrive without a redirect or login: Luora signs in with the client credentials.
+                </p>
+                <Field label="Organisation ID" hint="The brand/store created for this integration (a UUID).">
+                  <Input name="organizationId" defaultValue={str('organizationId')} placeholder="00000000-0000-0000-0000-000000000000" required />
+                </Field>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Secret name="clientId" label="Client ID" stored={stored.includes('clientId')} />
+                  <Secret name="clientSecret" label="Client secret" stored={stored.includes('clientSecret')} />
+                </div>
+                <Checkbox name="sandbox" label="Use InPost's stage (test) environment" defaultChecked={pub.sandbox === true} />
+                <p className="text-xs text-slate-500">
+                  Shipments are made with your InPost account (labels), not here: InPost links the label to the order through the buyer's e-mail.
+                </p>
               </fieldset>
             )}
 

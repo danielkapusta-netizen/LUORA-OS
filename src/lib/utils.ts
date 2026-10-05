@@ -38,6 +38,7 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   shopify: 'Shopify',
   allegro: 'Allegro',
   empik: 'Empik',
+  vonhalsky: 'Von Halsky',
 };
 
 export const CARRIER_LABELS: Record<string, string> = {

@@ -25,8 +25,8 @@ const PAGE_SIZE = 20;
 const PERIODS = [7, 30, 90] as const;
 const SORTS = { sales: 'Best selling', name: 'Name', stock: 'Lowest stock' } as const;
 type Sort = keyof typeof SORTS;
-const PLATFORMS = ['shopify', 'allegro', 'empik'] as const;
-const PLATFORM_LABEL: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik' };
+const PLATFORMS = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
+const PLATFORM_LABEL: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', vonhalsky: 'Von Halsky' };
 const LEVEL_LABEL: Record<PerformanceLevel, string> = { excellent: 'Excellent', good: 'Good', low: 'Low', none: 'No sales' };
 const LEVEL_TONE: Record<PerformanceLevel, string> = { excellent: 'text-emerald-600', good: 'text-emerald-600', low: 'text-amber-600', none: 'text-slate-400' };
 

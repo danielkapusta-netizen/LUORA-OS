@@ -15,7 +15,7 @@ const updatedAt = () =>
     .$onUpdate(() => new Date());
 
 export const userRoleValues = ['admin', 'staff'] as const;
-export const marketplaceTypeValues = ['shopify', 'allegro', 'empik'] as const;
+export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
 export const carrierTypeValues = ['inpost', 'allegro_shipping'] as const;
 export const orderStatusValues = [
   'new',
@@ -224,7 +224,7 @@ export const packagePresets = sqliteTable('package_presets', {
 });
 
 export interface RuleConditions {
-  marketplaces?: ('shopify' | 'allegro' | 'empik')[];
+  marketplaces?: ('shopify' | 'allegro' | 'empik' | 'vonhalsky')[];
   /** Case-insensitive substring of the buyer's delivery method name. */
   deliveryMethodContains?: string;
   hasPickupPoint?: boolean;

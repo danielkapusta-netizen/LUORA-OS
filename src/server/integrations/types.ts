@@ -2,7 +2,7 @@
 // each provider's payloads into these shapes, so the rest of the app never
 // deals with provider-specific JSON.
 
-export const MARKETPLACES = ['shopify', 'allegro', 'empik'] as const;
+export const MARKETPLACES = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
 export type Marketplace = (typeof MARKETPLACES)[number];
 
 export const CARRIERS = ['inpost', 'allegro_shipping'] as const;

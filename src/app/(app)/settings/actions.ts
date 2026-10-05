@@ -42,7 +42,7 @@ function secrets(fd: FormData, names: string[]): Record<string, string> {
 
 export async function saveMarketplaceAction(id: string | null, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
-  const type = text(fd, 'type') as 'shopify' | 'allegro' | 'empik';
+  const type = text(fd, 'type') as 'shopify' | 'allegro' | 'empik' | 'vonhalsky';
   const settings: MarketplaceSettings = { initialSyncDays: Number(text(fd, 'initialSyncDays')) || 14 };
   let credentials: Record<string, unknown> = {};
 
@@ -55,6 +55,15 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
     settings.pickupPointKeys = keys ? keys.split(',').map((k) => k.trim()).filter(Boolean) : undefined;
   } else if (type === 'allegro') {
     credentials = { ...secrets(fd, ['clientId', 'clientSecret']), sandbox: bool(fd, 'sandbox') };
+  } else if (type === 'vonhalsky') {
+    credentials = {
+      organizationId: text(fd, 'organizationId'),
+      sandbox: bool(fd, 'sandbox'),
+      ...secrets(fd, ['clientId', 'clientSecret']),
+      // A new client or environment needs a fresh token.
+      accessToken: '',
+      expiresAt: '',
+    };
   } else if (type === 'empik') {
     credentials = { baseUrl: text(fd, 'baseUrl'), ...secrets(fd, ['apiKey']), ...(text(fd, 'shopId') ? { shopId: text(fd, 'shopId') } : {}) };
     settings.autoAccept = bool(fd, 'autoAccept');

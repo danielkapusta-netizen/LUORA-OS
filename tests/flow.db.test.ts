@@ -469,6 +469,40 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     }
   });
 
+  it('connects InPost Von Halsky: orders and offers arrive, offers match Shopify products by EAN, stock goes out', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const settings = await import('@/server/services/settings');
+    const id = await settings.saveMarketplaceAccount({
+      type: 'vonhalsky',
+      name: 'InPost Von Halsky (test)',
+      credentials: { organizationId: '5b0e6b0a-6f5c-4a43-9a53-0d2f9d7a1111', clientId: 'c', clientSecret: 's' },
+      settings: {},
+      enabled: true,
+      stockSyncEnabled: true,
+      stockDryRun: true,
+    });
+    try {
+      const summary = await m.orders.syncAccount(id);
+      expect(summary.created).toBeGreaterThan(0);
+      const vh = await db.select().from(s.orders).where(orm.eq(s.orders.accountId, id));
+      expect(vh.length).toBeGreaterThan(0);
+      expect(vh.every((o) => o.marketplace === 'vonhalsky' && o.externalNumber.length > 0)).toBe(true);
+
+      await m.inventory.importListings(id);
+      const listings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, id));
+      expect(listings.length).toBeGreaterThan(0);
+      // Same EAN as the Shopify product, so every offer is linked.
+      expect(listings.every((l) => l.productId && l.ean)).toBe(true);
+
+      const push = await m.inventory.runStockPush(id);
+      expect(push).toMatchObject({ dryRun: true });
+    } finally {
+      await settings.deleteMarketplaceAccount(id);
+      queue.length = 0; // jobs for the removed account
+    }
+  });
+
   it('rates products by units sold in the period, ignoring cancelled orders', async () => {
     const { productStats } = await import('@/server/services/product-stats');
     const db = m.db.getDb();

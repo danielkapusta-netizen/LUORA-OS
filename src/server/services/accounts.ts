@@ -13,6 +13,8 @@ import { AllegroClient, type AllegroCredentials } from '../integrations/marketpl
 import { EmpikAdapter } from '../integrations/marketplaces/empik/adapter';
 import type { EmpikCredentials } from '../integrations/marketplaces/empik/client';
 import { MockMarketplaceAdapter } from '../integrations/marketplaces/mock/adapter';
+import { VonHalskyAdapter } from '../integrations/marketplaces/vonhalsky/adapter';
+import type { VonHalskyCredentials } from '../integrations/marketplaces/vonhalsky/client';
 import { ShopifyAdapter } from '../integrations/marketplaces/shopify/adapter';
 import type { ShopifyCredentials } from '../integrations/marketplaces/shopify/client';
 import type { MarketplaceAdapter } from '../integrations/marketplaces/types';
@@ -45,6 +47,8 @@ export function getMarketplaceAdapter(account: MarketplaceAccount): MarketplaceA
       return new ShopifyAdapter(marketplaceCredentialStore<ShopifyCredentials>(account), account.settings);
     case 'allegro':
       return new AllegroAdapter(marketplaceCredentialStore<AllegroCredentials>(account), account.settings);
+    case 'vonhalsky':
+      return new VonHalskyAdapter(marketplaceCredentialStore<VonHalskyCredentials>(account), account.settings);
     case 'empik': {
       const creds = readCredentials<EmpikCredentials>(account.credentials);
       if (!creds) throw new Error(`${account.name} has no API key yet. Add it in Settings → Integrations.`);

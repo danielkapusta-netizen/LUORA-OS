@@ -53,6 +53,7 @@ const DELIVERY: Record<Marketplace, { id: string; name: string; locker: boolean;
     { id: 'PACZKOMAT', name: 'Paczkomaty InPost', locker: true },
     { id: 'KURIER', name: 'Kurier InPost', locker: false },
   ],
+  vonhalsky: [{ id: 'APM', name: 'InPost parcel locker', locker: true }],
 };
 
 const INITIAL_ORDERS = 14;
@@ -101,6 +102,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
       }
       case 'empik':
         return `${210_000 + index}-A`;
+      case 'vonhalsky':
+        return `${hash(`${this.accountKey}-vh-${index}`).toString(16).padStart(8, '0')}-5e0b-4c1d-8f3a-${String(index).padStart(12, '0')}`;
     }
   }
 
