@@ -29,13 +29,25 @@ interface DeliveryService {
   cashOnDelivery?: { forceRequireIban?: boolean | null } | null;
 }
 
-/** Allegro wants 9–14 digits; keep a leading + so foreign numbers (e.g. +36 for Hungary) keep their prefix. */
-export function allegroPhone(phone: string | null | undefined): string | undefined {
+const CALLING_CODES: Record<string, string> = {
+  PL: '48', CZ: '420', SK: '421', HU: '36', DE: '49', AT: '43', LT: '370', LV: '371', EE: '372', RO: '40',
+  BG: '359', HR: '385', SI: '386', FR: '33', IT: '39', ES: '34', NL: '31', BE: '32',
+};
+
+/**
+ * Allegro wants an international number ("sender.phone must include an international prefix"):
+ * a leading + or 00 is kept, a national number gets the calling code of the address's country.
+ */
+export function allegroPhone(phone: string | null | undefined, countryCode?: string): string | undefined {
   if (!phone) return undefined;
   const trimmed = phone.trim();
   const digits = trimmed.replace(/\D/g, '');
   if (!digits) return undefined;
-  return trimmed.startsWith('+') || trimmed.startsWith('00') ? `+${digits.replace(/^00/, '')}` : digits;
+  if (trimmed.startsWith('+') || trimmed.startsWith('00')) return `+${digits.replace(/^00/, '')}`;
+  const code = CALLING_CODES[(countryCode ?? '').trim().toUpperCase()];
+  if (!code) return digits;
+  // Polish numbers have no trunk zero; elsewhere a leading 0 is dropped.
+  return `+${code}${code === '48' ? digits.replace(/^48(?=\d{9}$)/, '') : digits.replace(/^0/, '')}`;
 }
 
 function contact(a: { name: string; company?: string | null; street: string; postalCode: string; city: string; countryCode: string; email?: string | null; phone?: string | null }) {
@@ -47,7 +59,7 @@ function contact(a: { name: string; company?: string | null; street: string; pos
     city: a.city.trim(),
     countryCode: a.countryCode.trim().toUpperCase(),
     email: a.email?.trim() || undefined,
-    phone: allegroPhone(a.phone),
+    phone: allegroPhone(a.phone, a.countryCode),
   };
 }
 

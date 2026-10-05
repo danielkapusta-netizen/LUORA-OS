@@ -170,6 +170,10 @@ describe('Allegro Delivery (Wysyłam z Allegro)', () => {
     expect(cmd.input.sender.phone).toBe('+48500600700');
     expect(allegroPhone('0036 30 123 4567')).toBe('+36301234567');
     expect(allegroPhone('600-700-800')).toBe('600700800');
+    expect(allegroPhone('600 700 800', 'PL')).toBe('+48600700800');
+    expect(allegroPhone('48600700800', 'PL')).toBe('+48600700800');
+    expect(allegroPhone('+36 30 123 4567', 'PL')).toBe('+36301234567');
+    expect(allegroPhone('0301234567', 'HU')).toBe('+36301234567');
   });
 
   it('sends COD without an IBAN when the money goes to the Allegro balance', async () => {

@@ -119,7 +119,7 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
                 <Field label="Country">
                   <Input name="senderCountryCode" defaultValue={sender?.countryCode ?? 'PL'} maxLength={2} />
                 </Field>
-                <Field label="Phone">
+                <Field label="Phone" hint="With country code, e.g. +48600123456">
                   <Input name="senderPhone" defaultValue={sender?.phone ?? ''} required />
                 </Field>
                 <Field label="Email" className="sm:col-span-2">
