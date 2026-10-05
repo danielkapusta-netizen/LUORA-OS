@@ -8,6 +8,18 @@ export const EU_COUNTRIES = new Set([
   'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
 ]);
 
+/** Country names in Polish, as ifirma wants them in "Kraj" on the buyer (Greece is "EL" for ifirma and the EU). */
+const COUNTRY_NAMES: Record<string, string> = {
+  AT: 'Austria', BE: 'Belgia', BG: 'Bułgaria', CY: 'Cypr', CZ: 'Czechy', DE: 'Niemcy', DK: 'Dania', EE: 'Estonia',
+  ES: 'Hiszpania', FI: 'Finlandia', FR: 'Francja', GR: 'Grecja', EL: 'Grecja', HR: 'Chorwacja', HU: 'Węgry',
+  IE: 'Irlandia', IT: 'Włochy', LT: 'Litwa', LU: 'Luksemburg', LV: 'Łotwa', MT: 'Malta', NL: 'Holandia',
+  PL: 'Polska', PT: 'Portugalia', RO: 'Rumunia', SE: 'Szwecja', SI: 'Słowenia', SK: 'Słowacja',
+};
+
+export function countryName(code: string): string {
+  return COUNTRY_NAMES[code.toUpperCase()] ?? code.toUpperCase();
+}
+
 /** ifirma's language codes for OSS invoices; anything else gets English. */
 const LANGUAGES: Record<string, string> = {
   CZ: 'cs', SK: 'sk', HU: 'hu', DE: 'de', AT: 'de', LT: 'lt', LV: 'lv', EE: 'et', FR: 'fr', IT: 'it', ES: 'es',
@@ -38,8 +50,8 @@ const cents = (v: string | number | null | undefined) => Math.round(Number(v ?? 
 
 /**
  * Which invoice an order needs. The place of supply is where the parcel goes:
- * Poland → domestic invoice; a private buyer elsewhere in the EU → OSS invoice.
- * Foreign companies (intra-EU supply, WDT) and buyers outside the EU are left for a person.
+ * Poland → domestic invoice; any other EU country → OSS invoice (companies too, by choice).
+ * Buyers outside the EU are left for a person.
  */
 export function planInvoice(order: InvoiceOrder, items: InvoiceLine[], req: InvoiceRequest): InvoicePlan {
   const dest = order.shippingAddress.countryCode.toUpperCase();
@@ -55,7 +67,7 @@ export function planInvoice(order: InvoiceOrder, items: InvoiceLine[], req: Invo
     return { kind: 'domestic' };
   }
   if (!EU_COUNTRIES.has(dest)) return { kind: 'manual', reason: `Buyer outside the EU (${dest}) needs an export invoice; issue it in ifirma by hand` };
-  if (req.taxId) return { kind: 'manual', reason: `Company in ${dest} needs an intra-EU (WDT) invoice; issue it in ifirma by hand` };
+  // Every order to another EU country gets an OSS invoice, private buyers and companies alike.
   return { kind: 'oss' };
 }
 
@@ -158,15 +170,17 @@ export function buildOssPayload(order: InvoiceOrder, items: InvoiceLine[], req: 
     Kontrahent: {
       Nazwa: req.name.slice(0, 150),
       Identyfikator: null,
-      PrefiksUE: null,
-      NIP: null,
+      // A company keeps its VAT number on the invoice.
+      PrefiksUE: req.taxId ? (req.euPrefix || dest).slice(0, 2) : null,
+      NIP: req.taxId || null,
       Ulica: req.street.slice(0, 65) || undefined,
-      KodPocztowy: req.postalCode || undefined,
-      KodKraju: req.countryCode,
+      KodPocztowy: req.postalCode || '',
+      Kraj: countryName(req.countryCode),
+      KodKraju: req.countryCode === 'GR' ? 'EL' : req.countryCode,
       AdresZagraniczny: true,
       Miejscowosc: req.city.slice(0, 65),
       Email: req.email || undefined,
-      OsobaFizyczna: true,
+      OsobaFizyczna: !req.taxId,
     },
   };
 }

@@ -86,10 +86,20 @@ describe('IfirmaClient', () => {
   it('reads the standard VAT rate of an EU country', async () => {
     server.use(
       http.get(`${API}/slownik/stawki_vat/CZ.json`, () =>
-        HttpResponse.json({ response: { Kod: 0, KodKraju: 'cz', StawkiVat: [{ Rodzaj: 'POD', Wartosc: 21.0 }, { Rodzaj: 'PR1', Wartosc: 12.0 }] } }),
+        // ifirma's VAT-rate dictionary has no "Kod" in its answer.
+        HttpResponse.json({ response: { KodKraju: 'cz', NazwaKraju: 'Czechy', StawkiVat: [{ Rodzaj: 'POD', Wartosc: 21.0 }, { Rodzaj: 'PR1', Wartosc: 12.0 }] } }),
       ),
     );
     expect(await client.standardVatRate('CZ')).toBe(0.21);
+  });
+
+  it('reads the VAT rate of Hungary, and shows ifirma\'s raw answer when it is not one it knows', async () => {
+    server.use(
+      http.get(`${API}/slownik/stawki_vat/HU.json`, () => HttpResponse.json({ response: { KodKraju: 'hu', NazwaKraju: 'Węgry', StawkiVat: [{ Rodzaj: 'POD', Wartosc: 27.0 }] } })),
+      http.post(`${API}/fakturaoss.json`, () => HttpResponse.json({ response: { Blad: 'Brak pola Kraj' } })),
+    );
+    expect(await client.standardVatRate('HU')).toBe(0.27);
+    await expect(client.create('oss', {})).rejects.toThrow(/without a result code: .*Brak pola Kraj/);
   });
 
   it('sends an invoice to KSeF', async () => {
@@ -112,9 +122,10 @@ describe('planInvoice', () => {
     expect(planInvoice(cz, [{ name: 'Krem', quantity: 2, unitPrice: '315.00' }], person)).toEqual({ kind: 'oss' });
   });
 
-  it('leaves foreign companies, non-EU buyers and totals that do not add up to a person', () => {
+  it('leaves non-EU buyers and totals that do not add up to a person', () => {
     const cz = order({ shippingAddress: { ...order().shippingAddress, countryCode: 'CZ' } });
-    expect(planInvoice(cz, items, { ...company, euPrefix: 'CZ', countryCode: 'CZ' })).toMatchObject({ kind: 'manual', reason: expect.stringContaining('WDT') });
+    // Companies elsewhere in the EU get an OSS invoice too.
+    expect(planInvoice(cz, items, { ...company, euPrefix: 'CZ', countryCode: 'CZ' })).toEqual({ kind: 'oss' });
     expect(planInvoice(order({ shippingAddress: { ...order().shippingAddress, countryCode: 'UA' } }), items, person)).toMatchObject({ kind: 'manual' });
     expect(planInvoice(order({ totalAmount: '119.80' }), items, company)).toMatchObject({ kind: 'manual', reason: expect.stringContaining('discount') });
   });
@@ -144,6 +155,31 @@ describe('ifirma payloads', () => {
     expect(p.Pozycje).toEqual([{ NazwaPelna: 'Krem', NazwaPelnaObca: 'Krem', Ilosc: 2, CenaJednostkowa: 315, Jednostka: 'szt.', JednostkaObca: 'pcs', StawkaVat: 0.21, TypStawkiVat: 'POD' }]);
     expect(p.Kontrahent).toMatchObject({ OsobaFizyczna: true, AdresZagraniczny: true, KodKraju: 'CZ' });
     expect(() => buildOssPayload(cz, items, person, { ...ctx, vatRate: 0.21 })).toThrow(/exchange rate/);
+  });
+});
+
+describe('OSS invoice for a Hungarian order in HUF', () => {
+  const hu = order({
+    currency: 'HUF',
+    totalAmount: '4920.00',
+    shippingAmount: '790.00',
+    shippingAddress: { name: 'Nagy Anna', street: 'Fő utca 12', city: 'Budapest', postalCode: '1011', countryCode: 'HU' },
+  });
+  const buyer: InvoiceRequest = { name: 'Nagy Anna', taxId: null, euPrefix: null, street: 'Fő utca 12', postalCode: '1011', city: 'Budapest', countryCode: 'HU' };
+  const huItems = [{ name: 'Krem', quantity: 1, unitPrice: '4130.00' }];
+
+  it('is planned as OSS and carries the country name, the 27% VAT and the NBP rate', () => {
+    expect(planInvoice(hu, huItems, buyer)).toEqual({ kind: 'oss' });
+    const p = buildOssPayload(hu, huItems, buyer, { ...ctx, vatRate: 0.27, exchangeRate: 0.0116 });
+    expect(p).toMatchObject({ Jezyk: 'hu', Waluta: 'HUF', KrajDostawy: 'HU', KrajWysylki: 'PL', KursWalutyZDniaPoprzedzajacegoDzienWystawieniaFaktury: 0.0116 });
+    expect(p.Kontrahent).toMatchObject({ Kraj: 'Węgry', KodKraju: 'HU', KodPocztowy: '1011', OsobaFizyczna: true, NIP: null });
+    expect(p.Pozycje.map((l) => l.StawkaVat)).toEqual([0.27, 0.27]);
+  });
+
+  it('keeps the VAT number of a company on the OSS invoice', () => {
+    const company = { ...buyer, name: 'Nagy Kft.', taxId: '12345678', euPrefix: 'HU' };
+    expect(planInvoice(hu, huItems, company)).toEqual({ kind: 'oss' });
+    expect(buildOssPayload(hu, huItems, company, { ...ctx, vatRate: 0.27, exchangeRate: 0.0116 }).Kontrahent).toMatchObject({ PrefiksUE: 'HU', NIP: '12345678', OsobaFizyczna: false });
   });
 });
 

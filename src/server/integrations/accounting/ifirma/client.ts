@@ -41,18 +41,39 @@ export class IfirmaError extends Error {
   }
 }
 
-/** ifirma answers HTTP 200 with a non-zero "Kod" on errors; turn that into a readable error. */
-function unwrap<T>(data: IfirmaResponse<T>): IfirmaResponse<T>['response'] {
+/** How much of an unexpected ifirma answer goes into an error message. */
+const RAW_ANSWER_LIMIT = 300;
+
+/**
+ * ifirma answers HTTP 200 with a non-zero "Kod" on errors; turn that into a readable error.
+ * `lenient` is for the dictionary endpoints (VAT rates), whose answers carry no "Kod" at all.
+ */
+function unwrap<T>(data: IfirmaResponse<T>, lenient = false): IfirmaResponse<T>['response'] {
   const r = data?.response;
-  if (!r) throw new IfirmaError(-1, 'ifirma returned an empty response');
-  if (r.Kod !== 0) throw new IfirmaError(r.Kod, `ifirma (kod ${r.Kod}): ${r.Informacja || 'unknown error'}`);
+  if (!r) throw new IfirmaError(-1, `ifirma returned an unexpected answer: ${raw(data)}`);
+  if (r.Kod === undefined || r.Kod === null) {
+    if (lenient) return r;
+    throw new IfirmaError(-1, `ifirma returned an answer without a result code: ${raw(data)}`);
+  }
+  if (r.Kod !== 0) throw new IfirmaError(r.Kod, `ifirma (kod ${r.Kod}): ${r.Informacja || raw(data)}`);
   return r;
+}
+
+function raw(data: unknown): string {
+  const text = typeof data === 'string' ? data : JSON.stringify(data);
+  return (text ?? 'nothing').slice(0, RAW_ANSWER_LIMIT);
 }
 
 export class IfirmaClient implements InvoicingAdapter {
   constructor(private readonly creds: IfirmaCredentials) {}
 
-  private async call<T>(method: 'GET' | 'POST', path: string, body?: object, query?: Record<string, string>): Promise<IfirmaResponse<T>['response']> {
+  private async call<T>(
+    method: 'GET' | 'POST',
+    path: string,
+    body?: object,
+    query?: Record<string, string>,
+    lenient = false,
+  ): Promise<IfirmaResponse<T>['response']> {
     const url = new URL(path, IFIRMA_BASE);
     for (const [k, v] of Object.entries(query ?? {})) url.searchParams.set(k, v);
     const content = body ? JSON.stringify(body) : '';
@@ -68,7 +89,7 @@ export class IfirmaClient implements InvoicingAdapter {
         // A retried POST could issue a second invoice.
         retries: method === 'POST' ? 0 : 3,
       });
-      return unwrap(data);
+      return unwrap(data, lenient);
     } catch (err) {
       if (err instanceof HttpError) {
         try {
@@ -128,7 +149,8 @@ export class IfirmaClient implements InvoicingAdapter {
 
   async standardVatRate(countryCode: string): Promise<number> {
     const code = countryCode.toUpperCase() === 'GR' ? 'EL' : countryCode.toUpperCase();
-    const r = await this.call('GET', `slownik/stawki_vat/${code}.json`);
+    // The VAT-rate dictionary answers { response: { KodKraju, NazwaKraju, StawkiVat } } without a "Kod".
+    const r = await this.call('GET', `slownik/stawki_vat/${code}.json`, undefined, undefined, true);
     const rates = (r.StawkiVat ?? []) as { Rodzaj: string; Wartosc: number }[];
     const standard = rates.find((s) => s.Rodzaj === 'POD');
     if (!standard) throw new IfirmaError(-1, `ifirma has no standard VAT rate for ${code}`);
