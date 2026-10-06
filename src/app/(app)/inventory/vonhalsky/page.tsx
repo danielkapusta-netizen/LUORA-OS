@@ -41,7 +41,7 @@ export default async function VonHalskyOffersPage() {
             <Link className={buttonClass('secondary')} href="/inventory">
               Back to inventory
             </Link>
-            <ActionForm action={syncPricesAction.bind(null, account.id)}>
+            <ActionForm action={syncPricesAction.bind(null, account.id)} popup="Price update">
               <SubmitButton variant="secondary" pendingText="Updating…">
                 Update prices of Luora offers
               </SubmitButton>
@@ -56,7 +56,7 @@ export default async function VonHalskyOffersPage() {
           title="Categories"
           description={categories.length ? `${categories.length} cosmetics categories loaded from InPost.` : 'Load the category list from InPost before creating offers.'}
           actions={
-            <ActionForm action={loadCategoriesAction.bind(null, account.id)}>
+            <ActionForm action={loadCategoriesAction.bind(null, account.id)} popup="Loading categories">
               <SubmitButton variant="secondary" size="sm" pendingText="Loading…">
                 {categories.length ? 'Reload categories' : 'Load categories'}
               </SubmitButton>
@@ -97,7 +97,7 @@ export default async function VonHalskyOffersPage() {
             <p className="text-sm text-slate-500">Every Shopify product already has a Von Halsky offer.</p>
           </CardBody>
         ) : (
-          <ActionForm action={createOffersAction.bind(null, account.id)}>
+          <ActionForm action={createOffersAction.bind(null, account.id)} popup="Creating Von Halsky offers">
             <div className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <label key={r.productId} className="flex items-center gap-3 px-5 py-3">
