@@ -25,6 +25,7 @@ export const JOBS = {
   feesSyncAll: 'fees-sync-all',
   feesSync: 'fees-sync',
   fxSync: 'fx-sync',
+  profitRecompute: 'profit-recompute',
 } as const;
 
 export interface JobPayloads {
@@ -50,6 +51,8 @@ export interface JobPayloads {
   [JOBS.feesSyncAll]: Record<string, never>;
   [JOBS.feesSync]: { accountId: string };
   [JOBS.fxSync]: Record<string, never>;
+  /** orderIds: just these; otherwise every order, continuing after `after`. */
+  [JOBS.profitRecompute]: { orderIds?: string[]; all?: boolean; after?: string };
 }
 
 export type JobName = keyof JobPayloads;
@@ -98,6 +101,7 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.feesSyncAll]: { retries: 0, delaySeconds: 0 },
   [JOBS.feesSync]: { retries: 1, delaySeconds: 300 },
   [JOBS.fxSync]: { retries: 2, delaySeconds: 600 },
+  [JOBS.profitRecompute]: { retries: 2, delaySeconds: 120 },
 };
 
 /** A singleton lock is dropped after this long even if its job never reports back. */

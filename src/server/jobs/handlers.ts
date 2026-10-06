@@ -4,6 +4,7 @@ import { marketplaceAccounts } from '../db/schema';
 import { syncAccountFees } from '../services/fees';
 import { syncFxRates } from '../services/fx';
 import { runHistoryImport } from '../services/history';
+import { recomputeAll, recomputeOrders } from '../services/profit';
 import { importListings, runReconcile, runStockPush, syncAllStock } from '../services/inventory';
 import { autoInvoice, runCreateInvoice, runSendKsef, runUploadInvoice } from '../services/invoicing';
 import { backfillOrderDetails, syncAccount } from '../services/orders';
@@ -54,6 +55,7 @@ export const handlers: Handlers = {
     return result;
   },
   [JOBS.fxSync]: () => syncFxRates(),
+  [JOBS.profitRecompute]: (data) => (data?.orderIds ? recomputeOrders(data.orderIds) : recomputeAll(data?.after ?? null)),
 };
 
 export function runJob<K extends JobName>(name: K, data: JobPayloads[K]): Promise<unknown> {

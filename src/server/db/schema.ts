@@ -614,6 +614,65 @@ export interface AnalyticsSettings {
   criticalMargin?: number;
 }
 
+/**
+ * Profit per order line, in PLN, worked out from the order, its fees, refunds, shipments, the
+ * product cost of the day and the profit settings (services/profit.ts). Rebuilt whenever any of
+ * those change, so analytics reads plain numbers instead of recalculating every order.
+ * Cancelled orders have no lines.
+ */
+export const salesLines = sqliteTable(
+  'sales_lines',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => orderItems.id, { onDelete: 'cascade' }),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    accountId: text('account_id').notNull(),
+    marketplace: text('marketplace', { enum: marketplaceTypeValues }).notNull(),
+    productId: text('product_id').references(() => products.id, { onDelete: 'set null' }),
+    /** Filled by the CRM (customers). */
+    customerId: text('customer_id'),
+    placedAt: ts('placed_at').notNull(),
+    /** YYYY-MM-DD in Europe/Warsaw. */
+    day: text('day').notNull(),
+    currency: text('currency').notNull(),
+    /** PLN per unit of `currency` used for this order. */
+    fxRate: real('fx_rate').notNull(),
+    vatRate: real('vat_rate').notNull(),
+    quantity: integer('quantity').notNull(),
+    refundedQuantity: integer('refunded_quantity').notNull().default(0),
+    /** What the buyer paid for the goods, VAT included (after discounts). */
+    gross: real('gross').notNull(),
+    /** `gross` without VAT. */
+    net: real('net').notNull(),
+    discount: real('discount').notNull().default(0),
+    /** Marketplace and payment fees, without deductible VAT. */
+    fees: real('fees').notNull(),
+    /** No fee was reported yet: `fees` uses the fallback commission. */
+    feesEstimated: bool('fees_estimated').notNull(),
+    /** Landed cost of the units sold. */
+    cost: real('cost').notNull(),
+    costKnown: bool('cost_known').notNull(),
+    /** Share of the shipping the buyer paid, without VAT. */
+    shipping: real('shipping').notNull(),
+    /** Share of label, packaging and marketplace delivery charges. */
+    delivery: real('delivery').notNull(),
+    /** Money returned to the buyer without VAT, less the cost of goods that came back. */
+    refunds: real('refunds').notNull(),
+    /** net − fees − cost + shipping − delivery − refunds. */
+    profit: real('profit').notNull(),
+    computedAt: ts('computed_at').notNull(),
+  },
+  (t) => [
+    index('sales_lines_day_idx').on(t.day),
+    index('sales_lines_order_idx').on(t.orderId),
+    index('sales_lines_product_idx').on(t.productId, t.day),
+    index('sales_lines_customer_idx').on(t.customerId),
+  ],
+);
+
 /** Single row: how profit is calculated. VAT rates come from the accounting settings. */
 export const analyticsSettings = sqliteTable('analytics_settings', {
   id: text('id').primaryKey().$defaultFn(() => 'main'),
@@ -644,4 +703,5 @@ export type OrderFee = typeof orderFees.$inferSelect;
 export type OrderRefund = typeof orderRefunds.$inferSelect;
 export type ProductCost = typeof productCosts.$inferSelect;
 export type FeeKind = (typeof feeKindValues)[number];
+export type SalesLine = typeof salesLines.$inferSelect;
 export type FeeSource = (typeof feeSourceValues)[number];

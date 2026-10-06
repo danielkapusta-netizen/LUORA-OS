@@ -16,6 +16,7 @@ import {
   setProductCost,
   type ImportResult,
 } from '@/server/services/costs';
+import { scheduleFullRecompute } from '@/server/services/profit';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const amount = (fd: FormData, name: string) => parseAmount(text(fd, name));
@@ -51,6 +52,7 @@ export async function saveProfitSettingsAction(_prev: ActionResult, fd: FormData
       thinMargin: percent(fd, 'thinMargin'),
       criticalMargin: percent(fd, 'criticalMargin'),
     });
+    await scheduleFullRecompute();
     revalidatePath('/settings/costs');
     return 'Saved';
   });
@@ -72,6 +74,7 @@ export async function saveProductCostAction(productId: string, _prev: ActionResu
       },
       user.id,
     );
+    await scheduleFullRecompute();
     revalidatePath('/settings/costs');
     return 'Saved';
   });
@@ -80,6 +83,7 @@ export async function saveProductCostAction(productId: string, _prev: ActionResu
 export async function deleteProductCostAction(costId: string): Promise<void> {
   await requireAdmin();
   await deleteProductCost(costId);
+  await scheduleFullRecompute();
   revalidatePath('/settings/costs');
 }
 
@@ -100,6 +104,7 @@ export async function pasteCostsAction(_prev: ActionResult, fd: FormData): Promi
     const lines = parseCostLines(text(fd, 'lines'));
     if (!lines.length) throw new Error('No lines with a product and a cost were found');
     const result = await importCosts(lines, { effectiveFrom: text(fd, 'effectiveFrom') || undefined, userId: user.id, source: 'import' });
+    if (result.saved) await scheduleFullRecompute();
     revalidatePath('/settings/costs');
     return describe(result);
   });
@@ -109,6 +114,7 @@ export async function sheetCostsAction(_prev: ActionResult, fd: FormData): Promi
   const user = await requireAdmin();
   return attempt(async () => {
     const result = await importCostsFromSheet(text(fd, 'url'), { effectiveFrom: text(fd, 'effectiveFrom') || undefined, userId: user.id });
+    if (result.saved) await scheduleFullRecompute();
     revalidatePath('/settings/costs');
     return describe(result);
   });
@@ -118,6 +124,7 @@ export async function shopifyCostsAction(_prev: ActionResult, fd: FormData): Pro
   const user = await requireAdmin();
   return attempt(async () => {
     const result = await importCostsFromShopify({ userId: user.id, overwrite: fd.get('overwrite') === 'on' });
+    if (result.saved) await scheduleFullRecompute();
     revalidatePath('/settings/costs');
     return describe(result);
   });

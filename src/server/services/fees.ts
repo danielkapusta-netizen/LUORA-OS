@@ -6,6 +6,7 @@ import { chunk, getDb } from '../db/client';
 import { marketplaceAccounts, orderFees, orderItems, orderRefunds, orders } from '../db/schema';
 import type { FeeFeed } from '../integrations/marketplaces/types';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
+import { refreshProfit } from './profit';
 
 const DAY = 86_400_000;
 /** Each request covers this many days. */
@@ -114,6 +115,7 @@ async function storeFeed(accountId: string, feed: FeeFeed): Promise<{ fees: numb
   let fees = 0;
   let refunds = 0;
   let unmatched = 0;
+  const touched = new Set<string>();
   for (const f of feed.fees) {
     const orderId = byExternal.get(f.orderExternalId);
     if (!orderId) {
@@ -135,6 +137,7 @@ async function storeFeed(accountId: string, feed: FeeFeed): Promise<{ fees: numb
       .values({ source: 'allegro_billing', externalId: f.externalId, ...values })
       .onConflictDoUpdate({ target: [orderFees.source, orderFees.externalId], set: values });
     fees++;
+    touched.add(orderId);
   }
   for (const r of feed.refunds) {
     const orderId = byExternal.get(r.orderExternalId);
@@ -163,7 +166,9 @@ async function storeFeed(accountId: string, feed: FeeFeed): Promise<{ fees: numb
       .values({ orderId, externalId: r.externalId, ...values })
       .onConflictDoUpdate({ target: [orderRefunds.orderId, orderRefunds.externalId], set: values });
     refunds++;
+    touched.add(orderId);
   }
+  await refreshProfit([...touched]);
   return { fees, refunds, unmatched };
 }
 

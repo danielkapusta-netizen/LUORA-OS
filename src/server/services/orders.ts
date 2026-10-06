@@ -21,6 +21,7 @@ import type { Address, NormalizedOrder, OrderRef } from '../integrations/types';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
 import { applyOrderStock, scheduleStockPush, stockCoversOrder } from './inventory';
+import { refreshProfit } from './profit';
 import { awaitingPacking, changeStatus } from './workflow';
 
 const MAX_ROUNDS_PER_SYNC = 20;
@@ -99,6 +100,8 @@ export async function upsertOrders(
   const newOrderIds: string[] = [];
   let created = 0;
   let updated = 0;
+  /** Orders whose profit lines need rebuilding. */
+  const touched: string[] = [];
   let stockChanged = false;
 
   for (const n of incoming) {
@@ -150,6 +153,7 @@ export async function upsertOrders(
         ] as unknown as Parameters<Tx['batch']>[0]);
         await storeMoneyEvents(tx, account.type, id, n);
         created++;
+        touched.push(id);
         if (historical) return;
         if (!n.cancelled && !n.fulfilled) stockChanged = (await applyOrderStock(tx, id)) || stockChanged;
         newOrderIds.push(id);
@@ -157,6 +161,7 @@ export async function upsertOrders(
       }
 
       updated++;
+      touched.push(existing.id);
       await tx
         .update(orders)
         .set({
@@ -227,6 +232,7 @@ export async function upsertOrders(
   }
 
   if (stockChanged) await scheduleStockPush();
+  await refreshProfit(touched);
   return { created, updated, newOrderIds };
 }
 

@@ -757,6 +757,65 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     await expect(costs.saveAnalyticsSettings({ thinMargin: 0.2, healthyMargin: 0.15 })).rejects.toThrow('Margin bands');
   });
 
+  it('keeps a profit line for every sold item, rebuilt when costs change', async () => {
+    const profit = await import('@/server/services/profit');
+    const costs = await import('@/server/services/costs');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    queue.length = 0;
+    await profit.recomputeAll();
+    await drain();
+    const lines = await db.select().from(s.salesLines);
+    const live = await db
+      .select({ id: s.orderItems.id })
+      .from(s.orderItems)
+      .innerJoin(s.orders, orm.eq(s.orders.id, s.orderItems.orderId))
+      .where(orm.ne(s.orders.status, 'cancelled'));
+    expect(lines).toHaveLength(live.length);
+    expect(lines.every((l) => l.day.match(/^\d{4}-\d{2}-\d{2}$/) && l.fxRate === 1)).toBe(true);
+    // Demo fees arrive with the orders, so nothing is estimated except Von Halsky (none here).
+    expect(lines.filter((l) => l.feesEstimated)).toHaveLength(0);
+    // Every line linked to a product with a cost knows its cost; unlinked lines don't.
+    const withCost = new Set((await db.select({ productId: s.productCosts.productId }).from(s.productCosts)).map((c) => c.productId));
+    expect(lines.filter((l) => l.productId && withCost.has(l.productId)).every((l) => l.costKnown)).toBe(true);
+    expect(lines.filter((l) => !l.productId).every((l) => !l.costKnown && l.cost === 0)).toBe(true);
+    for (const l of lines.slice(0, 20)) {
+      expect(l.profit).toBeCloseTo(l.net - l.fees - l.cost + l.shipping - l.delivery - l.refunds, 1);
+    }
+    const cancelled = await db.select({ id: s.orders.id }).from(s.orders).where(orm.eq(s.orders.status, 'cancelled'));
+    expect(cancelled.length).toBeGreaterThan(0);
+    expect(lines.some((l) => cancelled.some((c) => c.id === l.orderId))).toBe(false);
+    expect(lines.some((l) => l.refunds > 0)).toBe(true);
+
+    // A cost change from a date applies to orders from that day on.
+    const [mug] = await db.select().from(s.products).where(orm.eq(s.products.sku, 'LUO-MUG-01'));
+    const mugLines = () => db.select().from(s.salesLines).where(orm.eq(s.salesLines.productId, mug.id));
+    const before = await mugLines();
+    const cutoff = [...new Set(before.map((l) => l.day))].sort()[Math.floor(before.length / 2)];
+    await costs.setProductCost(mug.id, { unitCost: 100, effectiveFrom: cutoff }, null);
+    await profit.recomputeAll();
+    await drain();
+    for (const l of await mugLines()) {
+      const unit = l.cost / l.quantity;
+      if (l.day >= cutoff) expect(unit).toBe(100);
+      else expect(unit).toBeLessThan(100);
+    }
+
+    // A new label on an order brings its configured cost in.
+    const order = (await allOrders()).find((o) => o.status === 'new' && o.marketplace === 'shopify' && o.pickupPointId)!;
+    const deliveryOf = async () =>
+      (await db.select().from(s.salesLines).where(orm.eq(s.salesLines.orderId, order.id))).reduce((sum, l) => sum + l.delivery, 0);
+    const form = await m.shipping.shippingFormData(order.id);
+    await m.shipping.requestShipment(
+      { orderId: order.id, carrierAccountId: form.route!.carrierAccountId, service: form.route!.service, parcel: m.shipping.presetToParcel(form.defaultPreset!), options: {} },
+      null,
+    );
+    await drain(['tracking-push']);
+    const settings = await costs.loadAnalyticsSettings();
+    expect(await deliveryOf()).toBeCloseTo((settings.labelCosts[form.route!.service] ?? settings.defaultLabelCost) + settings.packagingCost, 1);
+    queue.length = 0;
+  });
+
   it('removes demo accounts with their orders, labels and rules', async () => {
     const settings = await import('@/server/services/settings');
     expect(await settings.demoAccountCount()).toBe(5);
