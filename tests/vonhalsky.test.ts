@@ -12,6 +12,7 @@ import {
 } from '@/server/integrations/marketplaces/vonhalsky/client';
 import { isImportable, mapVonHalskyOrder, vonHalskyOrderSchema } from '@/server/integrations/marketplaces/vonhalsky/mapper';
 import { httpConfig } from '@/server/http';
+import { offerPrice, suggestCategory } from '@/server/services/vonhalsky-offers';
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -230,8 +231,8 @@ describe('VonHalskyAdapter', () => {
     const listings = [];
     for await (const l of new VonHalskyAdapter(store()).listListings()) listings.push(l);
     expect(listings).toEqual([
-      { externalId: 'offer-1', sku: 'LUA024', title: 'Anua Toner', quantity: 7, ean: '8809640735455', ref: { offerId: 'offer-1', status: 'PUBLISHED' } },
-      { externalId: 'offer-2', sku: null, title: 'Cream', quantity: 0, ean: null, ref: { offerId: 'offer-2', status: 'SOLDOUT' } },
+      { externalId: 'offer-1', sku: 'LUA024', title: 'Anua Toner', quantity: 7, ean: '8809640735455', ref: { offerId: 'offer-1', status: 'PUBLISHED', externalId: null, price: null } },
+      { externalId: 'offer-2', sku: null, title: 'Cream', quantity: 0, ean: null, ref: { offerId: 'offer-2', status: 'SOLDOUT', externalId: null, price: null } },
     ]);
   });
 
@@ -336,5 +337,136 @@ describe('Authorization Code sign-in', () => {
     expect(seen[0].get('grant_type')).toBe('refresh_token');
     expect(seen[0].get('refresh_token')).toBe('r1');
     expect(creds.get().refreshToken).toBe('r2');
+  });
+});
+
+describe('offers created from Shopify', () => {
+  const input = {
+    externalId: 'luora:p1',
+    name: 'Serum',
+    descriptionHtml: '<p>x</p>',
+    brand: 'VT',
+    categoryId: 'cat-1',
+    sku: 'SKU1',
+    ean: '8803463017859',
+    dimension: { width: 10, height: 10, length: 5, weight: 300 },
+    quantity: 4,
+    price: '98.99',
+    currency: 'PLN',
+    daysToShip: 1,
+    imageUrls: ['https://img/1.jpg', 'https://img/2.jpg'],
+  };
+
+  it('computes prices from Shopify + markup with the chosen rounding', () => {
+    expect(offerPrice('89.90', { vhMarkupPercent: 10 })).toBe('98.99');
+    expect(offerPrice('89.90', { vhMarkupPercent: 10, vhRounding: 'x.00' })).toBe('99.00');
+    expect(offerPrice('89.90', { vhMarkupPercent: 10, vhRounding: 'none' })).toBe('98.89');
+    expect(offerPrice('100', {})).toBe('109.99');
+  });
+
+  it('suggests a face-cream category from the product type and title', () => {
+    const cats = [
+      { id: 'a', path: 'Uroda › Pielęgnacja › Pielęgnacja twarzy › Kremy do twarzy' },
+      { id: 'b', path: 'Uroda › Pielęgnacja › Pielęgnacja włosów › Szampony' },
+      { id: 'c', path: 'Uroda › Makijaż › Usta › Pomadki' },
+    ];
+    expect(suggestCategory('Face cream', 'VT Vitamin C krem 50ml', cats)?.id).toBe('a');
+    expect(suggestCategory('', 'Zupełnie inne', cats)).toBeNull();
+  });
+
+  it('posts the offer, waits for the command and reports validation errors', async () => {
+    let posted: Record<string, unknown> | null = null;
+    server.use(
+      tokenHandler(),
+      http.post(`${API}/offers`, async ({ request }) => {
+        posted = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ commandId: 'c1', status: 'PENDING' });
+      }),
+      http.get(`${API}/offers/commands/c1`, () => HttpResponse.json({ commandId: 'c1', status: 'SUCCESS' })),
+      http.get(`${API}/offers`, () =>
+        HttpResponse.json({
+          page: { limit: 30, offset: 0, total: 2 },
+          data: [
+            { metadata: { validationErrors: ['other offer problem'] }, offer: { id: 'o0', product: { name: 'Other', ean: '111' } } },
+            { metadata: { validationErrors: [] }, offer: { id: 'o1', product: { name: 'Serum', ean: input.ean } } },
+          ],
+        }),
+      ),
+    );
+    await new VonHalskyAdapter(store()).createOffer(input);
+    expect(posted).toMatchObject({
+      externalId: 'luora:p1',
+      product: { name: 'Serum', brand: 'VT', categoryId: 'cat-1', ean: input.ean, dimension: input.dimension },
+      stock: { quantity: 4, unit: 'UNIT' },
+      price: { grossPrice: { amount: 98.99, currency: 'PLN' }, taxRateInfo: '23.00' },
+      shippingTime: { daysToShip: 1 },
+      images: [
+        { fileUrl: 'https://img/1.jpg', priority: 1 },
+        { fileUrl: 'https://img/2.jpg', priority: 2 },
+      ],
+    });
+
+    server.use(
+      http.get(`${API}/offers`, () =>
+        HttpResponse.json({
+          page: { limit: 30, offset: 0, total: 1 },
+          data: [{ metadata: { validationErrors: ['images: too small'] }, offer: { id: 'o1', product: { name: 'Serum', ean: input.ean } } }],
+        }),
+      ),
+    );
+    await expect(new VonHalskyAdapter(store()).createOffer(input)).rejects.toThrow('images: too small');
+  });
+
+  it('lists offers from the wrapped { metadata, offer } shape with price and external id', async () => {
+    server.use(
+      tokenHandler(),
+      http.get(`${API}/offers`, () =>
+        HttpResponse.json({
+          page: { limit: 30, offset: 0, total: 1 },
+          data: [
+            {
+              metadata: { validationErrors: [] },
+              offer: {
+                id: 'o1',
+                status: 'PUBLISHED',
+                externalId: 'luora:p1',
+                product: { name: 'Serum', ean: input.ean, sku: 'S1' },
+                stock: { quantity: 3 },
+                price: { grossPrice: { amount: 98.99 } },
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const out = [];
+    for await (const l of new VonHalskyAdapter(store()).listListings()) out.push(l);
+    expect(out).toEqual([
+      { externalId: 'o1', sku: 'S1', title: 'Serum', quantity: 3, ean: input.ean, ref: { offerId: 'o1', status: 'PUBLISHED', externalId: 'luora:p1', price: 98.99 } },
+    ]);
+  });
+
+  it('updates prices in a batch and reads the category tree level by level', async () => {
+    let body: unknown;
+    server.use(
+      tokenHandler(),
+      http.patch(`${API}/offers/prices`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json([]);
+      }),
+      http.get('https://stage-api.inpost-group.com/inpsa/v1/categories', () =>
+        HttpResponse.json([{ id: 'r', name: 'Uroda', leaf: false, children: [{ id: 'g', name: 'Pielęgnacja', leaf: false }, { id: 'l', name: 'Perfumy', leaf: true }] }]),
+      ),
+      http.get('https://stage-api.inpost-group.com/inpsa/v1/categories/g', () =>
+        HttpResponse.json({ id: 'g', name: 'Pielęgnacja', leaf: false, children: [{ id: 'k', name: 'Kremy', leaf: true }] }),
+      ),
+    );
+    const adapter = new VonHalskyAdapter(store());
+    await adapter.updatePrices([{ offerId: 'o1', price: '98.99', currency: 'PLN' }]);
+    expect(body).toEqual([{ offerId: 'o1', price: { grossPrice: { amount: 98.99, currency: 'PLN' } } }]);
+    expect(await adapter.categoryLeaves('uroda')).toEqual([
+      { id: 'l', path: 'Uroda › Perfumy' },
+      { id: 'k', path: 'Uroda › Pielęgnacja › Kremy' },
+    ]);
   });
 });

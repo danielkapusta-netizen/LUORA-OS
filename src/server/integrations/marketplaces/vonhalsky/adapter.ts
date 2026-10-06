@@ -18,15 +18,45 @@ interface Page {
   total: number;
 }
 
+interface Offer {
+  id: string;
+  status?: string;
+  externalId?: string | null;
+  product: { name: string; sku?: string | null; ean?: string | null };
+  stock?: { quantity: number } | null;
+  price?: { grossPrice?: { amount: number } | null } | null;
+}
+
+/** The list wraps each offer as { metadata, offer }; a bare offer is accepted too. */
 interface OffersPage {
   page: Page;
-  data: {
-    id: string;
-    status?: string;
-    externalId?: string | null;
-    product: { name: string; sku?: string | null; ean?: string | null };
-    stock?: { quantity: number } | null;
-  }[];
+  data: (Offer | { metadata?: unknown; offer: Offer })[];
+}
+
+const offerOf = (item: Offer | { offer: Offer }): Offer => ('offer' in item ? item.offer : item);
+
+/** What a new offer needs; the caller reads these from Shopify and the account settings. */
+export interface VonHalskyOfferInput {
+  externalId: string;
+  name: string;
+  descriptionHtml: string;
+  brand: string;
+  categoryId: string;
+  sku: string | null;
+  ean: string;
+  /** cm and grams. */
+  dimension: { width: number; height: number; length: number; weight: number };
+  quantity: number;
+  price: string;
+  currency: string;
+  daysToShip: number;
+  imageUrls: string[];
+}
+
+/** A write answers with one command or a list of them; a plain object without a command id is ignored. */
+function asCommands(result: unknown): CommandDetails[] {
+  const list = Array.isArray(result) ? result : result ? [result] : [];
+  return list.filter((c): c is CommandDetails => typeof c === 'object' && c !== null && typeof (c as CommandDetails).commandId === 'string');
 }
 
 interface CommandDetails {
@@ -52,23 +82,93 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
     this.client = new VonHalskyClient(creds);
   }
 
-  /** Read-only look at InPost's raw answers (categories, a few offers, one offer in full), used to learn the offer format. */
-  async inspect(): Promise<Record<string, unknown>> {
-    const out: Record<string, unknown> = {};
-    const probe = async (key: string, path: string, query?: Record<string, string | number>) => {
-      try {
-        out[key] = await this.client.call<unknown>('GET', path, { query, retries: 0 });
-      } catch (err) {
-        out[key] = { error: err instanceof Error ? err.message : String(err) };
+  /** Children of a category (the tree is loaded one level at a time). */
+  async categoryChildren(id: string): Promise<{ id: string; name: string; leaf: boolean }[]> {
+    const category = await this.client.call<{ children?: { id: string; name: string; leaf: boolean }[] }>('GET', `/v1/categories/${encodeURIComponent(id)}`);
+    return (category.children ?? []).map((c) => ({ id: c.id, name: c.name, leaf: c.leaf }));
+  }
+
+  /**
+   * All categories below the top-level category named `rootName`, as selectable leaves with their
+   * path ("Uroda › Pielęgnacja › Pielęgnacja twarzy › Kremy do twarzy"). Reads the tree level by level.
+   */
+  async categoryLeaves(rootName: string, maxCalls = 120): Promise<{ id: string; path: string }[]> {
+    const roots = await this.client.call<{ id: string; name: string; leaf: boolean; children?: { id: string; name: string; leaf: boolean }[] }[]>('GET', '/v1/categories');
+    const root = roots.find((r) => r.name.toLowerCase() === rootName.toLowerCase());
+    if (!root) throw new Error(`InPost has no top-level category "${rootName}"`);
+    const leaves: { id: string; path: string }[] = [];
+    let calls = 0;
+    const queue = (root.children ?? []).map((c) => ({ ...c, path: `${root.name} › ${c.name}` }));
+    while (queue.length) {
+      const node = queue.shift()!;
+      if (node.leaf) {
+        leaves.push({ id: node.id, path: node.path });
+        continue;
       }
+      if (++calls > maxCalls) throw new Error('InPost category tree is too large to read in one go');
+      for (const child of await this.categoryChildren(node.id)) queue.push({ ...child, path: `${node.path} › ${child.name}` });
+    }
+    return leaves.sort((x, y) => x.path.localeCompare(y.path));
+  }
+
+  /** Creates one offer; InPost checks it asynchronously, and its verdict is read back. */
+  async createOffer(offer: VonHalskyOfferInput): Promise<void> {
+    const body = {
+      externalId: offer.externalId,
+      product: {
+        name: offer.name,
+        description: offer.descriptionHtml,
+        brand: offer.brand,
+        categoryId: offer.categoryId,
+        attributes: [],
+        sku: offer.sku,
+        ean: offer.ean,
+        dimension: offer.dimension,
+      },
+      stock: { quantity: Math.max(0, Math.floor(offer.quantity)), unit: 'UNIT' },
+      price: { grossPrice: { amount: Number(offer.price), currency: offer.currency }, taxRateInfo: '23.00' },
+      gpsr: { manuals: [], doesNotRequireGpsrInfo: true },
+      shippingTime: { daysToShip: offer.daysToShip },
+      images: offer.imageUrls.map((fileUrl, i) => ({ fileUrl, priority: i + 1 })),
+      features: { refundable: true },
     };
-    const PIEL = 'a25a4d24-4759-5afc-8533-dce1f8daa097';
-    const USED = '124ee985-1efd-543c-9205-24b6e61e332d';
-    await probe('byId', `/v1/categories/${PIEL}`);
-    await probe('byParent', '/v1/categories', { parentId: PIEL });
-    await probe('used', `/v1/categories/${USED}`);
-    await probe('usedAttrs', `/v1/categories/${USED}/attributes`);
-    return out;
+    const result = await this.client.call<unknown>('POST', this.client.org('/offers'), { body });
+    await this.confirm(asCommands(result), 'the new offer');
+    const errors = await this.validationErrors(offer.ean);
+    if (errors.length) throw new Error(`InPost accepted the offer but reports: ${errors.join('; ')}`);
+  }
+
+  /** Validation problems InPost lists on the offer with this EAN (empty when fine or not found yet). */
+  private async validationErrors(ean: string): Promise<string[]> {
+    const page = await this.client.call<{ data: { metadata?: { validationErrors?: unknown[] }; offer?: Offer }[] }>('GET', this.client.org('/offers'), {
+      query: { ean, limit: 30 },
+    });
+    // The filter may be ignored, so keep only this product's offer.
+    return (page.data ?? [])
+      .filter((o) => o.offer?.product.ean === ean)
+      .flatMap((o) => (o.metadata?.validationErrors ?? []).map((e) => (typeof e === 'string' ? e : JSON.stringify(e))));
+  }
+
+  /** Sets gross prices; falls back to one request per offer when the batch endpoint is missing. */
+  async updatePrices(updates: { offerId: string; price: string; currency: string }[]): Promise<void> {
+    for (let i = 0; i < updates.length; i += STOCK_BATCH) {
+      const batch = updates.slice(i, i + STOCK_BATCH);
+      const price = (u: { price: string; currency: string }) => ({ grossPrice: { amount: Number(u.price), currency: u.currency } });
+      let commands: CommandDetails[];
+      try {
+        commands = asCommands(await this.client.call<unknown>('PATCH', this.client.org('/offers/prices'), { body: batch.map((u) => ({ offerId: u.offerId, price: price(u) })) }));
+      } catch (err) {
+        if (!(err instanceof VonHalskyApiError) || ![404, 405, 501].includes(err.status)) throw err;
+        commands = [];
+        for (const u of batch) {
+          await this.client.call('PATCH', this.client.org(`/offers/${encodeURIComponent(u.offerId)}`), {
+            headers: { 'Content-Type': 'application/merge-patch+json' },
+            body: JSON.stringify({ price: price(u) }),
+          });
+        }
+      }
+      await this.confirm(commands, 'the price update');
+    }
   }
 
   async checkConnection(): Promise<string> {
@@ -118,14 +218,14 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
     let offset = 0;
     for (;;) {
       const page = await this.client.call<OffersPage>('GET', this.client.org('/offers'), { query: { limit: OFFERS_PAGE, offset } });
-      for (const offer of page.data) {
+      for (const offer of page.data.map(offerOf)) {
         yield {
           externalId: offer.id,
           sku: offer.product.sku || null,
           title: offer.product.name,
           quantity: offer.stock?.quantity ?? null,
           ean: offer.product.ean ?? null,
-          ref: { offerId: offer.id, status: offer.status ?? null },
+          ref: { offerId: offer.id, status: offer.status ?? null, externalId: offer.externalId ?? null, price: offer.price?.grossPrice?.amount ?? null },
         };
       }
       offset += page.data.length;
@@ -154,12 +254,12 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
           });
         }
       }
-      await this.confirm(commands);
+      await this.confirm(commands, 'the stock update');
     }
   }
 
   /** Waits briefly for pending commands; a failed one is reported with InPost's reason. */
-  private async confirm(commands: CommandDetails[]): Promise<void> {
+  private async confirm(commands: CommandDetails[], what: string): Promise<void> {
     let pending = commands.filter((c) => c.status === 'PENDING');
     const failures: string[] = commands.filter((c) => c.status === 'FAILURE').map((c) => `offer ${c.offerId ?? c.commandId}: rejected`);
     for (let poll = 0; pending.length > 0 && poll < COMMAND_POLLS; poll++) {
@@ -174,6 +274,6 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
       }
       pending = next;
     }
-    if (failures.length) throw new Error(`InPost Von Halsky refused the stock update (${failures.slice(0, 5).join(' | ')}${failures.length > 5 ? ` … +${failures.length - 5}` : ''})`);
+    if (failures.length) throw new Error(`InPost Von Halsky refused ${what} (${failures.slice(0, 5).join(' | ')}${failures.length > 5 ? ` … +${failures.length - 5}` : ''})`);
   }
 }

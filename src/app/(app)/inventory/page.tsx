@@ -203,6 +203,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         description="Products and photos come from Shopify; Allegro and Empik offers are matched by EAN. One stock number for every platform."
         actions={
           <>
+            <Link className={buttonClass('secondary')} href="/inventory/vonhalsky">
+              Von Halsky offers
+            </Link>
             <ActionForm action={importListingsAction}>
               <SubmitButton variant="secondary" pendingText="Importing…">
                 Import listings

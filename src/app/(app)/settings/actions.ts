@@ -5,8 +5,6 @@ import { redirect } from 'next/navigation';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
 import type { CarrierSettings, MarketplaceSettings, RuleConditions } from '@/server/db/schema';
-import { VonHalskyAdapter } from '@/server/integrations/marketplaces/vonhalsky/adapter';
-import { getMarketplaceAdapter, loadMarketplaceAccount } from '@/server/services/accounts';
 import { enqueue, JOBS } from '@/server/jobs/queue';
 import {
   createDefaultRules,
@@ -66,6 +64,12 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
       accessToken: '',
       expiresAt: '',
     };
+    settings.vhMarkupPercent = Number(text(fd, 'vhMarkupPercent').replace(',', '.')) || 0;
+    const rounding = text(fd, 'vhRounding');
+    settings.vhRounding = rounding === 'x.00' || rounding === 'none' ? rounding : 'x.99';
+    const dim = (name: string, fallback: number) => Number(text(fd, name).replace(',', '.')) || fallback;
+    settings.vhBox = { width: dim('vhBoxWidth', 10), height: dim('vhBoxHeight', 10), length: dim('vhBoxLength', 5) };
+    settings.vhDaysToShip = Math.max(0, Math.floor(Number(text(fd, 'vhDaysToShip')) || 1));
   } else if (type === 'empik') {
     credentials = { baseUrl: text(fd, 'baseUrl'), ...secrets(fd, ['apiKey']), ...(text(fd, 'shopId') ? { shopId: text(fd, 'shopId') } : {}) };
     settings.autoAccept = bool(fd, 'autoAccept');
@@ -138,18 +142,6 @@ export async function importListingsAction(id: string): Promise<ActionResult> {
   return attempt(async () => {
     await enqueue(JOBS.listingsImport, { accountId: id }, { singletonKey: id });
     return 'Listing import queued; see the Inventory page';
-  });
-}
-
-export async function inspectVonHalskyAction(id: string): Promise<ActionResult> {
-  await requireAdmin();
-  return attempt(async () => {
-    const account = await loadMarketplaceAccount(id);
-    const adapter = getMarketplaceAdapter(account);
-    if (!(adapter instanceof VonHalskyAdapter)) throw new Error('Not a Von Halsky account');
-    const json = JSON.stringify(await adapter.inspect(), null, 1);
-    for (let i = 0; i < json.length; i += 3000) console.log(`[vonhalsky inspect ${i / 3000}]`, json.slice(i, i + 3000));
-    return `Read ${json.length} characters from InPost (logged for the developer).`;
   });
 }
 

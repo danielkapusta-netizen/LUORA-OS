@@ -55,6 +55,34 @@ const VARIANTS_QUERY = `query Variants($first: Int!, $after: String) {
   }
 }`;
 
+const VARIANT_DETAILS = `query Details($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on ProductVariant {
+      id sku barcode price displayName
+      image { url }
+      inventoryItem { measurement { weight { value unit } } }
+      product { title descriptionHtml vendor productType images(first: 10) { nodes { url } } }
+    }
+  }
+}`;
+
+/** What Von Halsky needs to create an offer, read live from Shopify. */
+export interface ShopifyVariantDetails {
+  variantId: string;
+  title: string;
+  descriptionHtml: string;
+  vendor: string;
+  productType: string;
+  price: string;
+  ean: string | null;
+  sku: string | null;
+  imageUrls: string[];
+  /** Grams, when Shopify knows it. */
+  weightGrams: number | null;
+}
+
+const GRAMS_PER_UNIT: Record<string, number> = { GRAMS: 1, KILOGRAMS: 1000, OUNCES: 28.3495, POUNDS: 453.592 };
+
 const SET_QUANTITIES = `mutation SetQty($input: InventorySetQuantitiesInput!) {
   inventorySetQuantities(input: $input) {
     inventoryAdjustmentGroup { id }
@@ -175,6 +203,43 @@ export class ShopifyAdapter implements MarketplaceAdapter {
       if (!data.productVariants.pageInfo.hasNextPage) return;
       after = data.productVariants.pageInfo.endCursor;
     }
+  }
+
+  /** Title, description, brand, photos, price and weight of Shopify variants (by variant id). */
+  async variantDetails(variantIds: string[]): Promise<Map<string, ShopifyVariantDetails>> {
+    const out = new Map<string, ShopifyVariantDetails>();
+    for (let i = 0; i < variantIds.length; i += 50) {
+      const data: {
+        nodes: ({
+          id: string;
+          sku: string | null;
+          barcode: string | null;
+          price: string;
+          displayName: string;
+          image: { url: string } | null;
+          inventoryItem: { measurement: { weight: { value: number; unit: string } | null } | null } | null;
+          product: { title: string; descriptionHtml: string; vendor: string; productType: string; images: { nodes: { url: string }[] } };
+        } | null)[];
+      } = await this.client.graphql(VARIANT_DETAILS, { ids: variantIds.slice(i, i + 50) });
+      for (const v of data.nodes) {
+        if (!v?.product) continue;
+        const weight = v.inventoryItem?.measurement?.weight;
+        const urls = [v.image?.url, ...v.product.images.nodes.map((n) => n.url)].filter((u): u is string => Boolean(u));
+        out.set(v.id, {
+          variantId: v.id,
+          title: v.displayName || v.product.title,
+          descriptionHtml: v.product.descriptionHtml,
+          vendor: v.product.vendor,
+          productType: v.product.productType,
+          price: v.price,
+          ean: v.barcode?.trim() || null,
+          sku: v.sku || null,
+          imageUrls: [...new Set(urls)],
+          weightGrams: weight && weight.value > 0 ? Math.round(weight.value * (GRAMS_PER_UNIT[weight.unit] ?? 1)) : null,
+        });
+      }
+    }
+    return out;
   }
 
   async setStock(updates: StockUpdate[]): Promise<void> {

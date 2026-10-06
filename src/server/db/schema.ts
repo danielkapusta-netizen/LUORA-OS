@@ -75,6 +75,16 @@ export interface MarketplaceSettings {
   carrierCodes?: Record<string, string>;
   /** Empik: carriers from SH21, refreshed at most daily. */
   carrierCache?: { fetchedAt: string; carriers: { code: string; label: string; tracking_url?: string | null }[] };
+  /** Von Halsky: price = Shopify price × (1 + markup/100), then rounded. */
+  vhMarkupPercent?: number;
+  vhRounding?: 'x.99' | 'x.00' | 'none';
+  /** Von Halsky: package size in cm used when Shopify has none, and the days to ship. */
+  vhBox?: { width: number; height: number; length: number };
+  vhDaysToShip?: number;
+  /** Von Halsky: chosen category per Shopify product type ("" = products without a type). */
+  vhCategoryMap?: Record<string, string>;
+  /** Von Halsky: categories to choose from (leaves), read from InPost and cached. */
+  vhCategories?: { fetchedAt: string; items: { id: string; path: string }[] };
 }
 
 export const marketplaceAccounts = sqliteTable('marketplace_accounts', {

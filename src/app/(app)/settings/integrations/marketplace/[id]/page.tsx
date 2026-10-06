@@ -15,7 +15,7 @@ import { DEFAULT_SHOPIFY_API_VERSION } from '@/server/integrations/marketplaces/
 import { DEFAULT_PICKUP_POINT_KEYS } from '@/server/integrations/marketplaces/shopify/mapper';
 import { loadMarketplaceAccount } from '@/server/services/accounts';
 import { empikCarriers, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
-import { deleteMarketplaceAction, importListingsAction, inspectVonHalskyAction, refreshEmpikCarriersAction, saveMarketplaceAction } from '../../../actions';
+import { deleteMarketplaceAction, importListingsAction, refreshEmpikCarriersAction, saveMarketplaceAction } from '../../../actions';
 
 export const metadata: Metadata = { title: 'Marketplace account' };
 
@@ -144,6 +144,33 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   <Secret name="clientSecret" label="Client secret" stored={stored.includes('clientSecret')} />
                 </div>
                 <Checkbox name="sandbox" label="Use InPost's stage (test) environment" defaultChecked={pub.sandbox === true} />
+                <p className="pt-2 text-sm font-semibold">Offers created from Shopify</p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Field label="Markup on the Shopify price (%)">
+                    <Input name="vhMarkupPercent" inputMode="decimal" defaultValue={String(s.vhMarkupPercent ?? 10)} />
+                  </Field>
+                  <Field label="Round the price to">
+                    <Select name="vhRounding" defaultValue={s.vhRounding ?? 'x.99'}>
+                      <option value="x.99">…99 (e.g. 89.99)</option>
+                      <option value="x.00">whole zloty (e.g. 90.00)</option>
+                      <option value="none">no rounding</option>
+                    </Select>
+                  </Field>
+                  <Field label="Days to ship">
+                    <Input name="vhDaysToShip" inputMode="numeric" defaultValue={String(s.vhDaysToShip ?? 1)} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Default box width (cm)">
+                    <Input name="vhBoxWidth" inputMode="decimal" defaultValue={String(s.vhBox?.width ?? 10)} />
+                  </Field>
+                  <Field label="Height (cm)">
+                    <Input name="vhBoxHeight" inputMode="decimal" defaultValue={String(s.vhBox?.height ?? 10)} />
+                  </Field>
+                  <Field label="Length (cm)">
+                    <Input name="vhBoxLength" inputMode="decimal" defaultValue={String(s.vhBox?.length ?? 5)} />
+                  </Field>
+                </div>
                 <p className="text-xs text-slate-500">
                   Shipments are made with your InPost account (labels), not here: InPost links the label to the order through the buyer’s e-mail.
                 </p>
@@ -213,11 +240,6 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
           <ActionForm action={importListingsAction.bind(null, account.id)}>
             <SubmitButton variant="secondary">Import listings for stock sync</SubmitButton>
           </ActionForm>
-          {type === 'vonhalsky' && (
-            <ActionForm action={inspectVonHalskyAction.bind(null, account.id)}>
-              <SubmitButton variant="secondary">Read InPost offer format (read-only)</SubmitButton>
-            </ActionForm>
-          )}
           <form action={deleteMarketplaceAction.bind(null, account.id)}>
             <SubmitButton variant="danger" confirm="Delete this account and all of its orders?">
               Delete account
