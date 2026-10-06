@@ -55,7 +55,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         <span className="text-xs font-medium text-slate-500">Order items</span>
         <span className="h-px flex-1 bg-slate-200" />
       </div>
-      <OrderItemsList items={items} currency={order.currency} className="mt-3" />
+      <OrderItemsList items={items} currency={order.currency} className="mt-3" highlightQuantity />
       <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
         <span className="text-sm text-slate-500">Total{order.codAmount ? ' (cash on delivery)' : ''}</span>
         <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
