@@ -6,6 +6,7 @@ import { MarketplaceBadge } from '@/components/badges';
 import { ExpandableRow } from '@/components/expandable-row';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Gauge } from '@/components/gauge';
+import { productMargins } from '@/server/analytics/dataset';
 import { Badge, buttonClass, Card, EmptyState, Input, PageHeader, Select } from '@/components/ui';
 import { hasRealSku } from '@/lib/sku';
 import { cn, formatDate, timeAgo } from '@/lib/utils';
@@ -161,6 +162,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     recentStockLog(30),
     productStats(days),
   ]);
+  const margins = await productMargins(days);
   const perf = (id: string): ProductPerformance => stats.byProduct.get(id) ?? emptyPerformance();
   const byProduct = new Map<string, ListingRow[]>();
   for (const l of listings) byProduct.set(l.productId!, [...(byProduct.get(l.productId!) ?? []), l]);
@@ -409,6 +411,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           <span className="text-slate-300">·</span>
                           <ShoppingBag className="size-3.5 text-slate-400" /> {pln(f.revenue)}
                         </p>
+                        {margins.get(p.id) && margins.get(p.id)!.gross > 0 && (
+                          <p className="mt-0.5 text-xs text-slate-500" title="Profit after VAT, fees, product cost, shipping and refunds">
+                            Margin{' '}
+                            <span className={cn('font-medium tabular-nums', margins.get(p.id)!.profit < 0 ? 'text-red-700' : 'text-slate-800')}>
+                              {((margins.get(p.id)!.profit / margins.get(p.id)!.gross) * 100).toFixed(1)}%
+                            </span>{' '}
+                            · {pln(margins.get(p.id)!.profit)} profit
+                          </p>
+                        )}
                       </td>
                       <td className="px-2 py-3">
                         <Gauge value={f.percentile} tone={f.level} className="h-10 w-16" label={`${LEVEL_LABEL[f.level]} performance`} />

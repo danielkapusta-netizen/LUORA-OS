@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Card, CardBody, CardHeader, EmptyState, PageHeader, td, th } from '@/components/ui';
+import { Card, CardBody, CardHeader, EmptyState, td, th } from '@/components/ui';
 import { cn, formatDate, formatMoney, MARKETPLACE_LABELS, SERVICE_LABELS, CARRIER_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analytics } from '@/server/services/analytics';
 import { STATUS_LABELS } from '@/server/services/workflow';
-import { HorizontalBars, MARKETPLACE_COLORS, RevenueByDay } from './charts';
+import { MARKETPLACE_COLORS } from '@/components/analytics/format';
+import { HorizontalBars, RevenueByDay } from './charts';
 
-export const metadata: Metadata = { title: 'Analytics' };
+export const metadata: Metadata = { title: 'Analytics · Operations' };
 
 const RANGES = [
   { value: '7', label: 'Last 7 days' },
@@ -64,7 +65,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PageHeader title="Analytics" description={`${formatDate(from, false)} – ${formatDate(to, false)} · orders by placement date, cancelled orders excluded`} />
+      <p className="mb-4 text-sm text-slate-500">
+        Operations: {formatDate(from, false)} – {formatDate(to, false)} · orders by placement date, cancelled orders excluded
+      </p>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
         {RANGES.map((r) => (

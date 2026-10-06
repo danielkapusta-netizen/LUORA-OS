@@ -98,6 +98,16 @@ Profit per order needs more than the order itself. This is where each part comes
 | Product costs | **Settings → Costs & margins.** Landed cost per unit in PLN, dated so that a new cost never rewrites past margins. Enter it by hand (or from a purchase price in USD/EUR/KRW at the NBP rate), paste two columns from a spreadsheet, import the Luora Analytics Google Sheet once, or take Shopify's "Cost per item". |
 | Profit settings | Same page: fallback commission per marketplace (only for orders without a reported fee), label and packaging cost, margin targets. VAT comes from the Accounting settings. |
 
+## Dashboard and analytics
+
+The analytics from the former Luora Analytics app (Google Sheet) now run on Luora OS data:
+
+- **Dashboard** (`/`): executive brief, KPIs with sparklines, top products, questions answered from your numbers, business health, risks and opportunities, the business pulse and the channel split, plus today's open orders.
+- **Analytics** (`/analytics`): Operations (labels, time to ship, backlog), Action centre, Business review, Products (by product, brand or category, with monthly history), Pricing (price needed for a margin, recommendations, simulator, margin at risk), Trends (any metric with previous period, last year, moving average and projection), Orders P&L, and the pre-purchase Calculator.
+- Every order shows its profit breakdown, and Inventory shows each product's margin.
+
+How it fits together: `services/profit.ts` keeps `sales_lines` (profit per order line, PLN) up to date; `src/server/analytics/dataset.ts` turns those lines into the domain model; the calculations in `src/lib/analytics/` are the Luora Analytics domain modules, ported almost unchanged (they keep that project's code style).
+
 ## How it works
 
 ```

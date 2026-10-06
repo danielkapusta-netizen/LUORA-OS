@@ -10,6 +10,8 @@ import { Alert, buttonClass, Card, CardBody, CardHeader, Field, Input, Select, t
 import { CARRIER_LABELS, cn, formatDate, formatMoney, SERVICE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { getOrderDetail } from '@/server/services/orders';
+import { orderProfit } from '@/server/analytics/dataset';
+import { ProfitBreakdown } from '@/components/analytics/profit-breakdown';
 import { listUsers } from '@/server/services/settings';
 import { shippingFormData } from '@/server/services/shipping';
 import { canTransition, MANUAL_TARGETS, STATUS_LABELS } from '@/server/services/workflow';
@@ -48,7 +50,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const detail = await getOrderDetail(id);
   if (!detail) notFound();
   const { order, account, items, events, shipments } = detail;
-  const users = await listUsers();
+  const [users, profitLines] = await Promise.all([listUsers(), orderProfit(order.id)]);
 
   const active = shipments.find((s) => s.state === 'pending' || s.state === 'created');
   const canShip = !active && order.readyToShip && !['cancelled', 'shipped', 'delivered'].includes(order.status);
@@ -285,6 +287,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <div className="space-y-5">
+          <Card>
+            <CardHeader title="Profit" description="After VAT, fees, product cost, shipping and refunds, in PLN." />
+            <CardBody>
+              <ProfitBreakdown lines={profitLines} />
+            </CardBody>
+          </Card>
           <Card>
             <CardHeader title="Workflow" />
             <CardBody className="space-y-4">

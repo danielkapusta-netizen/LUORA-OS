@@ -1,11 +1,12 @@
 'use client';
 
-import { BarChart3, Boxes, LogOut, ReceiptText, Settings, ShoppingBag, Truck } from 'lucide-react';
+import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const ITEMS = [
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/orders', label: 'Orders', icon: ShoppingBag },
   { href: '/shipments', label: 'Shipments', icon: Truck },
   { href: '/inventory', label: 'Inventory', icon: Boxes },
@@ -25,7 +26,7 @@ export function Nav({ userName, mock, logoutAction }: { userName: string; mock: 
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:gap-1.5 md:overflow-visible">
         {ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`);
+          const active = pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
           return (
             <Link
               key={href}

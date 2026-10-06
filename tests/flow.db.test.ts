@@ -67,6 +67,17 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
   const productStock = async () =>
     Object.fromEntries((await m.db.getDb().select().from(m.schema.products)).map((p) => [p.sku, p.stock]));
   const adminId = async () => (await m.db.getDb().select().from(m.schema.users))[0].id;
+  /** Orders an earlier test gave an extra line, so their total no longer matches their items. */
+  const alteredOrders = async () =>
+    new Set(
+      (
+        await m.db
+          .getDb()
+          .select({ orderId: m.schema.orderItems.orderId })
+          .from(m.schema.orderItems)
+          .where(m.orm.eq(m.schema.orderItems.externalLineId, 'night-1'))
+      ).map((r) => r.orderId),
+    );
 
   it('imports orders from every marketplace and takes stock', async () => {
     const before = await productStock();
@@ -321,8 +332,11 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       settings: { ...invoicing.DEFAULT_ACCOUNTING_SETTINGS },
     });
     const taken = new Set((await db.select({ id: m.schema.invoices.orderId }).from(m.schema.invoices)).map((r) => r.id));
+    const altered = await alteredOrders();
     const free = (marketplace: string) =>
-      allOrders().then((rows) => rows.find((o) => o.marketplace === marketplace && o.status !== 'cancelled' && !o.invoiceRequest && !taken.has(o.id) && o.shippingAddress.countryCode === 'PL' && o.currency === 'PLN'));
+      allOrders().then((rows) =>
+        rows.find((o) => o.marketplace === marketplace && o.status !== 'cancelled' && !o.invoiceRequest && !taken.has(o.id) && !altered.has(o.id) && o.shippingAddress.countryCode === 'PL' && o.currency === 'PLN'),
+      );
     const shopifyOrder = (await free('shopify'))!;
     const allegroOrder = (await free('allegro'))!;
     expect(shopifyOrder && allegroOrder).toBeTruthy();
@@ -575,7 +589,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       invoiceKey: null,
       settings: { autoOnShipped: true, uploadAllegro: true, uploadEmpik: true, sendB2bToKsef: true, defaultVatRate: 0.23 },
     });
-    const candidates = (await allOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount);
+    const altered = await alteredOrders();
+    const candidates = (await allOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id));
     const order = candidates[0];
     const other = candidates[1];
     await db
@@ -611,7 +626,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const userId = await adminId();
     await invoicing.saveAccounting({ enabled: true, login: '', invoiceKey: null, settings: { ...invoicing.DEFAULT_ACCOUNTING_SETTINGS } });
     expect((await invoicing.loadAccounting()).settings.autoOnShipped).toBe(false);
-    const order = (await allOrders()).find((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount)!;
+    const altered = await alteredOrders();
+    const order = (await allOrders()).find((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id))!;
     await db
       .update(m.schema.orders)
       .set({ invoiceRequest: { name: 'Hygge Twist', taxId: '9512513434', euPrefix: null, street: 'Prosta 2', postalCode: '00-001', city: 'Warszawa', countryCode: 'PL' } })
@@ -814,6 +830,36 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const settings = await costs.loadAnalyticsSettings();
     expect(await deliveryOf()).toBeCloseTo((settings.labelCosts[form.route!.service] ?? settings.defaultLabelCost) + settings.packagingCost, 1);
     queue.length = 0;
+  });
+
+  it('feeds the analytics pages from the profit lines', async () => {
+    const dataset = await import('@/server/analytics/dataset');
+    const { analyticsView } = await import('@/server/analytics/view');
+    const db = m.db.getDb();
+    const lines = await db.select().from(m.schema.salesLines);
+    const data = await dataset.loadBusinessData();
+    expect(data.lineItems).toHaveLength(lines.length);
+    expect(data.orders).toHaveLength(new Set(lines.map((l) => l.orderId)).size);
+    const gross = lines.reduce((s, l) => s + l.gross, 0);
+    const profit = lines.reduce((s, l) => s + l.profit, 0);
+    expect(data.lineItems.reduce((s, l) => s + l.revenuePLN, 0)).toBeCloseTo(gross, 2);
+
+    const all = dataset.snapshotFor(data, dataset.periodFor(data, 'all'));
+    expect(all.totals.revenuePLN).toBeCloseTo(gross, 2);
+    expect(all.totals.marginPLN).toBeCloseTo(profit, 2);
+    expect(all.kpis).toHaveLength(5);
+    expect(all.health.score).toBeGreaterThan(0);
+    expect(all.products.length).toBeGreaterThan(0);
+    // Brands and categories fall back to the name when Shopify gave none.
+    expect(all.products.every((p) => p.brand && p.category)).toBe(true);
+
+    const empik = await analyticsView({ marketplace: 'empik', period: 'year' });
+    expect(empik.data.lineItems.length).toBeGreaterThan(0);
+    expect(empik.data.lineItems.every((l) => l.source === 'empik')).toBe(true);
+    expect(empik.params).toMatchObject({ marketplace: 'empik', period: 'year' });
+
+    const margins = await dataset.productMargins(400);
+    expect(margins.size).toBeGreaterThan(0);
   });
 
   it('removes demo accounts with their orders, labels and rules', async () => {

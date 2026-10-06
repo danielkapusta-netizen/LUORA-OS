@@ -64,6 +64,8 @@ const HISTORY_PAGE = 50;
 const HISTORY_BASE = 5000;
 const globalMock = globalThis as unknown as { __luoraMockAccepted?: Set<string> };
 const accepted = (globalMock.__luoraMockAccepted ??= new Set<string>());
+/** Follow-up syncs per account (adapters are created per call, so the count lives here). */
+const syncCounts = new Map<string, number>();
 
 function prng(seed: number) {
   let a = seed >>> 0;
@@ -143,7 +145,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
   }
 
   buildOrder(index: number, placedAt: Date, past = false): NormalizedOrder {
-    const rand = prng(hash(`${this.accountKey}:${index}`));
+    // Seeded by marketplace and index (not the random account id), so every demo run has the same orders.
+    const rand = prng(hash(`${this.marketplace}:${index}`));
     const pick = <T,>(list: T[]) => list[Math.floor(rand() * list.length)];
     const first = pick(FIRST);
     const last = pick(LAST);
@@ -227,7 +230,7 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
     const now = Date.now();
     const orders: NormalizedOrder[] = [];
     for (let i = start; i < end; i++) {
-      const daysAgo = 20 + (i * 345) / MOCK_HISTORY_ORDERS + (hash(`${this.accountKey}h${i}`) % 20) / 24;
+      const daysAgo = 20 + (i * 345) / MOCK_HISTORY_ORDERS + (hash(`${this.marketplace}h${i}`) % 20) / 24;
       orders.push(this.buildOrder(HISTORY_BASE + i, new Date(now - daysAgo * 86_400_000), true));
     }
     const hasMore = end < MOCK_HISTORY_ORDERS;
@@ -241,11 +244,13 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
     const orders: NormalizedOrder[] = [];
     if (start === 0) {
       for (let i = 0; i < INITIAL_ORDERS; i++) {
-        orders.push(this.buildOrder(i, new Date(now - (INITIAL_ORDERS - i) * 16 * 3600_000 - hash(`${this.accountKey}${i}`) % 3600_000)));
+        orders.push(this.buildOrder(i, new Date(now - (INITIAL_ORDERS - i) * 16 * 3600_000 - hash(`${this.marketplace}${i}`) % 3600_000)));
       }
     } else {
-      // Roughly one new order every other sync.
-      const count = Math.random() < 0.5 ? 1 : 0;
+      // One new order every other sync; deterministic, so runs (and tests) repeat exactly.
+      const n = (syncCounts.get(this.accountKey) ?? 0) + 1;
+      syncCounts.set(this.accountKey, n);
+      const count = n % 2 === 1 ? 1 : 0;
       for (let i = 0; i < count; i++) orders.push(this.buildOrder(start + i, new Date(now)));
     }
     return { orders, nextCursor: String(start + orders.length), hasMore: false };

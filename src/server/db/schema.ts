@@ -673,6 +673,16 @@ export const salesLines = sqliteTable(
   ],
 );
 
+/** Products considered for purchase on the Calculator page, kept for comparison. */
+export const calculatorCandidates = sqliteTable('calculator_candidates', {
+  id: id(),
+  /** The calculator's candidate as entered (label, cost parts, price, channel, commission override). */
+  data: json<Record<string, unknown>>('data').notNull(),
+  createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 /** Single row: how profit is calculated. VAT rates come from the accounting settings. */
 export const analyticsSettings = sqliteTable('analytics_settings', {
   id: text('id').primaryKey().$defaultFn(() => 'main'),
