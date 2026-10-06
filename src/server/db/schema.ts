@@ -188,6 +188,8 @@ export const orders = sqliteTable(
     discountAmount: text('discount_amount'),
     /** Imported by the history import: never routed, labelled, invoiced or taken from stock. */
     historical: bool('historical').notNull().default(false),
+    /** The CRM customer this order belongs to (services/customers.ts). */
+    customerId: text('customer_id'),
     raw: json<unknown>('raw'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -196,6 +198,7 @@ export const orders = sqliteTable(
     uniqueIndex('orders_account_external_idx').on(t.accountId, t.externalId),
     index('orders_status_idx').on(t.status),
     index('orders_placed_at_idx').on(t.placedAt),
+    index('orders_customer_idx').on(t.customerId),
   ],
 );
 
@@ -673,6 +676,109 @@ export const salesLines = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------- CRM
+
+/**
+ * A buyer, across marketplaces. Allegro and Empik hide the real e-mail behind a relay address, so a
+ * person is recognised by their marketplace id and, where it is real, their e-mail. Aggregates are
+ * refreshed from the orders and their profit lines.
+ */
+export const customers = sqliteTable(
+  'customers',
+  {
+    id: id(),
+    displayName: text('display_name').notNull(),
+    /** Real e-mail when known (never a marketplace relay address). */
+    email: text('email'),
+    phone: text('phone'),
+    /** Last known delivery city and country, for the list. */
+    city: text('city'),
+    countryCode: text('country_code'),
+    firstOrderAt: ts('first_order_at'),
+    lastOrderAt: ts('last_order_at'),
+    ordersCount: integer('orders_count').notNull().default(0),
+    /** PLN, from the profit lines (cancelled orders left out). */
+    revenue: real('revenue').notNull().default(0),
+    profit: real('profit').notNull().default(0),
+    /** Marketplaces bought on, e.g. ["allegro","shopify"]. */
+    marketplaces: json<string[]>('marketplaces').notNull().$defaultFn(() => []),
+    tags: json<string[]>('tags').notNull().$defaultFn(() => []),
+    /** Shopify e-mail marketing consent, when read. */
+    marketingConsent: bool('marketing_consent'),
+    shopifyCustomerId: text('shopify_customer_id'),
+    /** Luora tags last written to the Shopify customer, so only changes are sent. */
+    syncedTags: json<string[]>('synced_tags'),
+    syncedAt: ts('synced_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('customers_last_order_idx').on(t.lastOrderAt), index('customers_email_idx').on(t.email)],
+);
+
+export const customerIdentityKinds = ['shopify', 'allegro', 'empik', 'vonhalsky', 'email'] as const;
+
+/** Keys a customer is recognised by: a marketplace buyer id, or a real e-mail. */
+export const customerIdentities = sqliteTable(
+  'customer_identities',
+  {
+    id: id(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: customerIdentityKinds }).notNull(),
+    value: text('value').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('customer_identities_kind_value_idx').on(t.kind, t.value), index('customer_identities_customer_idx').on(t.customerId)],
+);
+
+export const customerNotes = sqliteTable(
+  'customer_notes',
+  {
+    id: id(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('customer_notes_customer_idx').on(t.customerId, t.createdAt)],
+);
+
+export const customerTasks = sqliteTable(
+  'customer_tasks',
+  {
+    id: id(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    dueAt: ts('due_at'),
+    assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: ts('done_at'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('customer_tasks_open_idx').on(t.doneAt, t.dueAt), index('customer_tasks_customer_idx').on(t.customerId)],
+);
+
+export interface CrmSettings {
+  /** Segments whose tag ("luora-vip", …) is written to Shopify customers. */
+  syncSegments?: string[];
+  /** Also write the tags staff add here. */
+  syncManualTags?: boolean;
+  /** Only log what would change in Shopify. */
+  dryRun?: boolean;
+}
+
+/** Single row: Shopify marketing sync options. */
+export const crmSettings = sqliteTable('crm_settings', {
+  id: text('id').primaryKey().$defaultFn(() => 'main'),
+  settings: json<CrmSettings>('settings').notNull().$defaultFn(() => ({})),
+  updatedAt: updatedAt(),
+});
+
 /** Products considered for purchase on the Calculator page, kept for comparison. */
 export const calculatorCandidates = sqliteTable('calculator_candidates', {
   id: id(),
@@ -714,4 +820,6 @@ export type OrderRefund = typeof orderRefunds.$inferSelect;
 export type ProductCost = typeof productCosts.$inferSelect;
 export type FeeKind = (typeof feeKindValues)[number];
 export type SalesLine = typeof salesLines.$inferSelect;
+export type Customer = typeof customers.$inferSelect;
+export type CustomerIdentityKind = (typeof customerIdentityKinds)[number];
 export type FeeSource = (typeof feeSourceValues)[number];

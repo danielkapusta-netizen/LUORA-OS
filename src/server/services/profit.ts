@@ -7,6 +7,7 @@ import { chunk, getDb, insertStatements, type Tx } from '../db/client';
 import { orderFees, orderItems, orderRefunds, orders, productCosts, salesLines, shipments } from '../db/schema';
 import { enqueue, JOBS } from '../jobs/queue';
 import { loadAnalyticsSettings } from './costs';
+import { refreshCustomerStats } from './customers';
 import { ensureFxRates, loadFxTable } from './fx';
 import { loadAccounting } from './invoicing';
 
@@ -153,7 +154,7 @@ async function recomputeChunk(
         accountId: o.accountId,
         marketplace: o.marketplace,
         productId: productOf.get(l.itemId) ?? null,
-        customerId: null,
+        customerId: o.customerId ?? null,
         placedAt: o.placedAt,
         day,
         currency: o.currency,
@@ -166,6 +167,9 @@ async function recomputeChunk(
   }
   result.lines = rows.length;
   await db.batch([db.delete(salesLines).where(inArray(salesLines.orderId, ids)), ...insertStatements(db, salesLines, rows)] as unknown as Parameters<Tx['batch']>[0]);
+  // Customers' lifetime revenue and profit come from these lines.
+  const customerIds = [...new Set(orderRows.map((o) => o.customerId).filter((c): c is string => Boolean(c)))];
+  if (customerIds.length) await refreshCustomerStats(customerIds);
   return result;
 }
 

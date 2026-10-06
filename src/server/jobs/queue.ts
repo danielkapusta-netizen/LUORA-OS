@@ -26,6 +26,8 @@ export const JOBS = {
   feesSync: 'fees-sync',
   fxSync: 'fx-sync',
   profitRecompute: 'profit-recompute',
+  customersBackfill: 'customers-backfill',
+  crmSync: 'crm-shopify-sync',
 } as const;
 
 export interface JobPayloads {
@@ -53,6 +55,8 @@ export interface JobPayloads {
   [JOBS.fxSync]: Record<string, never>;
   /** orderIds: just these; otherwise every order, continuing after `after`. */
   [JOBS.profitRecompute]: { orderIds?: string[]; all?: boolean; after?: string };
+  [JOBS.customersBackfill]: Record<string, never>;
+  [JOBS.crmSync]: Record<string, never>;
 }
 
 export type JobName = keyof JobPayloads;
@@ -102,6 +106,8 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.feesSync]: { retries: 1, delaySeconds: 300 },
   [JOBS.fxSync]: { retries: 2, delaySeconds: 600 },
   [JOBS.profitRecompute]: { retries: 2, delaySeconds: 120 },
+  [JOBS.customersBackfill]: { retries: 1, delaySeconds: 120 },
+  [JOBS.crmSync]: { retries: 1, delaySeconds: 600 },
 };
 
 /** A singleton lock is dropped after this long even if its job never reports back. */

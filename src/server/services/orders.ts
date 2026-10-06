@@ -21,6 +21,7 @@ import type { Address, NormalizedOrder, OrderRef } from '../integrations/types';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
 import { applyOrderStock, scheduleStockPush, stockCoversOrder } from './inventory';
+import { resolveCustomers } from './customers';
 import { refreshProfit } from './profit';
 import { awaitingPacking, changeStatus } from './workflow';
 
@@ -232,8 +233,20 @@ export async function upsertOrders(
   }
 
   if (stockChanged) await scheduleStockPush();
+  // Customers first, so the profit lines carry the customer.
+  await linkCustomers(touched);
   await refreshProfit(touched);
   return { created, updated, newOrderIds };
+}
+
+/** Never lets a CRM problem break the order sync. */
+async function linkCustomers(orderIds: string[]): Promise<void> {
+  if (!orderIds.length) return;
+  try {
+    await resolveCustomers(orderIds);
+  } catch (err) {
+    console.error('[customers] linking failed; the backfill will retry:', err instanceof Error ? err.message : err);
+  }
 }
 
 /**

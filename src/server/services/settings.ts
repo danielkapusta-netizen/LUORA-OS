@@ -113,6 +113,9 @@ export async function removeDemoData(): Promise<{ accounts: number; carriers: nu
       and not exists (select 1 from product_listings l where l.product_id = products.id)
       and not exists (select 1 from order_items i where i.product_id = products.id)`);
 
+  // Demo customers left without orders (notes and tasks cascade).
+  await db.run(sql`delete from customers where not exists (select 1 from orders o where o.customer_id = customers.id)`);
+
   return { accounts: markets.length, carriers: carriers.length, orders: orderIds.length };
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Truck } from 'lucide-react';
+import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Truck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -10,6 +10,7 @@ const ITEMS = [
   { href: '/orders', label: 'Orders', icon: ShoppingBag },
   { href: '/shipments', label: 'Shipments', icon: Truck },
   { href: '/inventory', label: 'Inventory', icon: Boxes },
+  { href: '/customers', label: 'Customers', icon: Users },
   { href: '/accounting', label: 'Accounting', icon: ReceiptText },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },

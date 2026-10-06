@@ -108,6 +108,13 @@ The analytics from the former Luora Analytics app (Google Sheet) now run on Luor
 
 How it fits together: `services/profit.ts` keeps `sales_lines` (profit per order line, PLN) up to date; `src/server/analytics/dataset.ts` turns those lines into the domain model; the calculations in `src/lib/analytics/` are the Luora Analytics domain modules, ported almost unchanged (they keep that project's code style).
 
+## Customers (CRM)
+
+- Every order is linked to a customer (`services/customers.ts`). A buyer is recognised by the marketplace's buyer id (Allegro, Empik) or a real e-mail; Allegro and Empik relay e-mails are never used to join people. The same real e-mail on two marketplaces makes one customer. Orders synced before the CRM are linked in the background (`customers-backfill`, every 15 minutes).
+- **Customers** (`/customers`): lifetime revenue and profit, orders, basket, segment, marketplaces and tags; filters, sorting and a CSV export (admins). Each customer has a profile with their orders and profit, what they buy, contact details and identities, notes, tags and tasks.
+- **Segments**: VIP, Loyal, Promising, New, One-time, At risk, Can't lose and Lost (by recency, number of orders and spend), monthly cohorts, and regulars who went quiet. **Possible duplicates** lists customers with the same phone, or the same name at the same postcode, to merge. **Tasks** lists open follow-ups; yours also show on the Dashboard.
+- **Shopify tags**: chosen segments (and optionally staff tags) are written to Shopify customers as tags such as `luora-vip`, for Shopify Email or Klaviyo. It needs the `read_customers` and `write_customers` scopes, starts in dry run, and only covers customers who bought on Shopify: Allegro and Empik buyer data may not be used for your own marketing.
+
 ## How it works
 
 ```

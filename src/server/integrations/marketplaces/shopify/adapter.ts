@@ -108,6 +108,13 @@ const VARIANT_COSTS = `query Costs($first: Int!, $after: String) {
   }
 }`;
 
+const FIND_CUSTOMER = `query FindCustomer($query: String!) {
+  customers(first: 1, query: $query) { nodes { id tags defaultEmailAddress { emailAddress marketingState } } }
+}`;
+
+const TAGS_ADD = `mutation TagsAdd($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { field message } } }`;
+const TAGS_REMOVE = `mutation TagsRemove($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { userErrors { field message } } }`;
+
 const SET_QUANTITIES = `mutation SetQty($input: InventorySetQuantitiesInput!) {
   inventorySetQuantities(input: $input) {
     inventoryAdjustmentGroup { id }
@@ -288,6 +295,28 @@ export class ShopifyAdapter implements MarketplaceAdapter {
       }
     }
     return out;
+  }
+
+  /** The Shopify customer with this e-mail (needs read_customers), with their marketing consent. */
+  async findCustomer(email: string): Promise<{ id: string; tags: string[]; subscribed: boolean } | null> {
+    const data = await this.client.graphql<{
+      customers: { nodes: { id: string; tags: string[]; defaultEmailAddress: { marketingState: string | null } | null }[] };
+    }>(FIND_CUSTOMER, { query: `email:"${email.replace(/"/g, '')}"` });
+    const c = data.customers.nodes[0];
+    return c ? { id: c.id, tags: c.tags, subscribed: c.defaultEmailAddress?.marketingState === 'SUBSCRIBED' } : null;
+  }
+
+  /** Adds and removes customer tags (needs write_customers). */
+  async updateCustomerTags(customerId: string, add: string[], remove: string[]): Promise<void> {
+    for (const [query, tags, name] of [
+      [TAGS_ADD, add, 'tagsAdd'],
+      [TAGS_REMOVE, remove, 'tagsRemove'],
+    ] as const) {
+      if (!tags.length) continue;
+      const result = await this.client.graphql<Record<string, { userErrors: { message: string }[] }>>(query, { id: customerId, tags });
+      const errors = result[name].userErrors;
+      if (errors.length) throw new Error(`Shopify ${name} failed: ${errors.map((e) => e.message).join('; ')}`);
+    }
   }
 
   /** "Cost per item" of every variant that has one, keyed by variant id. */

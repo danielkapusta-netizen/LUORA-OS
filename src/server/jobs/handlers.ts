@@ -5,6 +5,8 @@ import { syncAccountFees } from '../services/fees';
 import { syncFxRates } from '../services/fx';
 import { runHistoryImport } from '../services/history';
 import { recomputeAll, recomputeOrders } from '../services/profit';
+import { resolveMissingCustomers } from '../services/customers';
+import { runCrmSync } from '../services/crm-sync';
 import { importListings, runReconcile, runStockPush, syncAllStock } from '../services/inventory';
 import { autoInvoice, runCreateInvoice, runSendKsef, runUploadInvoice } from '../services/invoicing';
 import { backfillOrderDetails, syncAccount } from '../services/orders';
@@ -55,6 +57,12 @@ export const handlers: Handlers = {
     return result;
   },
   [JOBS.fxSync]: () => syncFxRates(),
+  [JOBS.customersBackfill]: async () => {
+    const result = await resolveMissingCustomers();
+    if (result.remaining) await enqueue(JOBS.customersBackfill, {}, { debounceSeconds: 5, singletonKey: 'continue' });
+    return result;
+  },
+  [JOBS.crmSync]: () => runCrmSync(),
   [JOBS.profitRecompute]: (data) => (data?.orderIds ? recomputeOrders(data.orderIds) : recomputeAll(data?.after ?? null)),
 };
 

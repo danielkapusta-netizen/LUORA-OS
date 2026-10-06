@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { statusCounts } from '@/server/services/orders';
+import { allCustomers, openTasks, orderDatesByCustomer } from '@/server/services/customers';
+import { overdueCustomers, repeatStats } from '@/lib/crm/segments';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -25,7 +27,10 @@ const OPEN = [
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<ViewParams & { rank?: string; pulse?: string }> }) {
   const user = await requireUser();
   const params = await searchParams;
-  const [view, counts] = await Promise.all([analyticsView(params), statusCounts()]);
+  const [view, counts, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), openTasks(user.id), allCustomers(), orderDatesByCustomer()]);
+  const repeat = repeatStats(customerList, dates);
+  const byCustomer = new Map(customerList.map((c) => [c.id, c]));
+  const quietRegulars = overdueCustomers(dates).filter((o) => byCustomer.get(o.id));
   const { snapshot, period, data } = view;
   const brief = buildExecutiveBrief(snapshot, user.name.split(' ')[0]);
   const questions = buildExecutiveQuestions(snapshot);
@@ -55,6 +60,47 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </Link>
         ))}
       </section>
+
+      {(tasks.length > 0 || repeat.customers > 0) && (
+        <section aria-label="Customers" className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr_1fr]">
+          <Card>
+            <CardBody className="space-y-2">
+              <p className="flex items-center justify-between text-sm font-semibold">
+                My tasks
+                <Link href="/customers/tasks" className="text-xs font-normal text-brand-700 hover:underline">
+                  All tasks →
+                </Link>
+              </p>
+              {tasks.length ? (
+                <ul className="space-y-1 text-sm">
+                  {tasks.slice(0, 5).map(({ task, customerName }) => (
+                    <li key={task.id} className="flex justify-between gap-3">
+                      <Link href={`/customers/${task.customerId}`} className="truncate hover:underline">
+                        {task.title} <span className="text-slate-500">· {customerName}</span>
+                      </Link>
+                      <span className="shrink-0 text-xs text-slate-500">{task.dueAt ? formatDate(task.dueAt) : ''}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-500">Nothing assigned to you.</p>
+              )}
+            </CardBody>
+          </Card>
+          <Link href="/customers/segments" className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
+            <p className="text-xs font-medium text-slate-500">Customers who came back</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{Math.round(repeat.repeatRate * 100)}%</p>
+            <p className="text-xs text-slate-500">
+              {repeat.repeatCustomers} of {repeat.customers} customers ordered again
+            </p>
+          </Link>
+          <Link href="/customers/segments" className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
+            <p className="text-xs font-medium text-slate-500">Regulars gone quiet</p>
+            <p className={cn('mt-1 text-xl font-semibold tabular-nums', quietRegulars.length > 0 && 'text-amber-700')}>{quietRegulars.length}</p>
+            <p className="text-xs text-slate-500">over twice their usual gap since the last order</p>
+          </Link>
+        </section>
+      )}
 
       {data.lineItems.length === 0 ? (
         <Card>

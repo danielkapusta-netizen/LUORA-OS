@@ -862,6 +862,97 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(margins.size).toBeGreaterThan(0);
   });
 
+  it('links every order to a customer, across marketplaces, with lifetime totals', async () => {
+    const customers = await import('@/server/services/customers');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    queue.length = 0;
+    // Past orders imported earlier may not be linked yet: the backfill catches up.
+    while ((await customers.resolveMissingCustomers()).remaining);
+    expect(await db.select().from(s.orders).where(orm.isNull(s.orders.customerId))).toHaveLength(0);
+
+    const list = await customers.allCustomers();
+    expect(list.length).toBeGreaterThan(10);
+    // Demo buyers use real-looking e-mails, so one person who bought on two marketplaces is one customer.
+    expect(list.some((c) => c.marketplaces.length > 1)).toBe(true);
+    const [top] = [...list].sort((a, b) => b.ordersCount - a.ordersCount);
+    const lines = await db.select().from(s.salesLines).where(orm.eq(s.salesLines.customerId, top.id));
+    expect(top.revenue).toBeCloseTo(lines.reduce((sum, l) => sum + l.gross, 0), 1);
+    const live = await db
+      .select()
+      .from(s.orders)
+      .where(orm.and(orm.eq(s.orders.customerId, top.id), orm.ne(s.orders.status, 'cancelled')));
+    expect(top.ordersCount).toBe(live.length);
+
+    // The same Allegro buyer behind relay e-mails is one customer; a different buyer id is another.
+    const { MockMarketplaceAdapter } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const [allegro] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'allegro'));
+    const mock = new MockMarketplaceAdapter('allegro', allegro.id);
+    const build = (index: number, buyerId: string, email: string) => {
+      const o = mock.buildOrder(index, new Date());
+      return { ...o, buyer: { ...o.buyer, name: `Relay ${buyerId}`, email }, shippingAddress: { ...o.shippingAddress, email }, raw: { buyer: { id: buyerId } } };
+    };
+    await m.orders.upsertOrders(allegro, [build(9001, 'BUYER-1', 'a1@allegromail.pl'), build(9002, 'BUYER-1', 'zz@allegromail.pl'), build(9003, 'BUYER-2', 'a1@allegromail.pl')], { historical: true });
+    const relay = await db.select().from(s.orders).where(orm.like(orm.sql`json_extract(${s.orders.buyer}, '$.name')`, 'Relay %'));
+    const byBuyer = (name: string) => new Set(relay.filter((o) => o.buyer.name === name).map((o) => o.customerId));
+    expect(byBuyer('Relay BUYER-1').size).toBe(1);
+    expect([...byBuyer('Relay BUYER-2')][0]).not.toBe([...byBuyer('Relay BUYER-1')][0]);
+    const relayCustomer = list.find((c) => c.id === [...byBuyer('Relay BUYER-1')][0]) ?? (await customers.loadCustomer([...byBuyer('Relay BUYER-1')][0]!))!.customer;
+    expect(relayCustomer.email).toBeNull();
+
+    // Merging moves orders, notes and tasks, and the totals follow.
+    const target = [...byBuyer('Relay BUYER-1')][0]!;
+    const source = [...byBuyer('Relay BUYER-2')][0]!;
+    const userId = await adminId();
+    await customers.addCustomerNote(source, 'Prefers fragrance-free', userId);
+    await customers.addCustomerTask(source, { title: 'Send a sample', dueAt: null, assigneeId: userId }, userId);
+    await customers.mergeCustomers(target, [source]);
+    const merged = await customers.loadCustomer(target);
+    expect(merged!.orders).toHaveLength(3);
+    expect(merged!.notes.map((n) => n.note.body)).toContain('Prefers fragrance-free');
+    expect(merged!.identities.map((i) => i.value).sort()).toEqual(['BUYER-1', 'BUYER-2']);
+    expect(await customers.loadCustomer(source)).toBeNull();
+    expect((await customers.openTasks(userId)).map((t) => t.task.title)).toContain('Send a sample');
+    const dupes = await customers.duplicateSuggestions();
+    expect(Array.isArray(dupes)).toBe(true);
+  });
+
+  it('writes the chosen segments to Shopify customers as tags, sending only changes', async () => {
+    const crm = await import('@/server/services/crm-sync');
+    const calls: { id: string; add: string[]; remove: string[] }[] = [];
+    crm.setShopifyCustomerApi({
+      findCustomer: async (email) => ({ id: `gid://shopify/Customer/${email}`, tags: [], subscribed: email.startsWith('a') }),
+      updateCustomerTags: async (id, add, remove) => void calls.push({ id, add, remove }),
+    });
+    try {
+      await crm.saveCrmSettings({ syncSegments: ['new', 'one_time', 'promising', 'loyal', 'vip', 'at_risk', 'cant_lose', 'lost'], dryRun: true });
+      const dry = await crm.runCrmSync();
+      expect(dry.dryRun).toBe(true);
+      expect(dry.changes).toBeGreaterThan(0);
+      expect(calls).toHaveLength(0);
+
+      await crm.saveCrmSettings({ syncSegments: ['new', 'one_time', 'promising', 'loyal', 'vip', 'at_risk', 'cant_lose', 'lost'], dryRun: false });
+      queue.length = 0;
+      let result = await crm.runCrmSync();
+      while (queue.some((j) => j.name === 'crm-shopify-sync')) {
+        queue.length = 0;
+        result = await crm.runCrmSync();
+      }
+      expect(result.errors).toEqual([]);
+      expect(calls.length).toBe(dry.changes);
+      expect(calls.every((c) => c.add.length === 1 && c.add[0].startsWith('luora-'))).toBe(true);
+      // Only Shopify buyers: nobody who bought solely on Allegro or Empik.
+      const db = m.db.getDb();
+      const synced = await db.select().from(m.schema.customers).where(m.orm.isNotNull(m.schema.customers.syncedTags));
+      expect(synced.every((c) => c.marketplaces.includes('shopify'))).toBe(true);
+      expect(synced.every((c) => c.shopifyCustomerId?.startsWith('gid://shopify/Customer/'))).toBe(true);
+      expect((await crm.runCrmSync()).changes).toBe(0);
+    } finally {
+      crm.setShopifyCustomerApi(undefined);
+      queue.length = 0;
+    }
+  });
+
   it('removes demo accounts with their orders, labels and rules', async () => {
     const settings = await import('@/server/services/settings');
     expect(await settings.demoAccountCount()).toBe(5);

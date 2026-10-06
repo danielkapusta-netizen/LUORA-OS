@@ -247,7 +247,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <CardHeader title="Buyer and shipping address" description="Edits here are used for new labels; the marketplace is not changed." />
             <CardBody>
               <p className="mb-3 text-sm text-slate-600">
-                {order.buyer.name}
+                {order.customerId ? (
+                  <Link href={`/customers/${order.customerId}`} className="font-medium text-brand-700 hover:underline">
+                    {order.buyer.name}
+                  </Link>
+                ) : (
+                  order.buyer.name
+                )}
                 {order.buyer.login ? ` (${order.buyer.login})` : ''} · {order.buyer.email ?? 'no email'} · {order.buyer.phone ?? 'no phone'}
               </p>
               <ActionForm action={updateAddressAction.bind(null, order.id)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
