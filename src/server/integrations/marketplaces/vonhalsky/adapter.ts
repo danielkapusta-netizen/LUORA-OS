@@ -52,6 +52,24 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
     this.client = new VonHalskyClient(creds);
   }
 
+  /** Read-only look at InPost's raw answers (categories, a few offers, one offer in full), used to learn the offer format. */
+  async inspect(): Promise<Record<string, unknown>> {
+    const out: Record<string, unknown> = {};
+    const probe = async (key: string, path: string, query?: Record<string, string | number>) => {
+      try {
+        out[key] = await this.client.call<unknown>('GET', path, { query, retries: 0 });
+      } catch (err) {
+        out[key] = { error: err instanceof Error ? err.message : String(err) };
+      }
+    };
+    await probe('offers', this.client.org('/offers'), { limit: 3 });
+    const first = (out.offers as { data?: { id: string }[] } | undefined)?.data?.[0]?.id;
+    if (first) await probe('offer', this.client.org(`/offers/${first}`));
+    await probe('categories', '/v1/categories', { limit: 20 });
+    if (JSON.stringify(out.categories).includes('"error"')) await probe('categoriesOrg', this.client.org('/categories'), { limit: 20 });
+    return out;
+  }
+
   async checkConnection(): Promise<string> {
     const page = await this.client.call<OffersPage>('GET', this.client.org('/offers'), { query: { limit: 1 } });
     return `InPost Von Halsky: ${page.page.total} offer(s) in organisation ${this.client.organizationId.slice(0, 8)}…`;

@@ -5,6 +5,8 @@ import { redirect } from 'next/navigation';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
 import type { CarrierSettings, MarketplaceSettings, RuleConditions } from '@/server/db/schema';
+import { VonHalskyAdapter } from '@/server/integrations/marketplaces/vonhalsky/adapter';
+import { getMarketplaceAdapter, loadMarketplaceAccount } from '@/server/services/accounts';
 import { enqueue, JOBS } from '@/server/jobs/queue';
 import {
   createDefaultRules,
@@ -136,6 +138,18 @@ export async function importListingsAction(id: string): Promise<ActionResult> {
   return attempt(async () => {
     await enqueue(JOBS.listingsImport, { accountId: id }, { singletonKey: id });
     return 'Listing import queued; see the Inventory page';
+  });
+}
+
+export async function inspectVonHalskyAction(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    const account = await loadMarketplaceAccount(id);
+    const adapter = getMarketplaceAdapter(account);
+    if (!(adapter instanceof VonHalskyAdapter)) throw new Error('Not a Von Halsky account');
+    const json = JSON.stringify(await adapter.inspect(), null, 1);
+    for (let i = 0; i < json.length; i += 3000) console.log(`[vonhalsky inspect ${i / 3000}]`, json.slice(i, i + 3000));
+    return `Read ${json.length} characters from InPost (logged for the developer).`;
   });
 }
 

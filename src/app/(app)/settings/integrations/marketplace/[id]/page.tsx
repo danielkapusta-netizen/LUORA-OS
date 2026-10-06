@@ -15,7 +15,7 @@ import { DEFAULT_SHOPIFY_API_VERSION } from '@/server/integrations/marketplaces/
 import { DEFAULT_PICKUP_POINT_KEYS } from '@/server/integrations/marketplaces/shopify/mapper';
 import { loadMarketplaceAccount } from '@/server/services/accounts';
 import { empikCarriers, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
-import { deleteMarketplaceAction, importListingsAction, refreshEmpikCarriersAction, saveMarketplaceAction } from '../../../actions';
+import { deleteMarketplaceAction, importListingsAction, inspectVonHalskyAction, refreshEmpikCarriersAction, saveMarketplaceAction } from '../../../actions';
 
 export const metadata: Metadata = { title: 'Marketplace account' };
 
@@ -213,6 +213,11 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
           <ActionForm action={importListingsAction.bind(null, account.id)}>
             <SubmitButton variant="secondary">Import listings for stock sync</SubmitButton>
           </ActionForm>
+          {type === 'vonhalsky' && (
+            <ActionForm action={inspectVonHalskyAction.bind(null, account.id)}>
+              <SubmitButton variant="secondary">Read InPost offer format (read-only)</SubmitButton>
+            </ActionForm>
+          )}
           <form action={deleteMarketplaceAction.bind(null, account.id)}>
             <SubmitButton variant="danger" confirm="Delete this account and all of its orders?">
               Delete account
