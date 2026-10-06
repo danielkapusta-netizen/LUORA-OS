@@ -53,6 +53,25 @@ export interface VonHalskyOfferInput {
   imageUrls: string[];
 }
 
+/** InPost wants a file name per image: the last part of the URL without its query, unique within the offer. */
+export function imageFileNames(urls: string[]): { fileName: string; fileUrl: string }[] {
+  const used = new Set<string>();
+  return urls.map((fileUrl, i) => {
+    let name = '';
+    try {
+      name = decodeURIComponent(new URL(fileUrl).pathname.split('/').pop() ?? '');
+    } catch {
+      name = '';
+    }
+    name = name.replace(/[^\w.-]+/g, '_').slice(-100) || `image-${i + 1}`;
+    if (!/\.[A-Za-z0-9]{2,5}$/.test(name)) name += '.jpg';
+    let unique = name;
+    for (let n = 2; used.has(unique); n++) unique = name.replace(/(\.[^.]+)$/, `-${n}$1`);
+    used.add(unique);
+    return { fileName: unique, fileUrl };
+  });
+}
+
 /** A write answers with one command or a list of them; a plain object without a command id is ignored. */
 function asCommands(result: unknown): CommandDetails[] {
   const list = Array.isArray(result) ? result : result ? [result] : [];
@@ -129,7 +148,7 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
       price: { grossPrice: { amount: Number(offer.price), currency: offer.currency }, taxRateInfo: '23.00' },
       gpsr: { manuals: [], doesNotRequireGpsrInfo: true },
       shippingTime: { daysToShip: offer.daysToShip },
-      images: offer.imageUrls.map((fileUrl, i) => ({ fileUrl, priority: i + 1 })),
+      images: imageFileNames(offer.imageUrls).map(({ fileName, fileUrl }, i) => ({ fileName, fileUrl, priority: i + 1 })),
       features: { refundable: true },
     };
     const result = await this.client.call<unknown>('POST', this.client.org('/offers'), { body });

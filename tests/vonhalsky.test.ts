@@ -1,7 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { VonHalskyAdapter } from '@/server/integrations/marketplaces/vonhalsky/adapter';
+import { VonHalskyAdapter, imageFileNames } from '@/server/integrations/marketplaces/vonhalsky/adapter';
 import {
   VonHalskyApiError,
   VonHalskyClient,
@@ -357,6 +357,12 @@ describe('offers created from Shopify', () => {
     imageUrls: ['https://img/1.jpg', 'https://img/2.jpg'],
   };
 
+  it('derives unique image file names from CDN URLs', () => {
+    expect(
+      imageFileNames(['https://cdn.shopify.com/s/files/abc_def.jpg?v=123', 'https://other/abc_def.jpg', 'https://x/photo']).map((i) => i.fileName),
+    ).toEqual(['abc_def.jpg', 'abc_def-2.jpg', 'photo.jpg']);
+  });
+
   it('computes prices from Shopify + markup with the chosen rounding', () => {
     expect(offerPrice('89.90', { vhMarkupPercent: 10 })).toBe('98.99');
     expect(offerPrice('89.90', { vhMarkupPercent: 10, vhRounding: 'x.00' })).toBe('99.00');
@@ -401,8 +407,8 @@ describe('offers created from Shopify', () => {
       price: { grossPrice: { amount: 98.99, currency: 'PLN' }, taxRateInfo: '23.00' },
       shippingTime: { daysToShip: 1 },
       images: [
-        { fileUrl: 'https://img/1.jpg', priority: 1 },
-        { fileUrl: 'https://img/2.jpg', priority: 2 },
+        { fileName: '1.jpg', fileUrl: 'https://img/1.jpg', priority: 1 },
+        { fileName: '2.jpg', fileUrl: 'https://img/2.jpg', priority: 2 },
       ],
     });
 
