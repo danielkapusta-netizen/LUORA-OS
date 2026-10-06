@@ -62,11 +62,12 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
         out[key] = { error: err instanceof Error ? err.message : String(err) };
       }
     };
-    await probe('offers', this.client.org('/offers'), { limit: 3 });
-    const first = (out.offers as { data?: { id: string }[] } | undefined)?.data?.[0]?.id;
-    if (first) await probe('offer', this.client.org(`/offers/${first}`));
-    await probe('categories', '/v1/categories', { limit: 20 });
-    if (JSON.stringify(out.categories).includes('"error"')) await probe('categoriesOrg', this.client.org('/categories'), { limit: 20 });
+    const PIEL = 'a25a4d24-4759-5afc-8533-dce1f8daa097';
+    const USED = '124ee985-1efd-543c-9205-24b6e61e332d';
+    await probe('byId', `/v1/categories/${PIEL}`);
+    await probe('byParent', '/v1/categories', { parentId: PIEL });
+    await probe('used', `/v1/categories/${USED}`);
+    await probe('usedAttrs', `/v1/categories/${USED}/attributes`);
     return out;
   }
 
