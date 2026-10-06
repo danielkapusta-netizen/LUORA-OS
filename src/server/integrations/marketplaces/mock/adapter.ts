@@ -1,6 +1,6 @@
 // Fake marketplace used when INTEGRATIONS_MODE=mock. Orders are generated
 // deterministically from their index, so re-syncing never produces duplicates.
-import type { Listing, Marketplace, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
+import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, StockUpdate, TrackingInfo } from '../../types';
 import type { MarketplaceAdapter, SyncResult } from '../types';
 
 export const MOCK_CATALOG = [
@@ -57,6 +57,11 @@ const DELIVERY: Record<Marketplace, { id: string; name: string; locker: boolean;
 };
 
 const INITIAL_ORDERS = 14;
+/** Past orders each demo account offers to the history import, spread over the last year. */
+export const MOCK_HISTORY_ORDERS = 120;
+const HISTORY_PAGE = 50;
+/** History orders use their own index range, so they never collide with live ones. */
+const HISTORY_BASE = 5000;
 const globalMock = globalThis as unknown as { __luoraMockAccepted?: Set<string> };
 const accepted = (globalMock.__luoraMockAccepted ??= new Set<string>());
 
@@ -108,11 +113,36 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
   }
 
   private indexOf(externalId: string): number | null {
-    for (let i = 0; i < 10_000; i++) if (this.externalIdFor(i) === externalId) return i;
+    for (let i = 0; i < HISTORY_BASE + MOCK_HISTORY_ORDERS; i++) if (this.externalIdFor(i) === externalId) return i;
     return null;
   }
 
-  buildOrder(index: number, placedAt: Date): NormalizedOrder {
+  /** Fees the real marketplace would report for this order (Allegro's come from billing in reality). */
+  private feesFor(externalId: string, items: { externalLineId: string; quantity: number; unitPrice: string }[], shipping: number, placedAt: Date): NormalizedFee[] {
+    const goods = items.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0);
+    const fee = (id: string, kind: NormalizedFee['kind'], label: string, amount: number, line?: string): NormalizedFee => ({
+      externalId: `mock-${externalId}-${id}`,
+      kind,
+      label,
+      externalLineId: line ?? null,
+      amount: amount.toFixed(2),
+      taxAmount: ((amount * 0.23) / 1.23).toFixed(2),
+      currency: 'PLN',
+      occurredAt: placedAt,
+    });
+    switch (this.marketplace) {
+      case 'shopify':
+        return [fee('payment', 'payment', 'Shopify Payments fee', (goods + shipping) * 0.019 + 0.3)];
+      case 'allegro':
+        return [fee('commission', 'commission', 'Prowizja od sprzedaży', goods * 0.11), fee('delivery', 'delivery', 'Opłata za dostawę Allegro Smart', 5.49)];
+      case 'empik':
+        return items.map((i) => fee(`commission-${i.externalLineId}`, 'commission', 'Prowizja Empik', Number(i.unitPrice) * i.quantity * 0.15, i.externalLineId));
+      case 'vonhalsky':
+        return [];
+    }
+  }
+
+  buildOrder(index: number, placedAt: Date, past = false): NormalizedOrder {
     const rand = prng(hash(`${this.accountKey}:${index}`));
     const pick = <T,>(list: T[]) => list[Math.floor(rand() * list.length)];
     const first = pick(FIRST);
@@ -134,7 +164,22 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
     const total = items.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0) + shipping;
     const externalId = this.externalIdFor(index);
 
-    const waitingAcceptance = this.marketplace === 'empik' && index % 5 === 0 && !accepted.has(externalId);
+    const waitingAcceptance = !past && this.marketplace === 'empik' && index % 5 === 0 && !accepted.has(externalId);
+    const cancelled = past && index % 19 === 3;
+    const refunds: NormalizedRefund[] =
+      past && !cancelled && index % 13 === 5
+        ? [
+            {
+              externalId: `mock-refund-${index}`,
+              externalLineId: items[0].externalLineId,
+              amount: items[0].unitPrice,
+              currency: 'PLN',
+              quantity: 1,
+              restocked: true,
+              refundedAt: new Date(placedAt.getTime() + 6 * 86_400_000),
+            },
+          ]
+        : [];
     const status =
       this.marketplace === 'shopify' ? 'PAID / UNFULFILLED' : this.marketplace === 'allegro' ? 'READY_FOR_PROCESSING / NEW' : waitingAcceptance ? 'WAITING_ACCEPTANCE' : 'SHIPPING';
     const number =
@@ -145,9 +190,9 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
       externalId,
       externalNumber: number,
       marketplaceStatus: status,
-      readyToShip: !waitingAcceptance,
-      cancelled: false,
-      fulfilled: false,
+      readyToShip: !waitingAcceptance && !cancelled,
+      cancelled,
+      fulfilled: past && !cancelled,
       buyer: { name: `${first} ${last}`, email, phone: `5${String(10_000_000 + Math.floor(rand() * 89_999_999))}` },
       shippingAddress: {
         name: `${first} ${last}`,
@@ -168,9 +213,25 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
       placedAt,
       paidAt: delivery.cod ? null : placedAt,
       items,
+      fees: cancelled ? [] : this.feesFor(externalId, items, shipping, placedAt),
+      refunds,
       revision: String(index),
       raw: { mock: true, index },
     };
+  }
+
+  /** Cursor = how many past orders were returned so far. Newest first, like the real adapters. */
+  async syncHistory(cursor: string | null): Promise<SyncResult> {
+    const start = cursor ? Number(cursor) : 0;
+    const end = Math.min(MOCK_HISTORY_ORDERS, start + HISTORY_PAGE);
+    const now = Date.now();
+    const orders: NormalizedOrder[] = [];
+    for (let i = start; i < end; i++) {
+      const daysAgo = 20 + (i * 345) / MOCK_HISTORY_ORDERS + (hash(`${this.accountKey}h${i}`) % 20) / 24;
+      orders.push(this.buildOrder(HISTORY_BASE + i, new Date(now - daysAgo * 86_400_000), true));
+    }
+    const hasMore = end < MOCK_HISTORY_ORDERS;
+    return { orders, nextCursor: hasMore ? String(end) : null, hasMore };
   }
 
   /** Cursor = number of orders generated so far. */
@@ -192,7 +253,7 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
 
   async getOrder(externalId: string): Promise<NormalizedOrder | null> {
     const index = this.indexOf(externalId);
-    return index === null ? null : this.buildOrder(index, new Date());
+    return index === null ? null : this.buildOrder(index, new Date(), index >= HISTORY_BASE);
   }
 
   async acceptOrder(order: OrderRef): Promise<void> {

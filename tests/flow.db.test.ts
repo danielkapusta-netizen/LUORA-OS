@@ -644,6 +644,119 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(await awaitingIds()).toContain(order.id);
   });
 
+  it('imports past orders as closed history: no stock, labels or invoices, but with their fees and refunds', async () => {
+    const history = await import('@/server/services/history');
+    const { MOCK_HISTORY_ORDERS } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [allegro] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'allegro'));
+    const stockBefore = await productStock();
+    const movementsBefore = (await db.select().from(s.stockMovements)).length;
+    const shipmentsBefore = (await db.select().from(s.shipments)).length;
+    queue.length = 0;
+
+    await history.startHistoryImport(allegro.id);
+    await drain();
+    const account = async () => (await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.id, allegro.id)))[0];
+    expect(await account()).toMatchObject({ historyState: 'done', historyImported: MOCK_HISTORY_ORDERS, historyError: null });
+
+    const past = await db
+      .select()
+      .from(s.orders)
+      .where(orm.and(orm.eq(s.orders.accountId, allegro.id), orm.eq(s.orders.historical, true)));
+    expect(past).toHaveLength(MOCK_HISTORY_ORDERS);
+    expect(new Set(past.map((o) => o.status))).toEqual(new Set(['shipped', 'cancelled']));
+    expect(past.some((o) => o.discountAmount === null)).toBe(true);
+    // Nothing operational happened.
+    expect(await productStock()).toEqual(stockBefore);
+    expect(await db.select().from(s.stockMovements)).toHaveLength(movementsBefore);
+    expect(await db.select().from(s.shipments)).toHaveLength(shipmentsBefore);
+    expect(queue.filter((j) => ['shipment-create', 'invoice-auto', 'stock-push'].includes(j.name))).toHaveLength(0);
+
+    const pastOrder = orm.and(orm.eq(s.orders.accountId, allegro.id), orm.eq(s.orders.historical, true));
+    const feeCount = async () =>
+      (await db.select({ id: s.orderFees.id }).from(s.orderFees).innerJoin(s.orders, orm.eq(s.orders.id, s.orderFees.orderId)).where(pastOrder)).length;
+    const pastRefunds = () =>
+      db.select({ refund: s.orderRefunds }).from(s.orderRefunds).innerJoin(s.orders, orm.eq(s.orders.id, s.orderRefunds.orderId)).where(pastOrder);
+    const refundCount = async () => (await pastRefunds()).length;
+    const live = past.filter((o) => o.status !== 'cancelled').length;
+    expect(await feeCount()).toBe(live * 2); // commission + Smart delivery
+    expect(await refundCount()).toBeGreaterThan(0);
+    const [{ refund }] = await pastRefunds();
+    expect(refund.orderItemId).toBeTruthy();
+
+    // Importing again finds every order already there and never doubles fees or refunds.
+    const fees = await feeCount();
+    const refunds = await refundCount();
+    await history.startHistoryImport(allegro.id, { restart: true });
+    await drain();
+    expect(await account()).toMatchObject({ historyState: 'done', historyImported: 0 });
+    expect(await feeCount()).toBe(fees);
+    expect(await refundCount()).toBe(refunds);
+    expect(await db.select().from(s.orders).where(orm.eq(s.orders.historical, true))).toHaveLength(MOCK_HISTORY_ORDERS);
+  });
+
+  it('stores fees reported inside live orders once, however often they sync', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [empik] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'empik'));
+    const count = async () =>
+      (
+        await db
+          .select({ id: s.orderFees.id })
+          .from(s.orderFees)
+          .innerJoin(s.orders, orm.eq(s.orders.id, s.orderFees.orderId))
+          .where(orm.eq(s.orders.accountId, empik.id))
+      ).length;
+    const before = await count();
+    expect(before).toBeGreaterThan(0);
+    for (const o of (await allOrders()).filter((x) => x.accountId === empik.id).slice(0, 5)) await m.orders.refreshOrder(o.id);
+    expect(await count()).toBe(before);
+    const [fee] = await db.select().from(s.orderFees).where(orm.eq(s.orderFees.source, 'mirakl')).limit(1);
+    expect(fee).toMatchObject({ kind: 'commission' });
+    expect(fee.orderItemId).toBeTruthy();
+  });
+
+  it('keeps product costs by date, converts purchase prices and imports pasted costs', async () => {
+    const costs = await import('@/server/services/costs');
+    const fx = await import('@/server/services/fx');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [mug] = await db.select().from(s.products).where(orm.eq(s.products.sku, 'LUO-MUG-01'));
+    // The demo seed gave every product a cost "always".
+    expect((await costs.currentCosts([mug.id], '2020-01-01')).get(mug.id)?.unitCost).toBe('12.8000');
+
+    await costs.setProductCost(mug.id, { unitCost: 15, effectiveFrom: '2026-01-01' }, null);
+    expect((await costs.currentCosts([mug.id], '2025-12-31')).get(mug.id)?.unitCost).toBe('12.8000');
+    expect((await costs.currentCosts([mug.id], '2026-06-01')).get(mug.id)?.unitCost).toBe('15.0000');
+    // Saving the same date again replaces that entry.
+    await costs.setProductCost(mug.id, { unitCost: 16, effectiveFrom: '2026-01-01' }, null);
+    expect(await costs.costHistory(mug.id)).toHaveLength(2);
+
+    // USD purchase price + freight, at the (demo) NBP rate of a Monday.
+    const entry = await costs.setProductCost(mug.id, { purchasePrice: 3, purchaseCurrency: 'USD', freight: 1, effectiveFrom: '2026-03-02' }, null);
+    const rate = (await fx.loadFxTable(['USD'], '2026-03-02', '2026-03-02')).rate('USD', '2026-03-02');
+    expect(rate).toBeGreaterThan(3);
+    expect(Number(entry.unitCost)).toBeCloseTo(3 * rate! + 1, 3);
+    // A Sunday uses Friday's rate.
+    expect((await fx.loadFxTable(['USD'], '2026-03-01', '2026-03-01')).rate('USD', '2026-03-01')).toBe(
+      (await fx.loadFxTable(['USD'], '2026-02-27', '2026-02-27')).rate('USD', '2026-02-27'),
+    );
+
+    const result = await costs.importCosts(costs.parseCostLines('LUO-TSH-M;30\nNo such product;1'), { userId: null, source: 'import', effectiveFrom: '2026-02-01' });
+    expect(result).toEqual({ saved: 1, unmatched: ['No such product'] });
+    const rows = await costs.listCostRows();
+    expect(rows.every((r) => r.cost)).toBe(true);
+    expect(rows.find((r) => r.product.sku === 'LUO-TSH-M')?.cost?.source).toBe('import');
+    expect(rows.some((r) => r.units90 > 0 && r.revenue90 > 0)).toBe(true);
+
+    await costs.saveAnalyticsSettings({ fallbackCommission: { allegro: 0.1 }, labelCosts: { inpost_locker_standard: 9 } });
+    const settings = await costs.loadAnalyticsSettings();
+    expect(settings.fallbackCommission).toMatchObject({ allegro: 0.1, empik: 0.15 });
+    expect(settings.labelCosts).toMatchObject({ inpost_locker_standard: 9, inpost_courier_standard: 15.5 });
+    await expect(costs.saveAnalyticsSettings({ thinMargin: 0.2, healthyMargin: 0.15 })).rejects.toThrow('Margin bands');
+  });
+
   it('removes demo accounts with their orders, labels and rules', async () => {
     const settings = await import('@/server/services/settings');
     expect(await settings.demoAccountCount()).toBe(5);

@@ -222,6 +222,22 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
     return { orders, nextCursor: newest ?? since, hasMore };
   }
 
+  /** Every order the organisation has, oldest change first. Cursor = offset into that list. */
+  async syncHistory(cursor: string | null): Promise<SyncResult> {
+    let offset = cursor ? Number(cursor) : 0;
+    const orders: NormalizedOrder[] = [];
+    let hasMore = true;
+    for (let page = 0; page < MAX_PAGES_PER_SYNC && hasMore; page++) {
+      const result = await this.client.call<{ page: Page; data: unknown[] }>('GET', this.client.org('/orders'), {
+        query: { updatedAtGte: '2000-01-01T00:00:00.000Z', sort: 'updatedAt', limit: ORDERS_PAGE, offset },
+      });
+      for (const raw of result.data) if (isImportable(vonHalskyOrderSchema.parse(raw))) orders.push(mapVonHalskyOrder(raw));
+      offset += result.data.length;
+      hasMore = result.data.length > 0 && offset < result.page.total;
+    }
+    return { orders, nextCursor: hasMore ? String(offset) : null, hasMore };
+  }
+
   async getOrder(externalId: string): Promise<NormalizedOrder | null> {
     const raw = await this.client.call<unknown>('GET', this.client.org(`/orders/${encodeURIComponent(externalId)}`));
     return raw ? mapVonHalskyOrder(raw) : null;

@@ -10,6 +10,16 @@ const ORDER_FIELDS = `
   email phone paymentGatewayNames
   totalPriceSet { shopMoney { amount currencyCode } }
   totalShippingPriceSet { shopMoney { amount currencyCode } }
+  totalDiscountsSet { shopMoney { amount currencyCode } }
+  refunds(first: 20) {
+    id createdAt
+    totalRefundedSet { shopMoney { amount currencyCode } }
+    refundLineItems(first: 100) { nodes { quantity restockType lineItem { id } subtotalSet { shopMoney { amount } } } }
+  }
+  transactions(first: 20) {
+    id kind status processedAt
+    fees { id amount { amount currencyCode } taxAmount { amount currencyCode } type }
+  }
   shippingAddress { name firstName lastName company address1 address2 city zip countryCodeV2 phone }
   shippingLine { title code source }
   customAttributes { key value }
@@ -17,6 +27,7 @@ const ORDER_FIELDS = `
     nodes {
       id sku name quantity
       originalUnitPriceSet { shopMoney { amount currencyCode } }
+      totalDiscountSet { shopMoney { amount currencyCode } }
       image { url(transform: { maxWidth: 240 }) }
       variant { id inventoryItem { id } }
     }
@@ -24,6 +35,13 @@ const ORDER_FIELDS = `
 
 export const ORDERS_QUERY = `query Orders($first: Int!, $after: String, $query: String) {
   orders(first: $first, after: $after, query: $query, sortKey: UPDATED_AT) {
+    pageInfo { hasNextPage endCursor }
+    nodes { ${ORDER_FIELDS} }
+  }
+}`;
+
+export const HISTORY_QUERY = `query History($first: Int!, $after: String, $query: String) {
+  orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
     pageInfo { hasNextPage endCursor }
     nodes { ${ORDER_FIELDS} }
   }
@@ -50,7 +68,7 @@ const VARIANTS_QUERY = `query Variants($first: Int!, $after: String) {
     nodes {
       id sku barcode displayName inventoryQuantity inventoryItem { id }
       image { url(transform: { maxWidth: 240 }) }
-      product { featuredImage { url(transform: { maxWidth: 240 }) } }
+      product { vendor productType featuredImage { url(transform: { maxWidth: 240 }) } }
     }
   }
 }`;
@@ -82,6 +100,13 @@ export interface ShopifyVariantDetails {
 }
 
 const GRAMS_PER_UNIT: Record<string, number> = { GRAMS: 1, KILOGRAMS: 1000, OUNCES: 28.3495, POUNDS: 453.592 };
+
+const VARIANT_COSTS = `query Costs($first: Int!, $after: String) {
+  productVariants(first: $first, after: $after) {
+    pageInfo { hasNextPage endCursor }
+    nodes { id inventoryItem { unitCost { amount currencyCode } } }
+  }
+}`;
 
 const SET_QUANTITIES = `mutation SetQty($input: InventorySetQuantitiesInput!) {
   inventorySetQuantities(input: $input) {
@@ -139,6 +164,27 @@ export class ShopifyAdapter implements MarketplaceAdapter {
     return { orders, nextCursor: newest, hasMore };
   }
 
+  /**
+   * Past orders, newest first. Orders older than 60 days need the read_all_orders scope; without it
+   * Shopify simply returns fewer.
+   */
+  async syncHistory(cursor: string | null): Promise<SyncResult> {
+    const state: { before: string; after: string | null } = cursor ? JSON.parse(cursor) : { before: new Date().toISOString(), after: null };
+    const orders = [];
+    let hasMore = true;
+    for (let page = 0; page < MAX_PAGES_PER_SYNC && hasMore; page++) {
+      const data: { orders: { pageInfo: PageInfo; nodes: unknown[] } } = await this.client.graphql(HISTORY_QUERY, {
+        first: PAGE_SIZE,
+        after: state.after,
+        query: `created_at:<='${state.before}'`,
+      });
+      for (const node of data.orders.nodes) orders.push(mapShopifyOrder(node, this.settings.pickupPointKeys ?? DEFAULT_PICKUP_POINT_KEYS));
+      hasMore = data.orders.pageInfo.hasNextPage;
+      state.after = data.orders.pageInfo.endCursor;
+    }
+    return { orders, nextCursor: hasMore ? JSON.stringify(state) : null, hasMore };
+  }
+
   async getOrder(externalId: string) {
     const data = await this.client.graphql<{ order: unknown | null }>(ORDER_QUERY, { id: externalId });
     return data.order ? mapShopifyOrder(data.order, this.settings.pickupPointKeys ?? DEFAULT_PICKUP_POINT_KEYS) : null;
@@ -185,7 +231,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
             inventoryQuantity: number | null;
             inventoryItem: { id: string };
             image: { url: string } | null;
-            product: { featuredImage: { url: string } | null } | null;
+            product: { vendor?: string | null; productType?: string | null; featuredImage: { url: string } | null } | null;
           }[];
         };
       } = await this.client.graphql(VARIANTS_QUERY, { first: 100, after });
@@ -198,6 +244,8 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           ean: v.barcode?.trim() || null,
           ref: { inventoryItemId: v.inventoryItem.id },
           imageUrl: v.image?.url ?? v.product?.featuredImage?.url ?? null,
+          brand: v.product?.vendor?.trim() || null,
+          category: v.product?.productType?.trim() || null,
         };
       }
       if (!data.productVariants.pageInfo.hasNextPage) return;
@@ -240,6 +288,23 @@ export class ShopifyAdapter implements MarketplaceAdapter {
       }
     }
     return out;
+  }
+
+  /** "Cost per item" of every variant that has one, keyed by variant id. */
+  async variantCosts(): Promise<Map<string, { amount: string; currency: string }>> {
+    const out = new Map<string, { amount: string; currency: string }>();
+    let after: string | null = null;
+    for (;;) {
+      const data: {
+        productVariants: { pageInfo: PageInfo; nodes: { id: string; inventoryItem: { unitCost: { amount: string; currencyCode: string } | null } | null }[] };
+      } = await this.client.graphql(VARIANT_COSTS, { first: 100, after });
+      for (const v of data.productVariants.nodes) {
+        const cost = v.inventoryItem?.unitCost;
+        if (cost && Number(cost.amount) > 0) out.set(v.id, { amount: cost.amount, currency: cost.currencyCode });
+      }
+      if (!data.productVariants.pageInfo.hasNextPage) return out;
+      after = data.productVariants.pageInfo.endCursor;
+    }
   }
 
   async setStock(updates: StockUpdate[]): Promise<void> {

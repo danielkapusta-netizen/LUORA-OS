@@ -21,6 +21,10 @@ export const JOBS = {
   invoiceCreate: 'invoice-create',
   invoiceUpload: 'invoice-upload',
   invoiceKsef: 'invoice-ksef',
+  historyImport: 'history-import',
+  feesSyncAll: 'fees-sync-all',
+  feesSync: 'fees-sync',
+  fxSync: 'fx-sync',
 } as const;
 
 export interface JobPayloads {
@@ -42,6 +46,10 @@ export interface JobPayloads {
   [JOBS.invoiceCreate]: { invoiceId: string };
   [JOBS.invoiceUpload]: { invoiceId: string };
   [JOBS.invoiceKsef]: { invoiceId: string };
+  [JOBS.historyImport]: { accountId: string };
+  [JOBS.feesSyncAll]: Record<string, never>;
+  [JOBS.feesSync]: { accountId: string };
+  [JOBS.fxSync]: Record<string, never>;
 }
 
 export type JobName = keyof JobPayloads;
@@ -85,6 +93,11 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.invoiceCreate]: { retries: 0, delaySeconds: 0 },
   [JOBS.invoiceUpload]: { retries: 5, delaySeconds: 60 },
   [JOBS.invoiceKsef]: { retries: 3, delaySeconds: 120 },
+  // The import saves its progress; a failed step is resumed by hand ("Resume").
+  [JOBS.historyImport]: { retries: 0, delaySeconds: 0 },
+  [JOBS.feesSyncAll]: { retries: 0, delaySeconds: 0 },
+  [JOBS.feesSync]: { retries: 1, delaySeconds: 300 },
+  [JOBS.fxSync]: { retries: 2, delaySeconds: 600 },
 };
 
 /** A singleton lock is dropped after this long even if its job never reports back. */

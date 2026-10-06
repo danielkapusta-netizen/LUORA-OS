@@ -188,6 +188,8 @@ async function upsertShopifyProduct(listing: Listing): Promise<{ productId: stri
       shopifyVariantId: listing.externalId,
       ean: normalizeEan(listing.ean) ?? existing.ean,
       imageUrl: listing.imageUrl ?? existing.imageUrl,
+      brand: listing.brand ?? existing.brand,
+      category: listing.category ?? existing.category,
     };
     try {
       await db.update(products).set({ ...update, sku }).where(eq(products.id, existing.id));
@@ -207,6 +209,8 @@ async function upsertShopifyProduct(listing: Listing): Promise<{ productId: stri
       imageUrl: listing.imageUrl ?? null,
       ean: normalizeEan(listing.ean),
       shopifyVariantId: listing.externalId,
+      brand: listing.brand ?? null,
+      category: listing.category ?? null,
     })
     .returning({ id: products.id });
   await db.insert(stockMovements).values({ productId: inserted.id, delta: stock, reason: 'import' });

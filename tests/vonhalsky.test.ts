@@ -106,7 +106,9 @@ describe('mapVonHalskyOrder', () => {
     });
     expect(o.buyer).toEqual({ name: 'Anna Nowak', email: 'anna@example.com', phone: '+48600100200' });
     expect(o.shippingAddress).toMatchObject({ name: 'Anna Nowak', street: 'Floriańska 5', city: 'Kraków', postalCode: '31-019', countryCode: 'PL', email: 'anna@example.com' });
-    expect(o.items).toEqual([{ externalLineId: 'offer-1', sku: 'LUA024', name: 'Anua Toner 250 ml', quantity: 2, unitPrice: '59.90', externalProductId: 'offer-1' }]);
+    expect(o.items).toEqual([
+      { externalLineId: 'offer-1', sku: 'LUA024', name: 'Anua Toner 250 ml', quantity: 2, unitPrice: '59.90', externalProductId: 'offer-1', discountAmount: null },
+    ]);
     expect(o.invoiceRequest).toEqual({
       name: 'Kosmetyki Sp. z o.o.',
       taxId: '5250001009',
@@ -119,6 +121,14 @@ describe('mapVonHalskyOrder', () => {
     });
     expect(o.placedAt).toEqual(new Date('2026-10-05T08:00:00Z'));
     expect(o.paidAt).toEqual(new Date('2026-10-05T08:01:00Z'));
+  });
+
+  it('records the promotion discount as base price minus final price, per line', () => {
+    const line = (final: number) => ({
+      offer: { offerId: 'offer-1', product: { productId: 'p1', name: 'Anua Toner 250 ml', sku: 'LUA024' }, finalPrice: money(final), basePrice: money(59.9) },
+    });
+    const o = mapVonHalskyOrder({ ...paidOrder, orderLines: [line(49.9), line(49.9)] });
+    expect(o.items[0]).toMatchObject({ quantity: 2, unitPrice: '49.90', discountAmount: '20.00' });
   });
 
   it('knows cash on delivery, shipped parcels and cancelled orders', () => {

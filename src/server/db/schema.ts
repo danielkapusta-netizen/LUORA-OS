@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { Address, Buyer, InvoiceRequest, ParcelSpec, SenderSettings } from '../integrations/types';
 
 // SQLite on D1: ids are UUID text, timestamps are integer milliseconds, JSON is text.
@@ -32,6 +32,9 @@ export const labelSizeValues = ['A4', 'A6'] as const;
 // 'external' = invoiced outside Luora (marked by hand), so the order leaves "To issue".
 export const invoiceStateValues = ['pending', 'issued', 'failed', 'manual', 'external'] as const;
 export const invoiceKindValues = ['domestic', 'oss'] as const;
+export const historyStateValues = ['idle', 'running', 'done', 'error'] as const;
+export const feeKindValues = ['commission', 'promotion', 'delivery', 'payment', 'other'] as const;
+export const feeSourceValues = ['allegro_billing', 'mirakl', 'shopify_payments', 'mock'] as const;
 
 // ---------------------------------------------------------------- users
 
@@ -101,6 +104,16 @@ export const marketplaceAccounts = sqliteTable('marketplace_accounts', {
   stockSyncEnabled: bool('stock_sync_enabled').notNull().default(false),
   /** When true, stock pushes are only logged, never sent. */
   stockDryRun: bool('stock_dry_run').notNull().default(true),
+  /** One-off import of all past orders (for analytics): progress cursor, state and counts. */
+  historyCursor: text('history_cursor'),
+  historyState: text('history_state', { enum: historyStateValues }).notNull().default('idle'),
+  historyImported: integer('history_imported').notNull().default(0),
+  historyError: text('history_error'),
+  historyUpdatedAt: ts('history_updated_at'),
+  /** Marketplace fee import (Allegro billing): cursor, last run and last error. */
+  feesCursor: text('fees_cursor'),
+  feesSyncedAt: ts('fees_synced_at'),
+  feesError: text('fees_error'),
   createdAt: createdAt(),
 });
 
@@ -171,6 +184,10 @@ export const orders = sqliteTable(
     stockApplied: bool('stock_applied').notNull().default(false),
     /** Who the invoice is made out to, when the buyer asked for one. */
     invoiceRequest: json<InvoiceRequest>('invoice_request'),
+    /** Discounts on the whole order, in the order currency (informational; prices are already after discounts). */
+    discountAmount: text('discount_amount'),
+    /** Imported by the history import: never routed, labelled, invoiced or taken from stock. */
+    historical: bool('historical').notNull().default(false),
     raw: json<unknown>('raw'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -198,8 +215,62 @@ export const orderItems = sqliteTable(
     /** Product photo from the marketplace. */
     imageUrl: text('image_url'),
     productId: text('product_id').references(() => products.id, { onDelete: 'set null' }),
+    /** Discount on the whole line (all units), in the order currency; unit_price is before it. */
+    discountAmount: text('discount_amount'),
   },
   (t) => [index('order_items_order_idx').on(t.orderId), index('order_items_sku_idx').on(t.sku)],
+);
+
+/**
+ * What a marketplace or payment provider charged for an order (commission, promotion, delivery…),
+ * as reported by its API. Amounts are positive costs; a refunded fee is negative.
+ */
+export const orderFees = sqliteTable(
+  'order_fees',
+  {
+    id: id(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    orderItemId: text('order_item_id').references(() => orderItems.id, { onDelete: 'set null' }),
+    kind: text('kind', { enum: feeKindValues }).notNull(),
+    source: text('source', { enum: feeSourceValues }).notNull(),
+    /** Provider's id for the charge; unique per source so re-imports never double count. */
+    externalId: text('external_id').notNull(),
+    /** Name of the charge as the provider calls it, e.g. "Prowizja od sprzedaży". */
+    label: text('label'),
+    /** Gross amount (VAT included). */
+    amount: text('amount').notNull(),
+    /** VAT included in `amount`, when the provider says. */
+    taxAmount: text('tax_amount'),
+    currency: text('currency').notNull(),
+    occurredAt: ts('occurred_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('order_fees_source_external_idx').on(t.source, t.externalId), index('order_fees_order_idx').on(t.orderId)],
+);
+
+/** Money returned to the buyer. Amounts are positive, in the currency of the refund. */
+export const orderRefunds = sqliteTable(
+  'order_refunds',
+  {
+    id: id(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    orderItemId: text('order_item_id').references(() => orderItems.id, { onDelete: 'set null' }),
+    /** Provider's id, unique per order. Line-level refunds use "<refund id>:<line id>". */
+    externalId: text('external_id').notNull(),
+    amount: text('amount').notNull(),
+    currency: text('currency').notNull(),
+    /** Units returned (null for money-only refunds, e.g. shipping or goodwill). */
+    quantity: integer('quantity'),
+    /** The goods came back and can be sold again. */
+    restocked: bool('restocked').notNull().default(false),
+    refundedAt: ts('refunded_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('order_refunds_order_external_idx').on(t.orderId, t.externalId), index('order_refunds_refunded_idx').on(t.refundedAt)],
 );
 
 export const orderEvents = sqliteTable(
@@ -345,9 +416,53 @@ export const products = sqliteTable('products', {
   shopifyVariantId: text('shopify_variant_id').unique(),
   /** Barcode from Shopify, used to match Empik offers automatically. */
   ean: text('ean'),
+  /** Shopify product vendor and type, used as brand and category in analytics. */
+  brand: text('brand'),
+  category: text('category'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Landed cost of one unit, valid from a date until the next entry. Kept as history so a new
+ * purchase price never rewrites the margin of past sales.
+ */
+export const productCosts = sqliteTable(
+  'product_costs',
+  {
+    id: id(),
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    /** Everything one unit costs to get on the shelf, in PLN net: purchase + freight + duty. */
+    unitCost: text('unit_cost').notNull(),
+    /** Optional breakdown, as entered. */
+    purchasePrice: text('purchase_price'),
+    purchaseCurrency: text('purchase_currency'),
+    freight: text('freight'),
+    duty: text('duty'),
+    /** YYYY-MM-DD; the cost applies to orders placed on or after this day. */
+    effectiveFrom: text('effective_from').notNull(),
+    /** manual | import | sheet | shopify */
+    source: text('source').notNull().default('manual'),
+    note: text('note'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('product_costs_product_from_idx').on(t.productId, t.effectiveFrom)],
+);
+
+/** NBP table A mid rates: PLN per one unit of the currency, per business day. */
+export const fxRates = sqliteTable(
+  'fx_rates',
+  {
+    currency: text('currency').notNull(),
+    /** YYYY-MM-DD, the NBP effective date. */
+    day: text('day').notNull(),
+    rate: real('rate').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.currency, t.day] })],
+);
 
 export const productListings = sqliteTable(
   'product_listings',
@@ -476,6 +591,36 @@ export const invoices = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------- analytics
+
+export interface AnalyticsSettings {
+  /**
+   * Commission (fraction of the gross price) used when a marketplace reports no fee for an order,
+   * e.g. { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1 }.
+   */
+  fallbackCommission?: Partial<Record<(typeof marketplaceTypeValues)[number], number>>;
+  /** Net cost of one label in PLN, by carrier service ("inpost_locker_standard", …). */
+  labelCosts?: Record<string, number>;
+  /** Label cost for services without their own entry and for orders shipped outside Luora. */
+  defaultLabelCost?: number;
+  /** Packaging and other per-parcel costs in PLN net. */
+  packagingCost?: number;
+  /** Fees on marketplace invoices include VAT that the business deducts (count them net). */
+  feesVatDeductible?: boolean;
+  /** Margin thresholds as fractions of gross revenue. */
+  targetMargin?: number;
+  healthyMargin?: number;
+  thinMargin?: number;
+  criticalMargin?: number;
+}
+
+/** Single row: how profit is calculated. VAT rates come from the accounting settings. */
+export const analyticsSettings = sqliteTable('analytics_settings', {
+  id: text('id').primaryKey().$defaultFn(() => 'main'),
+  settings: json<AnalyticsSettings>('settings').notNull().$defaultFn(() => ({})),
+  updatedAt: updatedAt(),
+});
+
 /** Singleton/debounce keys for queued jobs (Cloudflare Queues has no built-in dedupe). */
 export const jobLocks = sqliteTable('job_locks', {
   key: text('key').primaryKey(),
@@ -495,3 +640,8 @@ export type Product = typeof products.$inferSelect;
 export type ProductListing = typeof productListings.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type AccountingSettingsRow = typeof accountingSettings.$inferSelect;
+export type OrderFee = typeof orderFees.$inferSelect;
+export type OrderRefund = typeof orderRefunds.$inferSelect;
+export type ProductCost = typeof productCosts.$inferSelect;
+export type FeeKind = (typeof feeKindValues)[number];
+export type FeeSource = (typeof feeSourceValues)[number];

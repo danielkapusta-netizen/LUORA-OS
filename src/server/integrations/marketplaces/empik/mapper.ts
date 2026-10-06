@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { formatPostalCode } from '../../address';
-import { splitTaxId, type InvoiceRequest, type NormalizedOrder } from '../../types';
+import { splitTaxId, type InvoiceRequest, type NormalizedFee, type NormalizedOrder, type NormalizedRefund } from '../../types';
 
 export const miraklOrderSchema = z.object({
   order_id: z.string(),
@@ -57,6 +57,27 @@ export const miraklOrderSchema = z.object({
       /** Line total without shipping. */
       price: z.number(),
       price_unit: z.number().nullish(),
+      /** Unit price before promotions. */
+      origin_unit_price: z.number().nullish(),
+      /** Empik's commission on the line: net, its VAT, and the total. */
+      commission_fee: z.number().nullish(),
+      commission_vat: z.number().nullish(),
+      total_commission: z.number().nullish(),
+      refunds: z
+        .array(
+          z.object({
+            id: z.union([z.string(), z.number()]).transform(String),
+            amount: z.number().nullish(),
+            shipping_amount: z.number().nullish(),
+            quantity: z.number().int().nullish(),
+            commission_amount: z.number().nullish(),
+            commission_vat: z.number().nullish(),
+            commission_total_amount: z.number().nullish(),
+            created_date: z.string().nullish(),
+            state: z.string().nullish(),
+          }),
+        )
+        .nullish(),
       product_medias: z.array(z.object({ media_url: z.string(), type: z.string().nullish() })).nullish(),
       order_line_state: z.string().nullish(),
     }),
@@ -115,6 +136,69 @@ function absoluteUrl(url: string | null | undefined, base: string | undefined): 
   return `${base.replace(/\/+$/, '').replace(/\/api$/, '')}${url}`;
 }
 
+type MiraklLine = MiraklOrder['order_lines'][number];
+
+function lineDiscount(l: MiraklLine): string | null {
+  const unit = l.price_unit ?? (l.quantity > 0 ? l.price / l.quantity : l.price);
+  if (l.origin_unit_price == null || l.origin_unit_price <= unit) return null;
+  return money((l.origin_unit_price - unit) * l.quantity);
+}
+
+/** Empik's refunds take back the money but are not settled until REFUNDED. */
+const SETTLED_REFUND = (state: string | null | undefined) => !state || state === 'REFUNDED';
+
+/** Empik's commission per line, and the commission it gives back on refunds. */
+function miraklFees(o: MiraklOrder): NormalizedFee[] {
+  const occurredAt = new Date(o.customer_debited_date ?? o.created_date);
+  const out: NormalizedFee[] = [];
+  for (const l of o.order_lines) {
+    const total = l.total_commission ?? (l.commission_fee != null ? l.commission_fee + (l.commission_vat ?? 0) : null);
+    if (total) {
+      out.push({
+        externalId: `${o.order_id}:${l.order_line_id}:commission`,
+        kind: 'commission',
+        label: 'Prowizja Empik',
+        externalLineId: l.order_line_id,
+        amount: money(total),
+        taxAmount: l.commission_vat != null ? money(l.commission_vat) : null,
+        currency: o.currency_iso_code,
+        occurredAt,
+      });
+    }
+    for (const r of l.refunds ?? []) {
+      if (!SETTLED_REFUND(r.state)) continue;
+      const back = r.commission_total_amount ?? (r.commission_amount != null ? r.commission_amount + (r.commission_vat ?? 0) : null);
+      if (!back) continue;
+      out.push({
+        externalId: `${o.order_id}:${l.order_line_id}:refund:${r.id}`,
+        kind: 'commission',
+        label: 'Zwrot prowizji Empik',
+        externalLineId: l.order_line_id,
+        amount: money(-back),
+        taxAmount: r.commission_vat != null ? money(-r.commission_vat) : null,
+        currency: o.currency_iso_code,
+        occurredAt: new Date(r.created_date ?? o.last_updated_date),
+      });
+    }
+  }
+  return out;
+}
+
+function miraklRefunds(o: MiraklOrder): NormalizedRefund[] {
+  return o.order_lines.flatMap((l) =>
+    (l.refunds ?? [])
+      .filter((r) => SETTLED_REFUND(r.state) && ((r.amount ?? 0) > 0 || (r.shipping_amount ?? 0) > 0))
+      .map((r) => ({
+        externalId: `${l.order_line_id}:${r.id}`,
+        externalLineId: l.order_line_id,
+        amount: money((r.amount ?? 0) + (r.shipping_amount ?? 0)),
+        currency: o.currency_iso_code,
+        quantity: r.quantity ?? null,
+        refundedAt: new Date(r.created_date ?? o.last_updated_date),
+      })),
+  );
+}
+
 /** @param mediaBase the Empik marketplace URL, used to make relative photo paths loadable. */
 export function mapMiraklOrder(raw: unknown, mediaBase?: string): NormalizedOrder {
   const o = miraklOrderSchema.parse(raw);
@@ -167,7 +251,10 @@ export function mapMiraklOrder(raw: unknown, mediaBase?: string): NormalizedOrde
       unitPrice: money(l.price_unit ?? (l.quantity > 0 ? l.price / l.quantity : l.price)),
       externalProductId: l.offer_id != null ? String(l.offer_id) : null,
       imageUrl: absoluteUrl((l.product_medias?.find((m) => m.type?.toLowerCase() === 'small') ?? l.product_medias?.[0])?.media_url, mediaBase),
+      discountAmount: lineDiscount(l),
     })),
+    fees: miraklFees(o),
+    refunds: miraklRefunds(o),
     invoiceRequest: invoiceRequest(o, buyerName || recipient || 'Empik buyer'),
     revision: o.last_updated_date,
     raw,

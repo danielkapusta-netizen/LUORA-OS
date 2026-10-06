@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ActionForm, SubmitButton } from '@/components/forms';
-import { Card, CardBody, CardHeader, Checkbox, Field, Input, Select } from '@/components/ui';
-import { MARKETPLACE_LABELS } from '@/lib/utils';
+import { Badge, Card, CardBody, CardHeader, Checkbox, Field, Input, Select } from '@/components/ui';
+import { formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireAdmin } from '@/server/auth';
 import type { MarketplaceAccount } from '@/server/db/schema';
 import { env } from '@/server/env';
@@ -15,7 +15,15 @@ import { DEFAULT_SHOPIFY_API_VERSION } from '@/server/integrations/marketplaces/
 import { DEFAULT_PICKUP_POINT_KEYS } from '@/server/integrations/marketplaces/shopify/mapper';
 import { loadMarketplaceAccount } from '@/server/services/accounts';
 import { empikCarriers, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
-import { deleteMarketplaceAction, importListingsAction, refreshEmpikCarriersAction, saveMarketplaceAction } from '../../../actions';
+import {
+  deleteMarketplaceAction,
+  importListingsAction,
+  refreshEmpikCarriersAction,
+  saveMarketplaceAction,
+  startHistoryAction,
+  stopHistoryAction,
+  syncFeesAction,
+} from '../../../actions';
 
 export const metadata: Metadata = { title: 'Marketplace account' };
 
@@ -229,6 +237,8 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
         </CardBody>
       </Card>
 
+      {account && <HistoryAndFees account={account} />}
+
       {account && (
         <div className="mt-5 flex flex-wrap gap-2">
           {type === 'empik' && (
@@ -248,5 +258,88 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
         </div>
       )}
     </div>
+  );
+}
+
+const HISTORY_STATE = {
+  idle: { label: 'Not imported', tone: 'gray' },
+  running: { label: 'Importing…', tone: 'blue' },
+  done: { label: 'Imported', tone: 'green' },
+  error: { label: 'Stopped', tone: 'red' },
+} as const;
+
+/** The one-off import of past orders and, for Allegro, the billing fee feed. */
+function HistoryAndFees({ account }: { account: MarketplaceAccount }) {
+  const state = HISTORY_STATE[account.historyState];
+  return (
+    <Card className="mt-5">
+      <CardHeader
+        title="Past orders and fees (for analytics)"
+        description="Imports every past order once, so analytics and margins cover your whole history. Past orders are stored as closed: they never get labels, invoices or stock changes."
+      />
+      <CardBody className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Badge tone={state.tone}>{state.label}</Badge>
+          <span>{account.historyImported} past order(s) imported</span>
+          {account.historyUpdatedAt && <span className="text-xs text-slate-500">last step {formatDate(account.historyUpdatedAt)}</span>}
+        </div>
+        {account.historyError && <p className="text-sm text-red-700">{account.historyError}</p>}
+        {account.type === 'shopify' && (
+          <p className="text-xs text-slate-500">
+            Shopify only returns orders older than 60 days when the app has the <code>read_all_orders</code> scope (ask for it in the Shopify Dev Dashboard).
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {account.historyState === 'running' ? (
+            <ActionForm action={stopHistoryAction.bind(null, account.id)}>
+              <SubmitButton variant="secondary">Stop</SubmitButton>
+            </ActionForm>
+          ) : (
+            <ActionForm action={startHistoryAction.bind(null, account.id)}>
+              {account.historyState === 'error' && account.historyCursor ? (
+                <SubmitButton>Resume import</SubmitButton>
+              ) : (
+                <SubmitButton>{account.historyState === 'done' ? 'Import again' : 'Import past orders'}</SubmitButton>
+              )}
+            </ActionForm>
+          )}
+          {account.historyState === 'error' && account.historyCursor && (
+            <ActionForm action={startHistoryAction.bind(null, account.id)}>
+              <input type="hidden" name="restart" value="1" />
+              <SubmitButton variant="secondary">Start over</SubmitButton>
+            </ActionForm>
+          )}
+        </div>
+
+        {account.type === 'allegro' && (
+          <div className="space-y-2 border-t border-slate-100 pt-4">
+            <p className="text-sm font-semibold">Allegro fees and refunds</p>
+            <p className="text-xs text-slate-500">
+              Commission, Smart delivery and promotion charges are read from Allegro billing every two hours, and payment refunds with them. The Allegro app
+              needs the “Billing (read)” and “Payments (read)” permissions; after enabling them press “Connect Allegro” again.
+            </p>
+            <p className="text-sm">
+              {account.feesSyncedAt ? (
+                <>
+                  Read up to {account.feesCursor ? formatDate(new Date(account.feesCursor)) : '–'} · last run {formatDate(account.feesSyncedAt)}
+                </>
+              ) : (
+                'Not read yet.'
+              )}
+            </p>
+            {account.feesError && <p className="text-sm text-red-700">{account.feesError}</p>}
+            <div className="flex flex-wrap gap-2">
+              <ActionForm action={syncFeesAction.bind(null, account.id)}>
+                <SubmitButton variant="secondary">Read fees now</SubmitButton>
+              </ActionForm>
+              <ActionForm action={syncFeesAction.bind(null, account.id)}>
+                <input type="hidden" name="fromStart" value="1" />
+                <SubmitButton variant="secondary">Read all fees again</SubmitButton>
+              </ActionForm>
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }

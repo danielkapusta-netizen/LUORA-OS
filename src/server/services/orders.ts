@@ -3,12 +3,15 @@ import { chunk, getDb, insertStatements, type Tx } from '../db/client';
 import {
   marketplaceAccounts,
   orderEvents,
+  orderFees,
   orderItems,
+  orderRefunds,
   orders,
   productListings,
   products,
   shipments,
   users,
+  type FeeSource,
   type MarketplaceAccount,
   type Order,
   type OrderStatus,
@@ -62,11 +65,19 @@ export async function syncAccount(accountId: string): Promise<SyncSummary> {
   }
 }
 
-function initialStatus(n: NormalizedOrder): OrderStatus {
+function initialStatus(n: NormalizedOrder, historical: boolean): OrderStatus {
   if (n.cancelled) return 'cancelled';
-  if (n.fulfilled) return 'shipped';
+  // A past order was dealt with outside Luora (or before it): it is closed, never put on To do.
+  if (n.fulfilled || historical) return 'shipped';
   return 'new';
 }
+
+/** Where fees reported inside an order come from, by marketplace. */
+const FEE_SOURCE: Partial<Record<MarketplaceAccount['type'], FeeSource>> = {
+  shopify: 'shopify_payments',
+  empik: 'mirakl',
+  allegro: 'allegro_billing',
+};
 
 /** The import event. An order that reaches us days after it was placed says so, so it doesn't look new. */
 export function importMessage(accountName: string, placedAt: Date, now = new Date()): string {
@@ -80,9 +91,13 @@ const EDITABLE: OrderStatus[] = ['new', 'processing', 'on_hold'];
 export async function upsertOrders(
   account: Pick<MarketplaceAccount, 'id' | 'type' | 'name'>,
   incoming: NormalizedOrder[],
+  /** historical: past orders from the history import (no stock, labels or invoices). */
+  options: { historical?: boolean } = {},
 ): Promise<SyncSummary & { newOrderIds: string[] }> {
+  const historical = options.historical ?? false;
   const db = getDb();
   const newOrderIds: string[] = [];
+  let created = 0;
   let updated = 0;
   let stockChanged = false;
 
@@ -105,7 +120,7 @@ export async function upsertOrders(
             externalNumber: n.externalNumber,
             marketplaceStatus: n.marketplaceStatus,
             readyToShip: n.readyToShip,
-            status: initialStatus(n),
+            status: initialStatus(n, historical),
             buyer: n.buyer,
             shippingAddress: n.shippingAddress,
             deliveryMethodId: n.deliveryMethodId ?? null,
@@ -117,16 +132,25 @@ export async function upsertOrders(
             currency: n.currency,
             placedAt: n.placedAt,
             paidAt: n.paidAt ?? null,
-            shippedAt: n.fulfilled ? new Date() : null,
+            shippedAt: n.fulfilled && !historical ? new Date() : null,
             revision: n.revision ?? null,
             invoiceRequest: n.invoiceRequest ?? null,
+            discountAmount: n.discountAmount ?? null,
+            historical,
             raw: n.raw as object,
           });
         await tx.batch([
           insertOrder,
           ...(await itemStatements(tx, account.id, id, n)),
-          tx.insert(orderEvents).values({ orderId: id, type: 'sync', message: importMessage(account.name, n.placedAt) }),
+          tx.insert(orderEvents).values({
+            orderId: id,
+            type: 'sync',
+            message: historical ? `Imported from ${account.name} history` : importMessage(account.name, n.placedAt),
+          }),
         ] as unknown as Parameters<Tx['batch']>[0]);
+        await storeMoneyEvents(tx, account.type, id, n);
+        created++;
+        if (historical) return;
         if (!n.cancelled && !n.fulfilled) stockChanged = (await applyOrderStock(tx, id)) || stockChanged;
         newOrderIds.push(id);
         return;
@@ -142,6 +166,7 @@ export async function upsertOrders(
           paidAt: n.paidAt ?? existing.paidAt,
           // Buyers can add invoice details after buying, so this always follows the marketplace.
           invoiceRequest: n.invoiceRequest ?? null,
+          discountAmount: n.discountAmount ?? existing.discountAmount,
           raw: n.raw as object,
           ...(EDITABLE.includes(existing.status)
             ? {
@@ -157,6 +182,16 @@ export async function upsertOrders(
             : {}),
         })
         .where(eq(orders.id, existing.id));
+
+      // Discounts can change after the order (e.g. a price correction); the lines follow the marketplace.
+      for (const item of n.items) {
+        if (item.discountAmount === undefined) continue;
+        await tx
+          .update(orderItems)
+          .set({ discountAmount: item.discountAmount ?? null })
+          .where(and(eq(orderItems.orderId, existing.id), eq(orderItems.externalLineId, item.externalLineId)));
+      }
+      await storeMoneyEvents(tx, account.type, existing.id, n);
 
       // Fill in product photos for orders imported before photos were stored.
       for (const item of n.items) {
@@ -192,7 +227,49 @@ export async function upsertOrders(
   }
 
   if (stockChanged) await scheduleStockPush();
-  return { created: newOrderIds.length, updated, newOrderIds };
+  return { created, updated, newOrderIds };
+}
+
+/**
+ * Saves the fees and refunds an order payload reports. Re-imports update them in place (keyed by
+ * the provider's id), so they are never counted twice.
+ */
+async function storeMoneyEvents(tx: Tx, marketplace: MarketplaceAccount['type'], orderId: string, n: NormalizedOrder): Promise<void> {
+  const source = FEE_SOURCE[marketplace];
+  const fees = source ? (n.fees ?? []) : [];
+  const refunds = n.refunds ?? [];
+  if (!fees.length && !refunds.length) return;
+  const lines = await tx.select({ id: orderItems.id, externalLineId: orderItems.externalLineId }).from(orderItems).where(eq(orderItems.orderId, orderId));
+  const itemId = (externalLineId: string | null | undefined) => (externalLineId ? (lines.find((l) => l.externalLineId === externalLineId)?.id ?? null) : null);
+  for (const f of fees) {
+    const values = {
+      orderItemId: itemId(f.externalLineId),
+      kind: f.kind,
+      label: f.label ?? null,
+      amount: f.amount,
+      taxAmount: f.taxAmount ?? null,
+      currency: f.currency,
+      occurredAt: f.occurredAt,
+    };
+    await tx
+      .insert(orderFees)
+      .values({ orderId, source: source!, externalId: f.externalId, ...values })
+      .onConflictDoUpdate({ target: [orderFees.source, orderFees.externalId], set: { orderId, ...values } });
+  }
+  for (const r of refunds) {
+    const values = {
+      orderItemId: itemId(r.externalLineId),
+      amount: r.amount,
+      currency: r.currency,
+      quantity: r.quantity ?? null,
+      restocked: r.restocked ?? false,
+      refundedAt: r.refundedAt,
+    };
+    await tx
+      .insert(orderRefunds)
+      .values({ orderId, externalId: r.externalId, ...values })
+      .onConflictDoUpdate({ target: [orderRefunds.orderId, orderRefunds.externalId], set: values });
+  }
 }
 
 async function itemStatements(tx: Tx, accountId: string, orderId: string, n: NormalizedOrder) {
@@ -229,6 +306,7 @@ async function itemStatements(tx: Tx, accountId: string, orderId: string, n: Nor
       // Allegro and Empik don't always send a photo; fall back to the product's (from Shopify).
       imageUrl: i.imageUrl ?? productFor(i)?.imageUrl ?? null,
       productId: productFor(i)?.id ?? null,
+      discountAmount: i.discountAmount ?? null,
     })),
   );
 }
@@ -314,6 +392,7 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
         eq(orders.deliveryMethodId, 'PACKSTATION'),
         isNull(orders.pickupPointId),
         inArray(orders.status, EDITABLE),
+        eq(orders.historical, false),
       ),
     )
     .orderBy(desc(orders.placedAt))
@@ -327,6 +406,8 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
         or(isNull(orderItems.imageUrl), like(orderItems.imageUrl, '/%')),
         or(isNotNull(orderItems.sku), isNotNull(orderItems.externalProductId)),
         ne(orders.status, 'cancelled'),
+        // Past orders are many and take their photo from the product instead.
+        eq(orders.historical, false),
       ),
     )
     .orderBy(desc(orders.placedAt))
@@ -339,6 +420,7 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
       and(
         isNull(orders.invoiceRequest),
         ne(orders.status, 'cancelled'),
+        eq(orders.historical, false),
         or(
           sql`${orders.marketplace} = 'allegro' and json_extract(${orders.raw}, '$.invoice.required') = 1`,
           sql`${orders.marketplace} = 'empik' and exists (select 1 from json_each(${orders.raw}, '$.order_additional_fields') f where json_extract(f.value, '$.code') = 'nip')`,

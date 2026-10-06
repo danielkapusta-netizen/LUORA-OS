@@ -1,4 +1,4 @@
-import type { Listing, Marketplace, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../types';
+import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, StockUpdate, TrackingInfo } from '../types';
 
 /** File name marketplaces accept for an invoice: ASCII only, e.g. "faktura-12-10-2026.pdf". */
 export function invoiceFileName(number: string): string {
@@ -13,6 +13,24 @@ export interface SyncResult {
   hasMore: boolean;
 }
 
+/** A fee charged for an order, reported by a separate billing feed. */
+export interface ExternalFee extends NormalizedFee {
+  orderExternalId: string;
+}
+
+/** A refund reported outside the order. `amount` is null when only the returned quantity is known. */
+export interface ExternalRefund extends Omit<NormalizedRefund, 'amount'> {
+  orderExternalId: string;
+  amount: string | null;
+}
+
+export interface FeeFeed {
+  fees: ExternalFee[];
+  refunds: ExternalRefund[];
+  /** Charges with no order (listing fees, ads, subscriptions); counted but not stored per order. */
+  unattached: number;
+}
+
 export interface MarketplaceAdapter {
   readonly marketplace: Marketplace;
 
@@ -21,6 +39,16 @@ export interface MarketplaceAdapter {
 
   /** Fetches orders created or changed since `cursor` (null on the first sync). */
   syncOrders(cursor: string | null): Promise<SyncResult>;
+
+  /**
+   * One step of the one-off import of past orders, newest first. `cursor` is null on the first
+   * call; a result with `hasMore: false` means the history is complete. The orders are stored as
+   * historical: they never create labels, invoices or stock movements.
+   */
+  syncHistory?(cursor: string | null): Promise<SyncResult>;
+
+  /** Fees and refunds booked between two times, when the marketplace reports them outside the order (Allegro). */
+  syncFees?(from: Date, to: Date): Promise<FeeFeed>;
 
   /** Re-reads one order, e.g. after accepting it. */
   getOrder(externalId: string): Promise<NormalizedOrder | null>;

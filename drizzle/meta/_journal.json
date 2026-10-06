@@ -43,6 +43,13 @@
       "when": 1790939385512,
       "tag": "0005_inventory_shopify",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791318030449,
+      "tag": "0006_analytics",
+      "breakpoints": true
     }
   ]
 }

@@ -74,8 +74,8 @@ curl -X POST https://<your-app>/api/admin/seed   # first run only: creates the a
 
 | Account | What you need | Where to get it |
 |---|---|---|
-| **Shopify** | Shop domain, Client ID, Client secret | Shopify **Dev Dashboard** → create an app, install it on the store. Since January 2026 new apps use client credentials, and tokens expire every 24 h (the app refreshes them automatically). A legacy `shpat_…` token also works. Scopes: `read_orders`, `read_products`, `read_locations`, `write_inventory`, `write_merchant_managed_fulfillment_orders`. |
-| **Allegro** | Client ID, Client secret | [apps.developer.allegro.pl](https://apps.developer.allegro.pl) (or the sandbox). Set the redirect URI to `APP_URL/api/oauth/allegro/callback`, save the account, then press **Connect Allegro**. |
+| **Shopify** | Shop domain, Client ID, Client secret | Shopify **Dev Dashboard** → create an app, install it on the store. Since January 2026 new apps use client credentials, and tokens expire every 24 h (the app refreshes them automatically). A legacy `shpat_…` token also works. Scopes: `read_orders`, `read_products`, `read_locations`, `write_inventory`, `write_merchant_managed_fulfillment_orders`. For the history import add `read_all_orders` (otherwise Shopify only returns the last 60 days). |
+| **Allegro** | Client ID, Client secret | [apps.developer.allegro.pl](https://apps.developer.allegro.pl) (or the sandbox). Set the redirect URI to `APP_URL/api/oauth/allegro/callback`, save the account, then press **Connect Allegro**. For fees and refunds in analytics the app also needs the **Billing (read)** and **Payments (read)** permissions; after enabling them press **Connect Allegro** again. |
 | **Empik** | Marketplace URL, API key | Empik seller panel → My account → API key (Empik runs on Mirakl). |
 | **InPost** | API token, Organization ID | InPost Manager Paczek → My account → API (ShipX). A sandbox is available. |
 | **Allegro Delivery** | A connected Allegro account, an IBAN for cash on delivery | No extra keys: it uses the Allegro account's connection. |
@@ -83,6 +83,20 @@ curl -X POST https://<your-app>/api/admin/seed   # first run only: creates the a
 For Shopify you can also add webhooks for `orders/create` and `orders/updated`, pointing at the URL shown on the Integrations page. They make new orders appear within seconds instead of at the next sync.
 
 Parcel locker codes for Shopify orders are read from order note attributes whose key contains `paczkomat`, `inpost_point`, `pickup_point`, and so on (you can change the list per account). If a code isn't found, it can be typed on the order page.
+
+## Analytics data: history, fees and costs
+
+Profit per order needs more than the order itself. This is where each part comes from:
+
+| Data | Source |
+|---|---|
+| Past orders | **Settings → Integrations → (account) → Import past orders.** A one-off, resumable import of every past order. Past orders are stored with `historical = true` and status Shipped or Cancelled: they never get labels, invoices or stock movements. Open orders from the last few days are left to the regular sync. |
+| Marketplace fees | Empik commission and Shopify Payments fees come inside the order. Allegro commission, Smart delivery and promotion charges come from `/billing/billing-entries`, read every two hours (`fees-sync`). Stored in `order_fees`, one row per charge, keyed by the provider's id. |
+| Refunds | Shopify and Empik refunds come inside the order; Allegro refunds from `/payments/refunds`. Stored in `order_refunds`. |
+| Discounts | Per line (`order_items.discount_amount`) and per order. Prices stay as paid. |
+| Exchange rates | NBP table A, stored per day in `fx_rates` (`fx-sync`, nightly). Each order converts at the rate of its day. |
+| Product costs | **Settings → Costs & margins.** Landed cost per unit in PLN, dated so that a new cost never rewrites past margins. Enter it by hand (or from a purchase price in USD/EUR/KRW at the NBP rate), paste two columns from a spreadsheet, import the Luora Analytics Google Sheet once, or take Shopify's "Cost per item". |
+| Profit settings | Same page: fallback commission per marketplace (only for orders without a reported fee), label and packaging cost, margin targets. VAT comes from the Accounting settings. |
 
 ## How it works
 
@@ -103,7 +117,7 @@ One Worker (src/worker/cloudflare.ts)
   - `mapper.ts`: provider JSON ↔ the app's own types.
   - `adapter.ts`: the actions the rest of the app calls.
 - The rest of the app only talks to the `MarketplaceAdapter` and `CarrierAdapter` interfaces.
-- Business logic lives in `src/server/services/`: `orders`, `shipping`, `routing`, `workflow`, `tracking`, `inventory` and `analytics`.
+- Business logic lives in `src/server/services/`: `orders`, `shipping`, `routing`, `workflow`, `tracking`, `inventory` and `analytics`, plus `history`, `fees`, `fx` and `costs` for the analytics data.
 
 Guards against buying a label twice:
 

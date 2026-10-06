@@ -3,8 +3,7 @@
 import { and, eq, gte, isNotNull, ne, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { orderItems, orders } from '../db/schema';
-import { isMockMode } from '../env';
-import { nbpRateBefore } from '../integrations/accounting/nbp';
+import { plnRateOn } from './fx';
 
 export type PerformanceLevel = 'excellent' | 'good' | 'low' | 'none';
 
@@ -62,25 +61,6 @@ export function rate(totals: Map<string, Omit<ProductPerformance, 'percentile' |
   return out;
 }
 
-const MOCK_RATES: Record<string, number> = { EUR: 4.3, CZK: 0.17, HUF: 0.011 };
-const rateCache = new Map<string, number>();
-
-/** PLN per unit of `currency` (today's NBP rate, cached per day). Null when it can't be read. */
-async function plnRate(currency: string): Promise<number | null> {
-  if (currency === 'PLN') return 1;
-  const today = new Date().toISOString().slice(0, 10);
-  const key = `${currency}:${today}`;
-  if (rateCache.has(key)) return rateCache.get(key)!;
-  try {
-    const rate = isMockMode() ? (MOCK_RATES[currency] ?? 1) : (await nbpRateBefore(currency, today)).rate;
-    rateCache.set(key, rate);
-    return rate;
-  } catch (err) {
-    console.error(`[stats] no NBP rate for ${currency}:`, err);
-    return null;
-  }
-}
-
 /** Sales of every product over the last `days` days (cancelled orders left out). */
 export async function productStats(days = 30, now = new Date()) {
   const since = new Date(now.getTime() - days * 86_400_000);
@@ -99,7 +79,7 @@ export async function productStats(days = 30, now = new Date()) {
     .groupBy(orderItems.productId, orders.marketplace, orders.currency);
 
   const rates = new Map<string, number | null>();
-  for (const currency of new Set(rows.map((r) => r.currency))) rates.set(currency, await plnRate(currency));
+  for (const currency of new Set(rows.map((r) => r.currency))) rates.set(currency, await plnRateOn(currency));
 
   const totals = new Map<string, Omit<ProductPerformance, 'percentile' | 'level' | 'rank' | 'rankByMarketplace'>>();
   for (const r of rows) {

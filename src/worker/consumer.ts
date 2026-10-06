@@ -24,21 +24,28 @@ export async function handleBatch(batch: MessageBatch<JobMessage>, env: CfEnv): 
   }
 }
 
-/** Cron expression (as written in wrangler.jsonc) → job to run. */
-export const CRON_JOBS: Record<string, JobName> = {
-  '*/3 * * * *': JOBS.syncAll,
-  '*/2 * * * *': JOBS.shipmentSweep,
-  '15 */2 * * *': JOBS.deliveryCheck,
-  '30 2 * * *': JOBS.stockReconcile,
-  '*/15 * * * *': JOBS.orderBackfill,
+/**
+ * Cron expression (as written in wrangler.jsonc) → jobs to run. Several jobs share a schedule
+ * because the number of cron triggers per Worker is limited.
+ */
+export const CRON_JOBS: Record<string, JobName[]> = {
+  '*/3 * * * *': [JOBS.syncAll],
+  '*/2 * * * *': [JOBS.shipmentSweep],
+  '15 */2 * * *': [JOBS.deliveryCheck, JOBS.feesSyncAll],
+  '30 2 * * *': [JOBS.stockReconcile, JOBS.fxSync],
+  '*/15 * * * *': [JOBS.orderBackfill],
 };
 
 export async function handleScheduled(controller: ScheduledController, env: CfEnv): Promise<void> {
   setCfEnv(env);
-  const job = CRON_JOBS[controller.cron];
-  if (!job) {
+  const jobs = CRON_JOBS[controller.cron];
+  if (!jobs) {
     console.warn(`[cron] no job for "${controller.cron}"`);
     return;
   }
-  await runJob(job, {} as never);
+  // One failing job must not keep the others on the same schedule from running.
+  const results = await Promise.allSettled(jobs.map((job) => runJob(job, {} as never)));
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') console.error(`[cron] ${jobs[i]} failed:`, r.reason instanceof Error ? r.reason.message : r.reason);
+  });
 }

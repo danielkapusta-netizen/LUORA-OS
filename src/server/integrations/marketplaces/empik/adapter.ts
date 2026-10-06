@@ -148,6 +148,25 @@ export class EmpikAdapter implements MarketplaceAdapter {
     return { orders, nextCursor: newest, hasMore };
   }
 
+  /** OR11 by creation date, newest first. Cursor = { before, offset } of the window being read. */
+  async syncHistory(cursor: string | null): Promise<SyncResult> {
+    const state: { before: string; offset: number } = cursor ? JSON.parse(cursor) : { before: new Date().toISOString(), offset: 0 };
+    const orders: NormalizedOrder[] = [];
+    let hasMore = true;
+    for (let page = 0; page < MAX_PAGES_PER_SYNC && hasMore; page++) {
+      const data = await this.client.call<OrdersPage>('GET', '/orders', {
+        query: { end_date: state.before, sort: 'dateCreated', order: 'desc', max: PAGE, offset: state.offset, paginate: true },
+      });
+      for (const raw of data.orders) {
+        if (raw.order_state === 'STAGING') continue;
+        orders.push(mapMiraklOrder(raw, this.baseUrl));
+      }
+      state.offset += data.orders.length;
+      hasMore = data.orders.length > 0 && state.offset < data.total_count;
+    }
+    return { orders, nextCursor: hasMore ? JSON.stringify(state) : null, hasMore };
+  }
+
   async getOrder(externalId: string): Promise<NormalizedOrder | null> {
     const data = await this.client.call<OrdersPage>('GET', '/orders', { query: { order_ids: externalId } });
     return data.orders[0] ? mapMiraklOrder(data.orders[0], this.baseUrl) : null;

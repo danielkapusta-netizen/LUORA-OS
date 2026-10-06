@@ -6,6 +6,8 @@ import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
 import type { CarrierSettings, MarketplaceSettings, RuleConditions } from '@/server/db/schema';
 import { enqueue, JOBS } from '@/server/jobs/queue';
+import { resetFeeCursor } from '@/server/services/fees';
+import { startHistoryImport, stopHistoryImport } from '@/server/services/history';
 import {
   createDefaultRules,
   createUser,
@@ -334,5 +336,35 @@ export async function resetPasswordAction(id: string, _prev: ActionResult, fd: F
   return attempt(async () => {
     await resetPassword(id, String(fd.get('password') ?? ''));
     return 'Password changed';
+  });
+}
+
+// ---------------------------------------------------------------- history and fees
+
+export async function startHistoryAction(accountId: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    await startHistoryImport(accountId, { restart: fd.get('restart') === '1' });
+    revalidatePath(`/settings/integrations/marketplace/${accountId}`);
+    return 'The import of past orders has started; it runs in the background. Reload this page to see its progress.';
+  });
+}
+
+export async function stopHistoryAction(accountId: string): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    await stopHistoryImport(accountId);
+    revalidatePath(`/settings/integrations/marketplace/${accountId}`);
+    return 'Stopped. “Resume” continues where it stopped.';
+  });
+}
+
+export async function syncFeesAction(accountId: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    if (fd.get('fromStart') === '1') await resetFeeCursor(accountId);
+    await enqueue(JOBS.feesSync, { accountId }, { singletonKey: accountId });
+    revalidatePath(`/settings/integrations/marketplace/${accountId}`);
+    return 'Fees are being read in the background.';
   });
 }

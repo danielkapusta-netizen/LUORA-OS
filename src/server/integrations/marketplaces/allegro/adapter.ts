@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
-import type { CredentialsStore, Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
-import { invoiceFileName, type MarketplaceAdapter, type SyncResult } from '../types';
+import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
+import { invoiceFileName, type ExternalFee, type ExternalRefund, type FeeFeed, type MarketplaceAdapter, type SyncResult } from '../types';
 import { AllegroApiError, AllegroClient, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
 
@@ -19,8 +19,41 @@ const RELEVANT_EVENTS = new Set([
 ]);
 const IMPORTABLE_STATUSES = new Set(['READY_FOR_PROCESSING', 'CANCELLED']);
 const EVENTS_LIMIT = 1000;
+/** Pages of 100 checkout forms read per history step. */
+const HISTORY_PAGES = 5;
 /** Cursor used when the account has no order events yet. */
 const NO_EVENTS = 'none';
+
+interface BillingEntry {
+  id: string;
+  occurredAt: string;
+  type: { id: string; name: string };
+  value: { amount: string; currency: string };
+  tax?: { percentage?: string | null } | null;
+  order?: { id: string } | null;
+}
+
+interface PaymentRefund {
+  id: string;
+  status?: string | null;
+  createdAt: string;
+  order?: { id: string } | null;
+  lineItems?: { id: string; type?: string | null; quantity?: number | null; value?: { amount: string; currency: string } | null }[] | null;
+  delivery?: { value?: { amount: string; currency: string } | null } | null;
+  totalValue?: { amount: string; currency: string } | null;
+}
+
+/** Sorts an Allegro billing type into a fee kind, by its id where known and otherwise by its Polish name. */
+export function allegroFeeKind(typeId: string, name: string): FeeKind {
+  const text = `${typeId} ${name}`.toLowerCase();
+  if (/\bsuc\b|prowizj|commission/.test(text)) return 'commission';
+  if (/dostaw|przesył|wysył|kurier|paczk|smart|delivery|shipping|etykiet/.test(text)) return 'delivery';
+  if (/wyróżn|promow|reklam|kampan|\bads\b|podbic|pakiet|baner|strona działu/.test(text)) return 'promotion';
+  if (/płatno|transakc|payment/.test(text)) return 'payment';
+  return 'other';
+}
+
+const BILLING_PAGE = 100;
 
 /** Allegro's catalogue parameter "EAN (GTIN)". */
 const EAN_PARAMETER_ID = '225693';
@@ -85,6 +118,103 @@ export class AllegroAdapter implements MarketplaceAdapter {
     }
     await this.addImages(orders);
     return { orders, nextCursor: stats.latestEvent?.id ?? NO_EVENTS, hasMore: false };
+  }
+
+  /**
+   * Past checkout forms, newest first, in windows by purchase date (Allegro caps offset paging).
+   * Photos are not looked up here: past orders take their photo from the product.
+   */
+  async syncHistory(cursor: string | null): Promise<SyncResult> {
+    const before = cursor ?? new Date().toISOString();
+    const orders: NormalizedOrder[] = [];
+    let oldest = before;
+    let hasMore = false;
+    for (let offset = 0; offset < HISTORY_PAGES * 100; offset += 100) {
+      const page = await this.client.call<{ checkoutForms: { status: string; lineItems?: { boughtAt?: string | null }[] }[]; totalCount: number }>(
+        'GET',
+        '/order/checkout-forms',
+        { query: { 'lineItems.boughtAt.lte': before, sort: '-lineItems.boughtAt', limit: 100, offset } },
+      );
+      for (const form of page.checkoutForms) {
+        for (const li of form.lineItems ?? []) if (li.boughtAt && li.boughtAt < oldest) oldest = li.boughtAt;
+        // Unpaid forms (BOUGHT, FILLED_IN) never became orders.
+        if (IMPORTABLE_STATUSES.has(form.status)) orders.push(mapAllegroCheckoutForm(form));
+      }
+      hasMore = page.checkoutForms.length === 100 && offset + 100 < page.totalCount;
+      if (!hasMore) break;
+    }
+    if (!hasMore) return { orders, nextCursor: null, hasMore: false };
+    // Continue from the oldest purchase seen; never stand still if a whole window shares one timestamp.
+    const next = oldest < before ? oldest : new Date(Date.parse(before) - 1000).toISOString();
+    return { orders, nextCursor: next, hasMore: true };
+  }
+
+  /**
+   * Billing entries (commission, Smart delivery, promotion fees…) and payment refunds booked in a
+   * time window. Needs the "billing: read" and "payments: read" permissions of the Allegro app.
+   */
+  async syncFees(from: Date, to: Date): Promise<FeeFeed> {
+    const window = { 'occurredAt.gte': from.toISOString(), 'occurredAt.lte': to.toISOString() };
+    const fees: ExternalFee[] = [];
+    let unattached = 0;
+    for (let offset = 0; ; offset += BILLING_PAGE) {
+      const page = await this.client.call<{ billingEntries: BillingEntry[] }>('GET', '/billing/billing-entries', {
+        query: { ...window, limit: BILLING_PAGE, offset },
+      });
+      for (const e of page.billingEntries) {
+        if (!e.order?.id) {
+          unattached++;
+          continue;
+        }
+        // Allegro books a charge as a negative value and a refund of a charge as a positive one.
+        const amount = -Number(e.value.amount);
+        if (!amount) continue;
+        const percent = Number(e.tax?.percentage ?? NaN);
+        fees.push({
+          orderExternalId: e.order.id,
+          externalId: e.id,
+          kind: allegroFeeKind(e.type.id, e.type.name),
+          label: e.type.name,
+          amount: amount.toFixed(2),
+          taxAmount: Number.isFinite(percent) ? ((amount * percent) / (100 + percent)).toFixed(2) : null,
+          currency: e.value.currency,
+          occurredAt: new Date(e.occurredAt),
+        });
+      }
+      if (page.billingEntries.length < BILLING_PAGE) break;
+    }
+
+    const refunds: ExternalRefund[] = [];
+    for (let offset = 0; ; offset += BILLING_PAGE) {
+      const page = await this.client.call<{ refunds: PaymentRefund[] }>('GET', '/payments/refunds', {
+        query: { ...window, limit: BILLING_PAGE, offset },
+      });
+      for (const r of page.refunds) {
+        if (!r.order?.id || (r.status && r.status !== 'SUCCESS')) continue;
+        const refundedAt = new Date(r.createdAt);
+        const currency = r.totalValue?.currency ?? r.lineItems?.find((l) => l.value)?.value?.currency ?? 'PLN';
+        let lines = 0;
+        for (const li of r.lineItems ?? []) {
+          const value = li.value ? Number(li.value.amount) : null;
+          if (value !== null) lines += value;
+          refunds.push({
+            orderExternalId: r.order.id,
+            externalId: `${r.id}:${li.id}`,
+            externalLineId: li.id,
+            amount: value !== null ? value.toFixed(2) : null,
+            currency,
+            quantity: li.type === 'QUANTITY' ? (li.quantity ?? null) : null,
+            refundedAt,
+          });
+        }
+        // Delivery and anything not split by line (only when every line had a value, so nothing is counted twice).
+        const known = (r.lineItems ?? []).every((l) => l.value);
+        const rest = r.totalValue && known ? Math.round((Number(r.totalValue.amount) - lines) * 100) / 100 : 0;
+        if (rest > 0) refunds.push({ orderExternalId: r.order.id, externalId: r.id, amount: rest.toFixed(2), currency, refundedAt });
+      }
+      if (page.refunds.length < BILLING_PAGE) break;
+    }
+    return { fees, refunds, unattached };
   }
 
   async getOrder(externalId: string): Promise<NormalizedOrder | null> {

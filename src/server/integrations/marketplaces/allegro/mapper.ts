@@ -64,6 +64,8 @@ export const checkoutFormSchema = z.object({
       id: z.string(),
       quantity: z.number().int(),
       price: amount,
+      /** Price before Allegro or seller discounts; `price` is what the buyer paid per unit. */
+      originalPrice: amount.nullish(),
       boughtAt: z.string().nullish(),
       offer: z.object({
         id: z.string(),
@@ -96,6 +98,15 @@ function invoiceRequest(f: CheckoutForm, fallbackName: string): InvoiceRequest |
     countryCode,
     email: f.buyer.email ?? null,
   };
+}
+
+/** Allegro prices are already discounted; the discount is what the lines lost against their original price. */
+function discountOf(f: CheckoutForm): string | null {
+  const total = f.lineItems.reduce((sum, li) => {
+    const original = Number(li.originalPrice?.amount ?? li.price.amount);
+    return sum + Math.max(0, original - Number(li.price.amount)) * li.quantity;
+  }, 0);
+  return total > 0.004 ? total.toFixed(2) : null;
 }
 
 export function mapAllegroCheckoutForm(raw: unknown): NormalizedOrder {
@@ -151,6 +162,7 @@ export function mapAllegroCheckoutForm(raw: unknown): NormalizedOrder {
       unitPrice: li.price.amount,
       externalProductId: li.offer.id,
     })),
+    discountAmount: discountOf(f),
     invoiceRequest: invoiceRequest(f, buyerName),
     revision: f.revision ?? null,
     raw,
