@@ -30,7 +30,8 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   const view = await analyticsView(params, 'quarter');
   const { period, data } = view;
-  const metric = METRIC_ORDER.includes(params.metric as AnalyticsMetric) ? (params.metric as AnalyticsMetric) : 'revenue';
+  const metrics = view.showProfit ? METRIC_ORDER : METRIC_ORDER.filter((m) => m !== 'profit' && m !== 'contribution');
+  const metric = metrics.includes(params.metric as AnalyticsMetric) ? (params.metric as AnalyticsMetric) : 'revenue';
   const grains = availableGranularities(period);
   const grain = grains.includes(params.grain as Granularity) ? (params.grain as Granularity) : period.granularity;
   // Overlays are on unless switched off: "show" lists the ones that are on.
@@ -52,7 +53,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
     <div className="space-y-6">
       <ViewFilters view={view} path="/analytics/trends" extra={current} />
       <div className="flex flex-wrap items-center gap-2">
-        <Pills label="Metric" options={METRIC_ORDER.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))} active={metric} href={(v) => link({ metric: v })} />
+        <Pills label="Metric" options={metrics.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))} active={metric} href={(v) => link({ metric: v })} />
         <Pills label="Grain" options={grains.map((g) => ({ value: g, label: GRAINS[g] }))} active={grain} href={(v) => link({ grain: v })} />
       </div>
       {view.snapshot.isEmpty ? (

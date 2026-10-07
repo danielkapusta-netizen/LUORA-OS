@@ -900,7 +900,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
 
   it('feeds the analytics pages from the profit lines', async () => {
     const dataset = await import('@/server/analytics/dataset');
-    const { analyticsView } = await import('@/server/analytics/view');
+    const { buildAnalyticsView } = await import('@/server/analytics/view');
     const db = m.db.getDb();
     const lines = await db.select().from(m.schema.salesLines);
     const data = await dataset.loadBusinessData();
@@ -919,7 +919,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     // Brands and categories fall back to the name when Shopify gave none.
     expect(all.products.every((p) => p.brand && p.category)).toBe(true);
 
-    const empik = await analyticsView({ marketplace: 'empik', period: 'year' });
+    const empik = await buildAnalyticsView({ marketplace: 'empik', period: 'year' }, true);
     expect(empik.data.lineItems.length).toBeGreaterThan(0);
     expect(empik.data.lineItems.every((l) => l.source === 'empik')).toBe(true);
     expect(empik.params).toMatchObject({ marketplace: 'empik', period: 'year' });

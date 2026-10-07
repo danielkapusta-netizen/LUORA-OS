@@ -69,7 +69,7 @@ export interface PulsePoint {
 }
 
 /** Revenue and profit (same unit, one axis) or orders over time. */
-export function PulseChart({ data, metric, granularity }: { data: PulsePoint[]; metric: 'money' | 'orders'; granularity: string }) {
+export function PulseChart({ data, metric, granularity, showProfit = true }: { data: PulsePoint[]; metric: 'money' | 'orders'; granularity: string; showProfit?: boolean }) {
   const format: ValueFormat = metric === 'orders' ? 'number' : 'pln';
   return (
     <ResponsiveContainer width="100%" height={280}>
@@ -82,7 +82,7 @@ export function PulseChart({ data, metric, granularity }: { data: PulsePoint[]; 
           <>
             <Legend iconType="plainline" formatter={(v: string) => <span style={{ color: INK.secondary, fontSize: 12 }}>{v}</span>} />
             <Area type="monotone" dataKey="revenue" name="Revenue" stroke={SERIES.revenue} fill={SERIES.revenue} fillOpacity={0.08} strokeWidth={2} isAnimationActive={false} />
-            <Area type="monotone" dataKey="profit" name="Profit" stroke={SERIES.profit} fill={SERIES.profit} fillOpacity={0.08} strokeWidth={2} isAnimationActive={false} />
+            {showProfit && <Area type="monotone" dataKey="profit" name="Profit" stroke={SERIES.profit} fill={SERIES.profit} fillOpacity={0.08} strokeWidth={2} isAnimationActive={false} />}
             <ReferenceLine y={0} stroke={INK.axis} />
           </>
         ) : (

@@ -5,6 +5,7 @@ import { formatValue, MARKETPLACE_COLORS } from '@/components/analytics/format';
 import { Badge, buttonClass, Card, EmptyState, Input, Select, td, th } from '@/components/ui';
 import { repeatStats, SEGMENT_ORDER, SEGMENTS } from '@/lib/crm/segments';
 import { cn, MARKETPLACE_LABELS } from '@/lib/utils';
+import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import { CUSTOMER_SORTS, customerRows } from '@/server/services/customer-list';
 import { orderDatesByCustomer } from '@/server/services/customers';
@@ -16,7 +17,9 @@ type Params = { q?: string; segment?: string; marketplace?: string; tag?: string
 
 export default async function CustomersPage({ searchParams }: { searchParams: Promise<Params> }) {
   const user = await requireUser();
-  const params = await searchParams;
+  const showProfit = can(user.role, 'profit');
+  const asked = await searchParams;
+  const params = showProfit || asked.sort !== 'profit' ? asked : { ...asked, sort: undefined };
   const [{ rows, all }, dates] = await Promise.all([customerRows(params), orderDatesByCustomer()]);
   const stats = repeatStats(all.map((r) => r.customer), dates);
   const counts = new Map<string, number>();
@@ -73,7 +76,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           </Select>
         )}
         <Select name="sort" defaultValue={params.sort ?? 'last'} className="h-9 w-44" aria-label="Sort by">
-          {CUSTOMER_SORTS.map((s) => (
+          {CUSTOMER_SORTS.filter((s) => showProfit || s.value !== 'profit').map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
             </option>
@@ -99,7 +102,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 <th className={th}>Segment</th>
                 <th className={cn(th, 'text-right')}>Orders</th>
                 <th className={cn(th, 'text-right')}>Revenue</th>
-                <th className={cn(th, 'text-right')}>Profit</th>
+                {showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
                 <th className={cn(th, 'text-right')}>Basket</th>
                 <th className={th}>Last order</th>
               </tr>
@@ -129,7 +132,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   <td className={td}>{scored && <Badge tone={SEGMENTS[scored.segment].tone}>{SEGMENTS[scored.segment].label}</Badge>}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{c.ordersCount}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{formatValue(c.revenue, 'pln')}</td>
-                  <td className={cn(td, 'text-right tabular-nums', c.profit < 0 && 'text-red-700')}>{formatValue(c.profit, 'pln')}</td>
+                  {showProfit && <td className={cn(td, 'text-right tabular-nums', c.profit < 0 && 'text-red-700')}>{formatValue(c.profit, 'pln')}</td>}
                   <td className={cn(td, 'text-right tabular-nums')}>{c.ordersCount ? formatValue(c.revenue / c.ordersCount, 'pln') : '—'}</td>
                   <td className={cn(td, 'whitespace-nowrap')}>
                     {c.lastOrderAt?.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) ?? '—'}

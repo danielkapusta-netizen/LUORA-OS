@@ -51,6 +51,8 @@ function trailingStreak(values: readonly number[]): { direction: 'up' | 'down'; 
 export function buildBusinessReview(
   snapshot: Snapshot,
   coverage: DataCoverage,
+  /** Off for people who may see margins but not how much profit was made. */
+  showProfit = true,
 ): BusinessReview {
   const { period, totals, previousTotals, products, channels, series } = snapshot
 
@@ -65,11 +67,15 @@ export function buildBusinessReview(
       value: formatPLN(totals.revenuePLN),
       caption: previousTotals ? `from ${formatPLN(previousTotals.revenuePLN)}` : 'no prior window',
     },
-    {
-      label: 'Profit',
-      value: formatPLN(totals.marginPLN),
-      caption: previousTotals ? `from ${formatPLN(previousTotals.marginPLN)}` : 'no prior window',
-    },
+    ...(showProfit
+      ? [
+          {
+            label: 'Profit',
+            value: formatPLN(totals.marginPLN),
+            caption: previousTotals ? `from ${formatPLN(previousTotals.marginPLN)}` : 'no prior window',
+          },
+        ]
+      : []),
     {
       label: 'Margin',
       value: formatPercent(totals.marginPct),
@@ -99,7 +105,7 @@ export function buildBusinessReview(
   const narrative: string[] = []
 
   narrative.push(
-    `Luora took ${formatPLN(totals.revenuePLN)} of revenue across ${totals.orders.toLocaleString('en-GB')} orders in this period and kept ${formatPLN(totals.marginPLN)} of it — a ${formatPercent(totals.marginPct)} margin after VAT, marketplace fees, product cost, shipping and refunds.`,
+    `Luora took ${formatPLN(totals.revenuePLN)} of revenue across ${totals.orders.toLocaleString('en-GB')} orders in this period${showProfit ? ` and kept ${formatPLN(totals.marginPLN)} of it` : ''} — a ${formatPercent(totals.marginPct)} margin after VAT, marketplace fees, product cost, shipping and refunds.`,
   )
 
   if (previousTotals && previousTotals.revenuePLN > 0) {

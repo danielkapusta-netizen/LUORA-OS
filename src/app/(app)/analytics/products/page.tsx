@@ -34,11 +34,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   const view = await analyticsView(params);
   const dimension = (DIMENSIONS.some((d) => d.value === params.dimension) ? params.dimension : 'product') as CatalogueDimension;
-  const sort = SORTS.some((s) => s.value === params.sort) ? params.sort! : 'revenue';
+  const sorts = view.showProfit ? SORTS : SORTS.filter((s) => s.value !== 'profit');
+  const sort = sorts.some((s) => s.value === params.sort) ? params.sort! : 'revenue';
   const current = { ...view.params, dimension: params.dimension, sort: params.sort, q: params.q };
   const link = (next: Record<string, string | undefined>) => hrefWith('/analytics/products', { ...current, open: params.open }, next);
 
-  const rows = buildCatalogue(view.snapshot.orders, dimension, view.snapshot.products)
+  const rows = buildCatalogue(view.fullSnapshot.orders, dimension, view.fullSnapshot.products)
     .filter((r) => !params.q || r.label.toLowerCase().includes(params.q.toLowerCase()))
     .sort((a, b) =>
       sort === 'profit' ? b.marginPLN - a.marginPLN : sort === 'margin' ? b.marginPct - a.marginPct : sort === 'orders' ? b.orders - a.orders : b.revenuePLN - a.revenuePLN,
@@ -49,7 +50,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
       <ViewFilters view={view} path="/analytics/products" extra={current} />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Pills label="Group by" options={DIMENSIONS} active={dimension} href={(v) => link({ dimension: v, open: undefined })} />
-        <Pills label="Sort by" options={SORTS} active={sort} href={(v) => link({ sort: v })} />
+        <Pills label="Sort by" options={sorts} active={sort} href={(v) => link({ sort: v })} />
         <form action="/analytics/products" className="flex items-center gap-2">
           {Object.entries({ ...view.params, dimension: params.dimension, sort: params.sort }).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
           <Input name="q" defaultValue={params.q ?? ''} placeholder="Search" className="h-8 w-56" aria-label="Search products" />
@@ -67,9 +68,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                 <th className={cn(th, 'text-right')}>Orders</th>
                 <th className={cn(th, 'text-right')}>Units</th>
                 <th className={cn(th, 'text-right')}>Revenue</th>
-                <th className={cn(th, 'text-right')}>Profit</th>
+                {view.showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
                 <th className={cn(th, 'text-right')}>Margin</th>
-                <th className={cn(th, 'text-right')}>Share of profit</th>
+                {view.showProfit && <th className={cn(th, 'text-right')}>Share of profit</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -101,9 +102,9 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     <td className={cn(td, 'text-right tabular-nums')}>{r.orders}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{r.units}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.revenuePLN, 'pln')}</td>
-                    <td className={cn(td, 'text-right tabular-nums', r.marginPLN < 0 && 'text-red-700')}>{formatValue(r.marginPLN, 'pln')}</td>
+                    {view.showProfit && <td className={cn(td, 'text-right tabular-nums', r.marginPLN < 0 && 'text-red-700')}>{formatValue(r.marginPLN, 'pln')}</td>}
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.marginPct, 'percent')}</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{Math.round(r.marginShare * 100)}%</td>
+                    {view.showProfit && <td className={cn(td, 'text-right tabular-nums')}>{Math.round(r.marginShare * 100)}%</td>}
                   </tr>,
                   open && (
                     <tr key={`${r.key}-detail`} className="bg-slate-50">
@@ -130,7 +131,7 @@ function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: Analytic
   const figures = [
     ['Average basket', formatValue(row.avgOrderValuePLN, 'pln')],
     ['Unit price', formatValue(row.avgUnitPricePLN, 'pln')],
-    ['Profit per order', formatValue(row.orders ? row.marginPLN / row.orders : 0, 'pln')],
+    ...(view.showProfit ? [['Profit per order', formatValue(row.orders ? row.marginPLN / row.orders : 0, 'pln')]] : []),
     ['Share of revenue', `${Math.round(row.revenueShare * 100)}%`],
     ['First sale', formatDate(row.firstSold)],
     ['Last sale', formatDate(row.lastSold)],
@@ -188,7 +189,7 @@ function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: Analytic
               <th className={cn(th, 'text-right')}>Units</th>
               <th className={cn(th, 'text-right')}>Unit price</th>
               <th className={cn(th, 'text-right')}>Revenue</th>
-              <th className={cn(th, 'text-right')}>Profit</th>
+              {view.showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
               <th className={cn(th, 'text-right')}>Margin</th>
             </tr>
           </thead>
@@ -200,7 +201,7 @@ function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: Analytic
                 <td className={cn(td, 'text-right tabular-nums')}>{h.units}</td>
                 <td className={cn(td, 'text-right tabular-nums')}>{formatValue(h.avgUnitPricePLN, 'pln')}</td>
                 <td className={cn(td, 'text-right tabular-nums')}>{formatValue(h.revenuePLN, 'pln')}</td>
-                <td className={cn(td, 'text-right tabular-nums')}>{formatValue(h.marginPLN, 'pln')}</td>
+                {view.showProfit && <td className={cn(td, 'text-right tabular-nums')}>{formatValue(h.marginPLN, 'pln')}</td>}
                 <td className={cn(td, 'text-right tabular-nums')}>{formatValue(h.marginPct, 'percent')}</td>
               </tr>
             ))}

@@ -3,6 +3,7 @@
 import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Truck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { canSeePath } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 
 const ITEMS = [
@@ -17,7 +18,7 @@ const ITEMS = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function Nav({ userName, mock, taskBadge = 0, logoutAction }: { userName: string; mock: boolean; /** My tasks due today or already late. */ taskBadge?: number; logoutAction: () => Promise<void> }) {
+export function Nav({ userName, role, mock, taskBadge = 0, logoutAction }: { userName: string; role: string; mock: boolean; /** My tasks due today or already late. */ taskBadge?: number; logoutAction: () => Promise<void> }) {
   const pathname = usePathname();
   return (
     <aside className="no-print flex w-full shrink-0 flex-col bg-sidebar text-white md:sticky md:top-0 md:h-screen md:w-60">
@@ -27,7 +28,7 @@ export function Nav({ userName, mock, taskBadge = 0, logoutAction }: { userName:
         {mock && <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">Demo</span>}
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:gap-1.5 md:overflow-visible">
-        {ITEMS.map(({ href, label, icon: Icon }) => {
+        {ITEMS.filter((item) => canSeePath(role, item.href)).map(({ href, label, icon: Icon }) => {
           const active = pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
           return (
             <Link

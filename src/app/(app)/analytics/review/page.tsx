@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { scrubDeep, scrubProfitText, withoutProfitFigures } from '@/lib/analytics/redact';
 import { Heatmap, hrefWith, Pills, SectionTitle } from '@/components/analytics/blocks';
 import { MetricChart } from '@/components/analytics/charts';
 import { formatBucket, formatValue } from '@/components/analytics/format';
@@ -15,6 +16,7 @@ import { ViewFilters } from '../filters';
 export const metadata: Metadata = { title: 'Analytics · Business review' };
 
 const METRICS: AnalyticsMetric[] = ['revenue', 'profit', 'margin', 'orders'];
+const METRICS_WITHOUT_PROFIT = METRICS.filter((m) => m !== 'profit');
 const TONE = { positive: 'border-l-emerald-500', negative: 'border-l-red-500', neutral: 'border-l-slate-300' } as const;
 const PAGE = 31;
 
@@ -27,7 +29,8 @@ export default async function BusinessReviewPage({
   const params = await searchParams;
   const view = await analyticsView(params);
   const { snapshot, period, data } = view;
-  const metric = METRICS.includes(params.metric as AnalyticsMetric) ? (params.metric as AnalyticsMetric) : 'revenue';
+  const metrics = view.showProfit ? METRICS : METRICS_WITHOUT_PROFIT;
+  const metric = metrics.includes(params.metric as AnalyticsMetric) ? (params.metric as AnalyticsMetric) : 'revenue';
   const heat = params.heat === 'product' || params.heat === 'category' ? params.heat : 'brand';
   const current = { ...view.params, metric: params.metric, heat: params.heat };
   const link = (next: Record<string, string | undefined>) => hrefWith('/analytics/review', current, next);
@@ -43,10 +46,13 @@ export default async function BusinessReviewPage({
     );
   }
 
-  const review = buildBusinessReview(snapshot, data.coverage);
+  const built = buildBusinessReview(view.fullSnapshot, data.coverage, view.showProfit);
+  const review = view.showProfit
+    ? built
+    : { ...built, narrative: built.narrative.map((p) => scrubProfitText(p)).filter(Boolean), insights: withoutProfitFigures(built.insights.map((i) => scrubDeep(i))) };
   const series = buildAnalyticsSeries({ allOrders: data.orders, period, metric });
   const definition = METRIC_DEFINITIONS[metric];
-  const daily = buildSeries(snapshot.orders, 'day').reverse();
+  const daily = buildSeries(view.fullSnapshot.orders, 'day').reverse();
   const page = Math.max(1, Number(params.page) || 1);
   const pages = Math.max(1, Math.ceil(daily.length / PAGE));
   const heatmap = buildHeatmap(data.orders, heat, 'revenue');
@@ -100,7 +106,7 @@ export default async function BusinessReviewPage({
           actions={
             <Pills
               label="Metric"
-              options={METRICS.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))}
+              options={metrics.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))}
               active={metric}
               href={(v) => link({ metric: v })}
             />
@@ -159,7 +165,7 @@ export default async function BusinessReviewPage({
                 <th className={cn(th, 'text-right')}>Orders</th>
                 <th className={cn(th, 'text-right')}>Units</th>
                 <th className={cn(th, 'text-right')}>Revenue</th>
-                <th className={cn(th, 'text-right')}>Profit</th>
+                {view.showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
                 <th className={cn(th, 'text-right')}>Margin</th>
               </tr>
             </thead>
@@ -170,7 +176,7 @@ export default async function BusinessReviewPage({
                   <td className={cn(td, 'text-right tabular-nums')}>{d.orders}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{d.units}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{formatValue(d.revenuePLN, 'pln')}</td>
-                  <td className={cn(td, 'text-right tabular-nums', d.marginPLN < 0 && 'text-red-700')}>{formatValue(d.marginPLN, 'pln')}</td>
+                  {view.showProfit && <td className={cn(td, 'text-right tabular-nums', d.marginPLN < 0 && 'text-red-700')}>{formatValue(d.marginPLN, 'pln')}</td>}
                   <td className={cn(td, 'text-right tabular-nums')}>{d.orders ? formatValue(d.marginPct, 'percent') : '—'}</td>
                 </tr>
               ))}

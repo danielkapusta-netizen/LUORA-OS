@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { Role } from '@/lib/permissions';
 
 describe('tasks (D1)', { timeout: 60_000 }, () => {
   const persistTo = mkdtempSync(path.join(tmpdir(), 'luora-tasks-'));
@@ -15,9 +16,9 @@ describe('tasks (D1)', { timeout: 60_000 }, () => {
     tasks: typeof import('@/server/services/tasks');
     dates: typeof import('@/lib/tasks/dates');
   };
-  let admin: { id: string; role: 'admin' | 'staff' };
-  let ola: { id: string; role: 'admin' | 'staff' };
-  let marek: { id: string; role: 'admin' | 'staff' };
+  let admin: { id: string; role: Role };
+  let ola: { id: string; role: Role };
+  let marek: { id: string; role: Role };
 
   beforeAll(async () => {
     process.env.INTEGRATIONS_MODE = 'mock';

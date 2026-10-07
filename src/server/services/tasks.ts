@@ -17,6 +17,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from '../../lib/tasks/model';
+import type { Role } from '../../lib/permissions';
 import { chunk, getDb, insertStatements, type Db } from '../db/client';
 import { customers, orders, projects, taskAssignees, taskComments, tasks, users, type Project, type Task } from '../db/schema';
 
@@ -28,7 +29,7 @@ const DEFAULT_LIMIT = 400;
 
 export interface Actor {
   id: string;
-  role: 'admin' | 'staff';
+  role: Role;
 }
 
 export interface Person {

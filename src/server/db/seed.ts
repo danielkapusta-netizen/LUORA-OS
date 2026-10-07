@@ -1,6 +1,7 @@
 // Creates the first admin user and default package presets. In mock mode it also
 // adds demo marketplace and carrier accounts plus the default shipping rules.
 import { eq, inArray } from 'drizzle-orm';
+import type { Role } from '../../lib/permissions';
 import { hashPassword } from '../crypto';
 import { isMockMode } from '../env';
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
@@ -69,13 +70,13 @@ export async function seed(admin: { email?: string; password?: string } = {}): P
     await setProductCost(p.id, { unitCost: Math.round(price * 0.32 * 100) / 100 }, null, 'manual');
   }
   // Two colleagues, so tasks can be shared out in the demo (they share the admin's password).
-  const colleague = async (name: string, mail: string) => {
+  const colleague = async (name: string, mail: string, role: Role) => {
     const address = `${mail}@${DEMO_USER_DOMAIN}`;
     const [found] = await db.select({ id: users.id }).from(users).where(eq(users.email, address));
     if (found) return found.id;
-    const [row] = await db.insert(users).values({ email: address, name, role: 'staff', passwordHash: await hashPassword(password) }).returning({ id: users.id });
+    const [row] = await db.insert(users).values({ email: address, name, role, passwordHash: await hashPassword(password) }).returning({ id: users.id });
     return row.id;
   };
-  await seedDemoTasks({ admin: adminUser.id, ola: await colleague('Ola Nowak', 'ola'), marek: await colleague('Marek Zieliński', 'marek') });
+  await seedDemoTasks({ admin: adminUser.id, ola: await colleague('Ola Nowak', 'ola', 'logistics'), marek: await colleague('Marek Zieliński', 'marek', 'marketing') });
   console.log('Created demo accounts, shipping rules and tasks (mock mode)');
 }

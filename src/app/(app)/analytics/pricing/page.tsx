@@ -54,7 +54,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
           ['Portfolio margin', formatValue(s.avgMarginPct, 'percent'), 'last 30 days'],
-          ['Profit on the table', formatValue(s.onTheTablePLN, 'pln'), 'a month, from recommended prices'],
+          ...(view.showProfit ? [['Profit on the table', formatValue(s.onTheTablePLN, 'pln'), 'a month, from recommended prices']] : []),
           ['Healthy', String(s.aboveFifteen), 'margin above 15%'],
           ['Thin', String(s.tenToFifteen), 'margin 10–15%'],
           ['Unhealthy', String(s.belowTenPct), 'margin below 10%'],
@@ -78,9 +78,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                 <th className={th}>{dimension === 'brand' ? 'Brand' : 'Product'}</th>
                 <th className={cn(th, 'text-right')}>Current price</th>
                 <th className={cn(th, 'text-right')}>Average price</th>
-                <th className={cn(th, 'text-right')}>Profit / order</th>
+                {view.showProfit && <th className={cn(th, 'text-right')}>Profit / order</th>}
                 <th className={cn(th, 'text-right')}>Margin</th>
-                <th className={cn(th, 'text-right')}>Monthly profit</th>
+                {view.showProfit && <th className={cn(th, 'text-right')}>Monthly profit</th>}
                 <th className={cn(th, 'text-right')}>Monthly revenue</th>
               </tr>
             </thead>
@@ -111,15 +111,15 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                     </td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.currentPricePLN, 'pln')}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.averagePricePLN, 'pln')}</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.averageProfitPLN, 'pln')}</td>
+                    {view.showProfit && <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.averageProfitPLN, 'pln')}</td>}
                     <td className={cn(td, 'text-right tabular-nums', r.averageMarginPct < 0 && 'text-red-700')}>{formatValue(r.averageMarginPct, 'percent')}</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.monthlyProfitPLN, 'pln')}</td>
+                    {view.showProfit && <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.monthlyProfitPLN, 'pln')}</td>}
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.monthlyRevenuePLN, 'pln')}</td>
                   </tr>,
                   open && (
                     <tr key={`${r.key}-detail`} className="bg-slate-50">
                       <td colSpan={8} className="px-4 pb-5">
-                        <PricingDetail row={r} />
+                        <PricingDetail row={r} showProfit={view.showProfit} />
                       </td>
                     </tr>
                   ),
@@ -168,7 +168,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   );
 }
 
-function PricingDetail({ row }: { row: PricingRow }) {
+function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit: boolean }) {
   const waterfall = buildWaterfall(row);
   const rec = row.recommendation;
   const prices = buildPriceHistory(row.allLines).map((p) => ({ date: p.date.toISOString().slice(0, 10), price: Math.round(p.unitPricePLN * 100) / 100 }));
@@ -237,7 +237,7 @@ function PricingDetail({ row }: { row: PricingRow }) {
             {rec.recommendedPricePLN !== null && (
               <p>
                 {formatValue(rec.recommendedPricePLN, 'pln')} → margin {formatValue(rec.expectedMarginPct, 'percent')}
-                {rec.expectedMonthlyUpliftPLN !== null && <>, about +{formatValue(rec.expectedMonthlyUpliftPLN, 'pln')} a month</>}
+                {showProfit && rec.expectedMonthlyUpliftPLN !== null && <>, about +{formatValue(rec.expectedMonthlyUpliftPLN, 'pln')} a month</>}
               </p>
             )}
             <ul className="list-disc space-y-0.5 pl-5 text-xs text-slate-600">
@@ -250,7 +250,7 @@ function PricingDetail({ row }: { row: PricingRow }) {
         </Card>
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {waterfall && (
+        {waterfall && showProfit && (
           <Card>
             <CardBody>
               <p className="mb-2 text-sm font-semibold">Where one unit&apos;s price goes</p>
@@ -275,6 +275,7 @@ function PricingDetail({ row }: { row: PricingRow }) {
                 unitCost={row.unitCostPLN}
                 monthlyUnits={row.monthlyUnits}
                 averageMarginPct={row.averageMarginPct}
+                showProfit={showProfit}
               />
             </CardBody>
           </Card>

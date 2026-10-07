@@ -15,7 +15,7 @@ const updatedAt = () =>
     .$defaultFn(() => new Date())
     .$onUpdate(() => new Date());
 
-export const userRoleValues = ['admin', 'staff'] as const;
+export const userRoleValues = ['admin', 'logistics', 'marketing'] as const;
 export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
 export const carrierTypeValues = ['inpost', 'allegro_shipping'] as const;
 export const orderStatusValues = [
@@ -44,7 +44,8 @@ export const users = sqliteTable('users', {
   email: text('email').notNull().unique(),
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
-  role: text('role', { enum: userRoleValues }).notNull().default('staff'),
+  // The database default stays 'staff' (changing it would rebuild the users table); every insert sets the role.
+  role: text('role', { enum: userRoleValues }).notNull().default(sql`'staff'`),
   createdAt: createdAt(),
 });
 

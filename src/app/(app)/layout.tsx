@@ -9,7 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const taskBadge = await myTaskBadge(user.id).catch(() => 0);
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <Nav userName={user.name} mock={isMockMode()} taskBadge={taskBadge} logoutAction={logoutAction} />
+      <Nav userName={user.name} role={user.role} mock={isMockMode()} taskBadge={taskBadge} logoutAction={logoutAction} />
       <main className="min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
     </div>
   );

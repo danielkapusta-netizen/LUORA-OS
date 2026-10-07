@@ -7,7 +7,9 @@ import { formatValue } from '@/components/analytics/format';
 import { buttonClass, Card, CardBody, EmptyState, PageHeader, td, th } from '@/components/ui';
 import { buildExecutiveBrief } from '@/lib/analytics/brief';
 import { formatDate } from '@/lib/analytics/format';
+import { scrubDeep, withoutProfitFigures } from '@/lib/analytics/redact';
 import { buildExecutiveQuestions } from '@/lib/analytics/questions';
+import { can } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
@@ -17,6 +19,7 @@ import { listTasks } from '@/server/services/tasks';
 import { dayLabel, today as warsawToday } from '@/lib/tasks/dates';
 import { dueState } from '@/lib/tasks/model';
 import { overdueCustomers, repeatStats } from '@/lib/crm/segments';
+import { LogisticsDashboard } from './logistics-dashboard';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -29,16 +32,17 @@ const OPEN = [
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<ViewParams & { rank?: string; pulse?: string }> }) {
   const user = await requireUser();
+  if (!can(user.role, 'fullDashboard')) return <LogisticsDashboard user={user} />;
   const params = await searchParams;
   const [view, counts, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), listTasks({ assignee: user.id, status: 'open', limit: 40 }), allCustomers(), orderDatesByCustomer()]);
   const todayKey = warsawToday();
   const repeat = repeatStats(customerList, dates);
   const byCustomer = new Map(customerList.map((c) => [c.id, c]));
   const quietRegulars = overdueCustomers(dates).filter((o) => byCustomer.get(o.id));
-  const { snapshot, period, data } = view;
-  const brief = buildExecutiveBrief(snapshot, user.name.split(' ')[0]);
-  const questions = buildExecutiveQuestions(snapshot);
-  const rank = params.rank === 'profit' ? 'profit' : 'revenue';
+  const { snapshot, period, data, showProfit } = view;
+  const brief = buildExecutiveBrief(snapshot, user.name.split(' ')[0], new Date(), showProfit);
+  const questions = showProfit ? buildExecutiveQuestions(snapshot) : withoutProfitFigures(buildExecutiveQuestions(view.fullSnapshot).map((q) => scrubDeep(q)));
+  const rank = showProfit && params.rank === 'profit' ? 'profit' : 'revenue';
   const pulse = params.pulse === 'orders' ? 'orders' : 'money';
   const current = { ...view.params, rank: params.rank, pulse: params.pulse };
   const link = (next: Record<string, string | undefined>) => hrefWith('/', current, next);
@@ -141,7 +145,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <section>
             <SectionTitle
               title="Summary"
-              description={`${snapshot.totals.orders} orders from ${snapshot.totals.customers} customers. Profit is after VAT, fees, product cost, shipping and refunds.`}
+              description={`${snapshot.totals.orders} orders from ${snapshot.totals.customers} customers. ${showProfit ? 'Profit is after VAT, fees, product cost, shipping and refunds.' : 'Margin is after VAT, fees, product cost, shipping and refunds.'}`}
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {snapshot.kpis.map((kpi) => (
@@ -155,15 +159,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               title="Top products"
               actions={
                 <div className="flex items-center gap-2">
-                  <Pills
-                    label="Rank products by"
-                    options={[
-                      { value: 'revenue', label: 'Revenue' },
-                      { value: 'profit', label: 'Profit' },
-                    ]}
-                    active={rank}
-                    href={(v) => link({ rank: v })}
-                  />
+                  {showProfit && (
+                    <Pills
+                      label="Rank products by"
+                      options={[
+                        { value: 'revenue', label: 'Revenue' },
+                        { value: 'profit', label: 'Profit' },
+                      ]}
+                      active={rank}
+                      href={(v) => link({ rank: v })}
+                    />
+                  )}
                   <Link href={hrefWith('/analytics/products', view.params, {})} className={buttonClass('secondary', 'sm')}>
                     All products
                   </Link>
@@ -177,9 +183,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     <th className={th}>Product</th>
                     <th className={cn(th, 'text-right')}>Units</th>
                     <th className={cn(th, 'text-right')}>Revenue</th>
-                    <th className={cn(th, 'text-right')}>Profit</th>
+                    {showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
                     <th className={cn(th, 'text-right')}>Margin</th>
-                    <th className={cn(th, 'text-right')}>Share of profit</th>
+                    {showProfit && <th className={cn(th, 'text-right')}>Share of profit</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -196,9 +202,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                       </td>
                       <td className={cn(td, 'text-right tabular-nums')}>{p.units}</td>
                       <td className={cn(td, 'text-right tabular-nums')}>{formatValue(p.revenuePLN, 'pln')}</td>
-                      <td className={cn(td, 'text-right tabular-nums', p.marginPLN < 0 && 'text-red-700')}>{formatValue(p.marginPLN, 'pln')}</td>
+                      {showProfit && <td className={cn(td, 'text-right tabular-nums', p.marginPLN < 0 && 'text-red-700')}>{formatValue(p.marginPLN, 'pln')}</td>}
                       <td className={cn(td, 'text-right tabular-nums')}>{formatValue(p.marginPct, 'percent')}</td>
-                      <td className={cn(td, 'text-right tabular-nums')}>{Math.round(p.marginShare * 100)}%</td>
+                      {showProfit && <td className={cn(td, 'text-right tabular-nums')}>{Math.round(p.marginShare * 100)}%</td>}
                     </tr>
                   ))}
                 </tbody>
@@ -231,13 +237,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <div className="space-y-3">
                 <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <ShieldAlert className="size-4 text-red-600" aria-hidden /> Risks to your profit
+                  <ShieldAlert className="size-4 text-red-600" aria-hidden /> {showProfit ? 'Risks to your profit' : 'Risks to your margin'}
                 </h3>
                 {risks.length ? (
                   risks.map((i) => <InsightCard key={i.id} insight={i} productHref={productHref} />)
                 ) : (
                   <Card>
-                    <EmptyState title="No profit risks detected">
+                    <EmptyState title={showProfit ? 'No profit risks detected' : 'No margin risks detected'}>
                       <CheckCircle2 className="mx-auto size-5 text-emerald-600" aria-hidden />
                     </EmptyState>
                   </Card>
@@ -266,7 +272,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <Pills
                   label="Pulse metric"
                   options={[
-                    { value: 'money', label: 'Revenue & profit' },
+                    { value: 'money', label: showProfit ? 'Revenue & profit' : 'Revenue' },
                     { value: 'orders', label: 'Orders' },
                   ]}
                   active={pulse}
@@ -279,6 +285,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <PulseChart
                   metric={pulse}
                   granularity={period.granularity}
+                  showProfit={showProfit}
                   data={snapshot.series.map((p) => ({ date: p.date, revenue: Math.round(p.revenuePLN), profit: Math.round(p.marginPLN), orders: p.orders }))}
                 />
               </CardBody>

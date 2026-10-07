@@ -35,7 +35,8 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
   const page = Math.max(1, Number(params.page) || 1);
   const pages = Math.max(1, Math.ceil(orders.length / PAGE));
   const shown = orders.slice((page - 1) * PAGE, page * PAGE);
-  const openLines = params.open ? await orderProfit(params.open) : [];
+  const showProfit = view.showProfit;
+  const openLines = params.open && showProfit ? await orderProfit(params.open) : [];
   const revenue = orders.reduce((s, o) => s + o.revenuePLN, 0);
   const profit = orders.reduce((s, o) => s + o.marginPLN, 0);
 
@@ -59,7 +60,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
           <Input name="q" defaultValue={params.q ?? ''} placeholder="Order, customer or product" className="h-8 w-64" aria-label="Search orders" />
         </form>
         <span className="text-sm text-slate-600">
-          {orders.length} orders · {formatValue(revenue, 'pln')} revenue · {formatValue(profit, 'pln')} profit
+          {orders.length} orders · {formatValue(revenue, 'pln')} revenue{showProfit && <> · {formatValue(profit, 'pln')} profit</>}
         </span>
       </div>
       <Card className="overflow-x-auto">
@@ -75,7 +76,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                 <th className={th}>Customer</th>
                 <th className={cn(th, 'text-right')}>Revenue</th>
                 <th className={cn(th, 'text-right')}>Fees</th>
-                <th className={cn(th, 'text-right')}>Profit</th>
+                {showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
                 <th className={cn(th, 'text-right')}>Margin</th>
               </tr>
             </thead>
@@ -109,7 +110,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                     <td className={td}>{o.customerName}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.revenuePLN, 'pln')}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.commissionPLN, 'pln')}</td>
-                    <td className={cn(td, 'text-right tabular-nums', o.marginPLN < 0 && 'text-red-700')}>{formatValue(o.marginPLN, 'pln')}</td>
+                    {showProfit && <td className={cn(td, 'text-right tabular-nums', o.marginPLN < 0 && 'text-red-700')}>{formatValue(o.marginPLN, 'pln')}</td>}
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.marginPct, 'percent')}</td>
                   </tr>,
                   open && (
@@ -125,12 +126,12 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                                     {!i.costKnown && <Badge tone="amber" className="ml-1.5">no cost</Badge>}
                                   </td>
                                   <td className="py-1.5 text-right tabular-nums">{formatValue(i.revenuePLN, 'pln')}</td>
-                                  <td className={cn('py-1.5 text-right tabular-nums', i.marginPLN < 0 && 'text-red-700')}>{formatValue(i.marginPLN, 'pln')}</td>
+                                  {showProfit ? <td className={cn('py-1.5 text-right tabular-nums', i.marginPLN < 0 && 'text-red-700')}>{formatValue(i.marginPLN, 'pln')}</td> : <td className="py-1.5 text-right tabular-nums">{formatValue(i.marginPct, 'percent')}</td>}
                                 </tr>
                               ))}
                             </tbody>
                           </table>
-                          <ProfitBreakdown lines={openLines} />
+                          {showProfit && <ProfitBreakdown lines={openLines} />}
                         </div>
                       </td>
                     </tr>

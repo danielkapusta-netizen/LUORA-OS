@@ -31,7 +31,7 @@ export default async function CalculatorPage() {
         on each marketplace.
       </p>
       <Calculator
-        rates={channelCommissionRates(view.snapshot.orders)}
+        rates={channelCommissionRates(view.fullSnapshot.orders)}
         fx={fx}
         products={view.snapshot.products}
         saved={saved.map((s) => s.data as unknown as Candidate)}

@@ -10,6 +10,7 @@ import { productMargins } from '@/server/analytics/dataset';
 import { Badge, buttonClass, Card, EmptyState, Input, PageHeader, Select } from '@/components/ui';
 import { hasRealSku } from '@/lib/sku';
 import { cn, formatDate, timeAgo } from '@/lib/utils';
+import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import type { Product } from '@/server/db/schema';
 import { desiredQuantity, listProductsWithListings, marketplaceQuantity, matchingGroups, pendingPushCounts, recentStockLog } from '@/server/services/inventory';
@@ -188,7 +189,7 @@ function Stat({ label, children, className }: { label: string; children: React.R
 }
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string; days?: string; page?: string }> }) {
-  await requireUser();
+  const viewer = await requireUser();
   const params = await searchParams;
   const days = PERIODS.find((d) => String(d) === params.days) ?? 30;
   const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'sales';
@@ -200,7 +201,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     productStats(days),
     pendingPushCounts(),
   ]);
-  const margins = await productMargins(days);
+  // Margins only for roles that may see them; marketing gets the percentage, never the profit amount.
+  const margins = can(viewer.role, 'margin') ? await productMargins(days) : new Map<string, { units: number; gross: number; profit: number }>();
+  const showProfit = can(viewer.role, 'profit');
   const perf = (id: string): ProductPerformance => stats.byProduct.get(id) ?? emptyPerformance();
   const byProduct = new Map<string, ListingRow[]>();
   for (const l of listings) byProduct.set(l.productId!, [...(byProduct.get(l.productId!) ?? []), l]);
@@ -455,7 +458,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                             <span className={cn('font-medium tabular-nums', margins.get(p.id)!.profit < 0 ? 'text-red-700' : 'text-slate-800')}>
                               {((margins.get(p.id)!.profit / margins.get(p.id)!.gross) * 100).toFixed(1)}%
                             </span>{' '}
-                            · {pln(margins.get(p.id)!.profit)} profit
+                            {showProfit && <>· {pln(margins.get(p.id)!.profit)} profit</>}
                           </p>
                         )}
                       </td>

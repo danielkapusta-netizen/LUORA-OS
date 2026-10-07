@@ -1,6 +1,7 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getCfEnv } from '../cf';
 import { encryptJson, hashPassword } from '../crypto';
+import { isRole, type Role } from '../../lib/permissions';
 import { chunk, getDb } from '../db/client';
 import {
   carrierAccounts,
@@ -305,15 +306,30 @@ export async function listUsers() {
     .orderBy(asc(users.createdAt));
 }
 
-export async function createUser(input: { email: string; name: string; password: string; role: 'admin' | 'staff' }): Promise<void> {
+export async function createUser(input: { email: string; name: string; password: string; role: Role }): Promise<void> {
   if (input.password.length < 8) throw new Error('Password must have at least 8 characters');
   await getDb()
     .insert(users)
     .values({ email: input.email.trim().toLowerCase(), name: input.name.trim(), role: input.role, passwordHash: await hashPassword(input.password) });
 }
 
+async function adminCount(): Promise<number> {
+  const [row] = await getDb().select({ n: sql<number>`count(*)` }).from(users).where(eq(users.role, 'admin'));
+  return row?.n ?? 0;
+}
+
 export async function deleteUser(id: string): Promise<void> {
+  const [target] = await getDb().select({ role: users.role }).from(users).where(eq(users.id, id));
+  if (target?.role === 'admin' && (await adminCount()) <= 1) throw new Error('There must be at least one admin');
   await getDb().delete(users).where(eq(users.id, id));
+}
+
+export async function setUserRole(id: string, role: Role): Promise<void> {
+  if (!isRole(role)) throw new Error('Unknown role');
+  const [target] = await getDb().select({ role: users.role }).from(users).where(eq(users.id, id));
+  if (!target) throw new Error('User not found');
+  if (target.role === 'admin' && role !== 'admin' && (await adminCount()) <= 1) throw new Error('There must be at least one admin');
+  await getDb().update(users).set({ role }).where(eq(users.id, id));
 }
 
 export async function resetPassword(id: string, password: string): Promise<void> {

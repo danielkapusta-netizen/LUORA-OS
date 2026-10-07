@@ -130,6 +130,20 @@ What the team has to do, who is on it and when (`/tasks`, in the sidebar with a 
 
 Dates are plain Warsaw days (`YYYY-MM-DD`) and times (`HH:MM`), so the calendar needs no time-zone arithmetic. The code is in `services/tasks.ts` (database), `src/lib/tasks/` (dates, colours, grouping and figures, with no database) and `src/components/tasks/`.
 
+## Roles and access
+
+Every user has one role (Settings → Users; admins change it with the Role selector, and the last admin can't be demoted or deleted):
+
+| Role | Sees | Doesn't see |
+| --- | --- | --- |
+| **Admin** | everything | |
+| **Logistics** | Orders, Shipments, Inventory, Customers, Tasks, Accounting. The Dashboard shows only the orders still to send, the parcels per courier and your tasks | Analytics, Settings, and profit or margin anywhere (order page, inventory, customers) |
+| **Marketing** | every page except Settings, with margins in % | how much profit was made: profit amounts, columns, charts, and the sentences and findings that quote them |
+
+The rules live in one table, `src/lib/permissions.ts`, used by the sidebar, the page guards (`requireCapability`) and the data loaders. For marketing the profit figures are removed on the server (`src/server/analytics/view.ts`, `src/lib/analytics/redact.ts`), not just hidden, so they never reach the browser. Courier names come from the delivery method the buyer chose (`src/lib/couriers.ts`).
+
+Migration `0012_roles` turns the old `staff` users into `logistics`.
+
 ## How it works
 
 ```

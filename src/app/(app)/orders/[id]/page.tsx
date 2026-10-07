@@ -13,6 +13,7 @@ import { DoneToggle } from '@/components/tasks/done-toggle';
 import { NewTaskDialog } from '@/components/tasks/task-dialog';
 import { today as warsawToday } from '@/lib/tasks/dates';
 import { CARRIER_LABELS, cn, formatDate, formatMoney, SERVICE_LABELS } from '@/lib/utils';
+import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import { getOrderDetail } from '@/server/services/orders';
 import { orderProfit } from '@/server/analytics/dataset';
@@ -56,8 +57,11 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const detail = await getOrderDetail(id);
   if (!detail) notFound();
   const { order, account, items, events, shipments } = detail;
-  const [users, profitLines, orderTasks, projectCards, tagList] = await Promise.all([listUsers(), orderProfit(order.id), listTasks({ orderId: id }), listProjects(), tagCounts({ limit: 20 })]);
+  const [users, allProfitLines, orderTasks, projectCards, tagList] = await Promise.all([listUsers(), orderProfit(order.id), listTasks({ orderId: id }), listProjects(), tagCounts({ limit: 20 })]);
   const todayKey = warsawToday();
+  const profitLines = can(user.role, 'profit') ? allProfitLines : [];
+  const orderGross = allProfitLines.reduce((sum, l) => sum + Number(l.gross ?? 0), 0);
+  const orderMargin = orderGross > 0 ? (allProfitLines.reduce((sum, l) => sum + Number(l.profit ?? 0), 0) / orderGross) * 100 : null;
 
   const active = shipments.find((s) => s.state === 'pending' || s.state === 'created');
   const canShip = !active && order.readyToShip && !['cancelled', 'shipped', 'delivered'].includes(order.status);
@@ -300,12 +304,24 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <div className="space-y-5">
-          <Card>
-            <CardHeader title="Profit" description="After VAT, fees, product cost, shipping and refunds, in PLN." />
-            <CardBody>
-              <ProfitBreakdown lines={profitLines} />
-            </CardBody>
-          </Card>
+          {can(user.role, 'profit') ? (
+            <Card>
+              <CardHeader title="Profit" description="After VAT, fees, product cost, shipping and refunds, in PLN." />
+              <CardBody>
+                <ProfitBreakdown lines={profitLines} />
+              </CardBody>
+            </Card>
+          ) : (
+            can(user.role, 'margin') &&
+            orderMargin !== null && (
+              <Card>
+                <CardHeader title="Margin" description="After VAT, fees, product cost, shipping and refunds." />
+                <CardBody>
+                  <p className={cn('text-2xl font-semibold tabular-nums', orderMargin < 0 ? 'text-red-700' : 'text-slate-900')}>{orderMargin.toFixed(1)}%</p>
+                </CardBody>
+              </Card>
+            )
+          )}
           <Card>
             <CardHeader title="Workflow" />
             <CardBody className="space-y-4">

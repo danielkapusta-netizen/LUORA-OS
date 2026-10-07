@@ -12,12 +12,15 @@ export function PriceSimulator({
   unitCost,
   monthlyUnits,
   averageMarginPct,
+  showProfit = true,
 }: {
   averagePrice: number;
   commissionRate: number;
   unitCost: number;
   monthlyUnits: number;
   averageMarginPct: number;
+  /** Off for people who may see margins but not how much profit is made. */
+  showProfit?: boolean;
 }) {
   const [price, setPrice] = useState(Math.round(averagePrice * 100) / 100);
   const valid = price > 0;
@@ -48,7 +51,7 @@ export function PriceSimulator({
           />
         </div>
       </label>
-      <dl className="grid grid-cols-3 gap-3 text-sm">
+      <dl className={cn('grid gap-3 text-sm', showProfit ? 'grid-cols-3' : 'grid-cols-1')}>
         <div>
           <dt className="text-xs text-slate-500">Margin</dt>
           <dd className={cn('font-semibold tabular-nums', margin < 0 && 'text-red-700')}>
@@ -59,10 +62,13 @@ export function PriceSimulator({
             </span>
           </dd>
         </div>
+        {showProfit && (
         <div>
           <dt className="text-xs text-slate-500">Profit per unit</dt>
           <dd className="font-semibold tabular-nums">{formatValue(profit, 'pln')}</dd>
         </div>
+        )}
+        {showProfit && (
         <div>
           <dt className="text-xs text-slate-500">Monthly change</dt>
           <dd className={cn('font-semibold tabular-nums', monthlyDelta < 0 ? 'text-red-700' : 'text-emerald-700')}>
@@ -70,6 +76,7 @@ export function PriceSimulator({
             {formatValue(monthlyDelta, 'pln')}
           </dd>
         </div>
+        )}
       </dl>
       <p className="text-xs text-slate-500">
         Assumes {monthlyUnits} units a month, {(commissionRate * 100).toFixed(1)}% fees and a {formatValue(unitCost, 'pln')} landed cost; shipping and packaging are left out.

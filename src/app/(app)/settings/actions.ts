@@ -1,5 +1,6 @@
 'use server';
 
+import { isRole, type Role } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { attempt, type ActionResult } from '@/lib/action-result';
@@ -11,6 +12,7 @@ import { startHistoryImport, stopHistoryImport } from '@/server/services/history
 import {
   createDefaultRules,
   createUser,
+  setUserRole,
   deleteCarrierAccount,
   deleteMarketplaceAccount,
   deletePreset,
@@ -315,9 +317,20 @@ export async function deletePresetAction(id: string): Promise<ActionResult> {
 export async function createUserAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   return attempt(async () => {
-    await createUser({ email: text(fd, 'email'), name: text(fd, 'name'), password: String(fd.get('password') ?? ''), role: text(fd, 'role') === 'admin' ? 'admin' : 'staff' });
+    await createUser({ email: text(fd, 'email'), name: text(fd, 'name'), password: String(fd.get('password') ?? ''), role: isRole(text(fd, 'role')) ? (text(fd, 'role') as Role) : 'logistics' });
     revalidatePath('/settings/users');
     return 'User created';
+  });
+}
+
+export async function setRoleAction(id: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    const role = text(fd, 'role');
+    if (!isRole(role)) throw new Error('Unknown role');
+    await setUserRole(id, role);
+    revalidatePath('/settings/users');
+    return 'Role changed';
   });
 }
 

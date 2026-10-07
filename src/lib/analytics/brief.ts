@@ -47,6 +47,8 @@ export function buildExecutiveBrief(
   snapshot: Snapshot,
   ownerName?: string,
   now: Date = new Date(),
+  /** Off for people who may see margins but not how much profit was made. */
+  showProfit = true,
 ): ExecutiveBrief {
   const { totals, previousTotals, period, products, channels, insights } = snapshot
 
@@ -97,10 +99,12 @@ export function buildExecutiveBrief(
         ? 'margin was unchanged'
         : `margin ${marginShift > 0 ? 'improved' : 'slipped'} ${Math.abs(marginShift).toFixed(1)} points to ${formatPercent(totals.marginPct)}`
 
-    body.push(`${revenuePhrase}, ${profitPhrase}, and ${marginPhrase}.`)
+    body.push(showProfit ? `${revenuePhrase}, ${profitPhrase}, and ${marginPhrase}.` : `${revenuePhrase}, and ${marginPhrase}.`)
   } else {
     body.push(
-      `${formatPLN(totals.revenuePLN)} of revenue produced ${formatPLN(totals.marginPLN)} of profit, a ${formatPercent(totals.marginPct)} margin.`,
+      showProfit
+        ? `${formatPLN(totals.revenuePLN)} of revenue produced ${formatPLN(totals.marginPLN)} of profit, a ${formatPercent(totals.marginPct)} margin.`
+        : `${formatPLN(totals.revenuePLN)} of revenue came in at a ${formatPercent(totals.marginPct)} margin.`,
     )
   }
 
@@ -108,7 +112,9 @@ export function buildExecutiveBrief(
   const leader = products[0]
   if (leader && products.length > 1) {
     body.push(
-      `${shortLabel(leader.label, 44)} led the period with ${formatPLN(leader.revenuePLN)} of revenue and ${formatPercent(leader.marginShare * 100, 0)} of all profit.`,
+      showProfit
+        ? `${shortLabel(leader.label, 44)} led the period with ${formatPLN(leader.revenuePLN)} of revenue and ${formatPercent(leader.marginShare * 100, 0)} of all profit.`
+        : `${shortLabel(leader.label, 44)} led the period with ${formatPLN(leader.revenuePLN)} of revenue.`,
     )
   }
 

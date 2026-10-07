@@ -1,6 +1,7 @@
 import { and, eq, gt } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { can, type Capability } from '@/lib/permissions';
 import { randomToken, sha256, verifyPassword } from './crypto';
 import { getDb } from './db/client';
 import { sessions, users, type User } from './db/schema';
@@ -56,5 +57,19 @@ export async function requireUser(): Promise<SessionUser> {
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
   if (user.role !== 'admin') throw new Error('Only admins can do this');
+  return user;
+}
+
+/** Page guard: sends people who may not see an area back to the Dashboard. */
+export async function requireCapability(capability: Capability): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!can(user.role, capability)) redirect('/');
+  return user;
+}
+
+/** Server-action guard: throws, since a redirect makes no sense mid-action. */
+export async function assertCapability(capability: Capability): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!can(user.role, capability)) throw new Error('Your role does not allow this');
   return user;
 }

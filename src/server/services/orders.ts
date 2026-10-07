@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { courierOf, type Courier } from '../../lib/couriers';
 import { chunk, getDb, insertStatements, type Tx } from '../db/client';
 import {
   marketplaceAccounts,
@@ -573,6 +574,23 @@ export async function statusCounts(): Promise<Record<string, number>> {
     .from(orders)
     .groupBy(orders.status);
   return Object.fromEntries(rows.map((r) => [r.status, r.count]));
+}
+
+/** Orders still to be packed and sent (not on hold), grouped by the courier the buyer chose. Busiest first. */
+export async function ordersToShipByCourier(): Promise<{ courier: Courier; count: number; labelled: number }[]> {
+  const rows = await getDb()
+    .select({ method: orders.deliveryMethodName, status: orders.status, carrier: sql<string | null>`(select s.carrier from shipments s where s.order_id = ${orders.id} and s.state != 'cancelled' order by s.created_at desc limit 1)` })
+    .from(orders)
+    .where(and(inArray(orders.status, ['new', 'processing', 'label_created']), eq(orders.historical, false)));
+  const byCourier = new Map<Courier, { count: number; labelled: number }>();
+  for (const r of rows) {
+    const courier = courierOf(r.method, r.carrier);
+    const entry = byCourier.get(courier) ?? { count: 0, labelled: 0 };
+    entry.count += 1;
+    if (r.status === 'label_created') entry.labelled += 1;
+    byCourier.set(courier, entry);
+  }
+  return [...byCourier].map(([courier, v]) => ({ courier, ...v })).sort((a, b) => b.count - a.count || a.courier.localeCompare(b.courier));
 }
 
 /** Items of many orders at once (e.g. for the Shipments pages), keyed by order id. */

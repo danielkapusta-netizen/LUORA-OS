@@ -8,6 +8,7 @@ import { Badge, Card, CardBody, CardHeader, Field, Input, Select, Textarea, td, 
 import { overdueCustomers, SEGMENTS, segmentCustomers } from '@/lib/crm/segments';
 import { shortDay } from '@/lib/tasks/dates';
 import { cn, formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
+import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import { allCustomers, loadCustomer } from '@/server/services/customers';
 import { listUsers } from '@/server/services/settings';
@@ -20,7 +21,8 @@ const IDENTITY_LABELS: Record<string, string> = { shopify: 'Shopify', allegro: '
 const DAY = 86_400_000;
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const viewer = await requireUser();
+  const showProfit = can(viewer.role, 'profit');
   const { id } = await params;
   const [detail, everyone, users] = await Promise.all([loadCustomer(id), allCustomers(), listUsers()]);
   if (!detail) notFound();
@@ -47,7 +49,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
           ['Lifetime revenue', formatValue(c.revenue, 'pln')],
-          ['Lifetime profit', formatValue(c.profit, 'pln')],
+          ...(showProfit ? [['Lifetime profit', formatValue(c.profit, 'pln')]] : []),
           ['Orders', String(c.ordersCount)],
           ['Average basket', c.ordersCount ? formatValue(c.revenue / c.ordersCount, 'pln') : '—'],
           ['Usually orders every', usualGap ? `${Math.round(usualGap)} days` : '—'],
@@ -73,7 +75,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                   <th className={th}>Status</th>
                   <th className={cn(th, 'text-right')}>Items</th>
                   <th className={cn(th, 'text-right')}>Paid</th>
-                  <th className={cn(th, 'text-right')}>Profit</th>
+                  {showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -94,7 +96,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     <td className={cn(td, 'text-right tabular-nums')}>
                       {o.totalAmount} {o.currency}
                     </td>
-                    <td className={cn(td, 'text-right tabular-nums', (o.profit ?? 0) < 0 && 'text-red-700')}>{o.profit === null ? '—' : formatValue(o.profit, 'pln')}</td>
+                    {showProfit && <td className={cn(td, 'text-right tabular-nums', (o.profit ?? 0) < 0 && 'text-red-700')}>{o.profit === null ? '—' : formatValue(o.profit, 'pln')}</td>}
                   </tr>
                 ))}
               </tbody>
