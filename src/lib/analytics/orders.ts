@@ -128,6 +128,8 @@ export function averageOrderValue(orders: readonly Order[]): number {
 const BRANDS = [
   'Dr. Jart+',
   'Dr.Jart+',
+  'Dr Jart+',
+  'NIDA',
   'CENTALLIAN24',
   'CENTELLIAN24',
   'Centellian24',
@@ -152,6 +154,8 @@ const BRANDS = [
 const BRAND_ALIASES: Record<string, string> = {
   'dr.jart+': 'Dr. Jart+',
   'dr. jart+': 'Dr. Jart+',
+  'dr jart+': 'Dr. Jart+',
+  nida: 'NIDA',
   centallian24: 'Centellian24',
   centellian24: 'Centellian24',
   'round lab': 'Round Lab',
@@ -166,7 +170,9 @@ const BRAND_ALIASES: Record<string, string> = {
 export function inferBrand(label: string): string {
   const haystack = label.toLowerCase()
   for (const brand of BRANDS) {
-    if (haystack.includes(brand.toLowerCase())) {
+    // A brand must start a word, so a short name such as NIDA is not found inside another word.
+    const at = haystack.indexOf(brand.toLowerCase())
+    if (at === 0 || (at > 0 && !/[a-z0-9]/.test(haystack[at - 1]))) {
       return BRAND_ALIASES[brand.toLowerCase()] ?? brand
     }
   }
