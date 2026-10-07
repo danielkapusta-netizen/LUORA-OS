@@ -130,6 +130,13 @@ What the team has to do, who is on it and when (`/tasks`, in the sidebar with a 
 
 Dates are plain Warsaw days (`YYYY-MM-DD`) and times (`HH:MM`), so the calendar needs no time-zone arithmetic. The code is in `services/tasks.ts` (database), `src/lib/tasks/` (dates, colours, grouping and figures, with no database) and `src/components/tasks/`.
 
+## Publishing products to Allegro and Empik
+
+Inventory → **Publish to Allegro / Empik** (admins) lists the Shopify products that have no offer in that account yet, and creates offers for the ones you tick (25 at a time). Only products the marketplace's catalogue already knows by EAN can be listed; others show "Not in the catalogue". Price = Shopify price + the account's markup % (Settings → Integrations → the account → "Offers created from Shopify"), stock = the master stock; once the offer exists the normal stock sync takes over.
+
+- **Allegro:** the Allegro app needs the permissions "Offers: read and write" and "Seller settings: read" (reconnect Allegro after enabling them). In the account settings press "Load choices from Allegro", then pick the shipping rates, return policy and implied warranty, and fill in where the goods are sent from. Offers are published at once unless "create as drafts" is ticked.
+- **Empik:** offers are sent with an OF01 import for the EAN; the offer state code defaults to 11 (new).
+
 ## Roles and access
 
 Every user has one role (Settings → Users; admins change it with the Role selector, and the last admin can't be demoted or deleted):

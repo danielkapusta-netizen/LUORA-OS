@@ -1,7 +1,8 @@
 import type { MarketplaceSettings } from '../../../db/schema';
+import { httpConfig } from '../../../http';
 import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
-import { invoiceFileName, type ExternalFee, type ExternalRefund, type FeeFeed, type MarketplaceAdapter, type SyncResult } from '../types';
-import { AllegroApiError, AllegroClient, type AllegroCredentials } from './client';
+import { invoiceFileName, type CatalogueMatch, type ExternalFee, type ExternalRefund, type FeeFeed, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
+import { AllegroApiError, AllegroClient, describeAllegroErrors, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
 
 interface OrderEvent {
@@ -58,7 +59,21 @@ const BILLING_PAGE = 100;
 /** Allegro's catalogue parameter "EAN (GTIN)". */
 const EAN_PARAMETER_ID = '225693';
 
-export class AllegroAdapter implements MarketplaceAdapter {
+/** Allegro's handling time as an ISO 8601 duration (it accepts only a fixed set). */
+export function allegroHandlingTime(days: number): string {
+  if (days <= 0) return 'PT0S';
+  if (days === 1) return 'PT24H';
+  if (days === 2) return 'PT48H';
+  const allowed = [3, 4, 5, 7, 10, 14, 21, 30, 60];
+  return `P${allowed.find((d) => d >= days) ?? 60}D`;
+}
+
+interface NamedItem {
+  id: string;
+  name: string;
+}
+
+export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
   readonly marketplace = 'allegro' as const;
   readonly client: AllegroClient;
 
@@ -356,5 +371,88 @@ export class AllegroAdapter implements MarketplaceAdapter {
         responseType: 'none',
       });
     }
+  }
+
+  // ------------------------------------------------------------ creating offers
+
+  publishSetupProblems(): string[] {
+    const s = this.settings;
+    const problems: string[] = [];
+    if (!s.allegroShippingRateId) problems.push('choose the shipping rates');
+    if (!s.allegroReturnPolicyId) problems.push('choose the return policy');
+    if (!s.allegroImpliedWarrantyId) problems.push('choose the implied warranty (complaints)');
+    if (!s.allegroLocation?.province || !s.allegroLocation.city || !s.allegroLocation.postCode) problems.push('fill in where the goods are sent from');
+    return problems;
+  }
+
+  /** The Allegro catalogue product behind each EAN (offers are attached to it; it supplies photos and description). */
+  async checkCatalogue(eans: string[]): Promise<Map<string, CatalogueMatch>> {
+    const out = new Map<string, CatalogueMatch>();
+    for (let i = 0; i < eans.length; i += 5) {
+      await Promise.all(
+        eans.slice(i, i + 5).map(async (ean) => {
+          const data = await this.client.call<{ products?: { id: string; name?: string }[] }>('GET', '/sale/products', { query: { phrase: ean, mode: 'GTIN' } });
+          const hit = data.products?.[0];
+          out.set(ean, hit ? { found: true, ref: hit.id, name: hit.name } : { found: false });
+        }),
+      );
+    }
+    return out;
+  }
+
+  async createOffer(draft: OfferDraft, match: CatalogueMatch): Promise<{ externalId?: string; note?: string }> {
+    const s = this.settings;
+    if (!match.ref) throw new Error('not in the Allegro catalogue');
+    const created = await this.client.call<{ id: string }>('POST', '/sale/product-offers', {
+      body: {
+        productSet: [
+          {
+            product: { id: match.ref },
+            safetyInformation: { type: 'NO_SAFETY_INFORMATION' },
+            ...(s.allegroResponsibleProducerId ? { responsibleProducer: { type: 'ID', id: s.allegroResponsibleProducerId } } : {}),
+          },
+        ],
+        sellingMode: { format: 'BUY_NOW', price: { amount: draft.price, currency: draft.currency } },
+        stock: { available: Math.max(0, draft.quantity), unit: 'UNIT' },
+        external: { id: draft.sku },
+        delivery: { shippingRates: { id: s.allegroShippingRateId }, handlingTime: allegroHandlingTime(s.offerHandlingDays ?? 1) },
+        payments: { invoice: 'VAT' },
+        location: { countryCode: 'PL', province: s.allegroLocation?.province, city: s.allegroLocation?.city, postCode: s.allegroLocation?.postCode },
+        afterSalesServices: {
+          impliedWarranty: { id: s.allegroImpliedWarrantyId },
+          returnPolicy: { id: s.allegroReturnPolicyId },
+          ...(s.allegroWarrantyId ? { warranty: { id: s.allegroWarrantyId } } : {}),
+        },
+        publication: { status: s.allegroCreateAsDraft ? 'INACTIVE' : 'ACTIVE' },
+        language: 'pl-PL',
+      },
+    });
+    // Allegro checks the offer after answering; its verdict is on the offer.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await httpConfig.sleep(800);
+      const offer = await this.client.call<{ validation?: { errors?: { userMessage?: string; message?: string; path?: string }[] }; publication?: { status?: string } }>(
+        'GET',
+        `/sale/product-offers/${created.id}`,
+      );
+      const errors = offer.validation?.errors ?? [];
+      if (errors.length) {
+        const text = describeAllegroErrors(errors);
+        throw new Error(`Allegro created the offer but reports: ${text}`);
+      }
+      if (offer.publication?.status) return { externalId: created.id };
+    }
+    return { externalId: created.id, note: 'Allegro is still checking the offer' };
+  }
+
+  /** The choices every new offer needs, for the settings page (needs the settings read scope). */
+  async publishOptions(): Promise<{ shippingRates: NamedItem[]; returnPolicies: NamedItem[]; impliedWarranties: NamedItem[]; warranties: NamedItem[] }> {
+    const [rates, returns, implied, warranties] = await Promise.all([
+      this.client.call<{ shippingRates?: NamedItem[] }>('GET', '/sale/shipping-rates'),
+      this.client.call<{ returnPolicies?: NamedItem[] }>('GET', '/after-sales-service-conditions/return-policies'),
+      this.client.call<{ impliedWarranties?: NamedItem[] }>('GET', '/after-sales-service-conditions/implied-warranties'),
+      this.client.call<{ warranties?: NamedItem[] }>('GET', '/after-sales-service-conditions/warranties'),
+    ]);
+    const pick = (items?: NamedItem[]) => (items ?? []).map((i) => ({ id: i.id, name: i.name }));
+    return { shippingRates: pick(rates.shippingRates), returnPolicies: pick(returns.returnPolicies), impliedWarranties: pick(implied.impliedWarranties), warranties: pick(warranties.warranties) };
   }
 }

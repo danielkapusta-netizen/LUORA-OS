@@ -76,3 +76,42 @@ export interface MarketplaceAdapter {
   /** Sets absolute stock quantities. */
   setStock(updates: StockUpdate[]): Promise<void>;
 }
+
+/** What an offer needs from the Shopify product, whichever marketplace it goes to. */
+export interface OfferDraft {
+  sku: string;
+  ean: string;
+  name: string;
+  descriptionHtml: string;
+  brand: string;
+  imageUrls: string[];
+  weightGrams: number | null;
+  quantity: number;
+  /** Gross price with two decimals. */
+  price: string;
+  currency: string;
+}
+
+/** The marketplace's own catalogue product for an EAN: offers are attached to it. */
+export interface CatalogueMatch {
+  found: boolean;
+  /** The catalogue product id the offer attaches to (Allegro). */
+  ref?: string;
+  name?: string;
+  /** The marketplace could not be asked, so the answer is a guess; its import decides. */
+  unverified?: boolean;
+}
+
+/** Marketplaces Luora can create offers on, for products that exist in their catalogue. */
+export interface OfferPublisher {
+  /** What is missing in the account settings before any offer can be created (empty when ready). */
+  publishSetupProblems(): string[];
+  /** Which of these EANs the marketplace catalogue knows. */
+  checkCatalogue(eans: string[]): Promise<Map<string, CatalogueMatch>>;
+  /** Creates one offer; throws with the marketplace's reasons when it refuses. Returns a note when it is still being processed. */
+  createOffer(draft: OfferDraft, match: CatalogueMatch): Promise<{ externalId?: string; note?: string }>;
+}
+
+export function isOfferPublisher(adapter: unknown): adapter is OfferPublisher {
+  return typeof adapter === 'object' && adapter !== null && 'checkCatalogue' in adapter && 'createOffer' in adapter;
+}

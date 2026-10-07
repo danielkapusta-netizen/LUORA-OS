@@ -90,6 +90,30 @@ export interface MarketplaceSettings {
   vhCategoryMap?: Record<string, string>;
   /** Von Halsky: categories to choose from (leaves), read from InPost and cached. */
   vhCategories?: { fetchedAt: string; items: { id: string; path: string }[] };
+  /** Allegro and Empik: offers created from Shopify (price = Shopify price × (1 + markup/100), then rounded). */
+  offerMarkupPercent?: number;
+  offerRounding?: 'x.99' | 'x.00' | 'none';
+  /** Allegro and Empik: days from the order to dispatch, shown on new offers. */
+  offerHandlingDays?: number;
+  /** Allegro: what every new offer needs besides the product (ids come from Allegro's own lists). */
+  allegroShippingRateId?: string;
+  allegroReturnPolicyId?: string;
+  allegroImpliedWarrantyId?: string;
+  allegroWarrantyId?: string;
+  allegroResponsibleProducerId?: string;
+  allegroLocation?: { province: string; city: string; postCode: string };
+  /** Allegro: create offers as inactive drafts instead of publishing them at once. */
+  allegroCreateAsDraft?: boolean;
+  /** Allegro: the choices above, read from Allegro and cached. */
+  allegroOptions?: {
+    fetchedAt: string;
+    shippingRates: { id: string; name: string }[];
+    returnPolicies: { id: string; name: string }[];
+    impliedWarranties: { id: string; name: string }[];
+    warranties: { id: string; name: string }[];
+  };
+  /** Empik: offer state code of new offers (Mirakl "new"). */
+  empikOfferState?: string;
 }
 
 export const marketplaceAccounts = sqliteTable('marketplace_accounts', {

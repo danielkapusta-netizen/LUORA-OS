@@ -1,7 +1,7 @@
 // Fake marketplace used when INTEGRATIONS_MODE=mock. Orders are generated
 // deterministically from their index, so re-syncing never produces duplicates.
 import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, StockUpdate, TrackingInfo } from '../../types';
-import type { MarketplaceAdapter, SyncResult } from '../types';
+import type { CatalogueMatch, MarketplaceAdapter, OfferDraft, OfferPublisher, SyncResult } from '../types';
 
 export const MOCK_CATALOG = [
   { sku: 'LUO-MUG-01', name: 'Kubek ceramiczny Luora 350 ml', price: 39.99 },
@@ -89,7 +89,7 @@ function hash(text: string): number {
   return h >>> 0;
 }
 
-export class MockMarketplaceAdapter implements MarketplaceAdapter {
+export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublisher {
   constructor(
     readonly marketplace: Marketplace,
     private readonly accountKey: string,
@@ -97,6 +97,21 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter {
 
   async checkConnection(): Promise<string> {
     return `Mock ${this.marketplace} account`;
+  }
+
+  // Demo catalogue for creating offers: an EAN ending in an even digit is "known" to the marketplace.
+  publishSetupProblems(): string[] {
+    return [];
+  }
+
+  async checkCatalogue(eans: string[]): Promise<Map<string, CatalogueMatch>> {
+    return new Map(eans.map((e) => [e, Number(e.slice(-1)) % 2 === 0 ? { found: true, ref: `demo-${e}`, name: `Catalogue product ${e}` } : { found: false }]));
+  }
+
+  async createOffer(draft: OfferDraft): Promise<{ externalId?: string; note?: string }> {
+    if (draft.price === '0.00') throw new Error('Demo marketplace refused the offer: price must be above zero');
+    console.log(`[mock ${this.marketplace}] create offer ${draft.sku} at ${draft.price} ${draft.currency}`);
+    return { externalId: draft.sku };
   }
 
   externalIdFor(index: number): string {

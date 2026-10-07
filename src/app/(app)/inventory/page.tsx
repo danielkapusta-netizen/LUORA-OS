@@ -246,6 +246,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         description="Products and photos come from Shopify; Allegro and Empik offers are matched by EAN. One stock number for every platform."
         actions={
           <>
+            {viewer.role === 'admin' &&
+              accounts
+                .filter((a) => a.enabled && (a.type === 'allegro' || a.type === 'empik'))
+                .map((a) => (
+                  <Link key={a.id} className={buttonClass('secondary')} href={`/inventory/publish/${a.id}`}>
+                    Publish to {a.type === 'allegro' ? 'Allegro' : 'Empik'}
+                  </Link>
+                ))}
             <Link className={buttonClass('secondary')} href="/inventory/vonhalsky">
               Von Halsky offers
             </Link>

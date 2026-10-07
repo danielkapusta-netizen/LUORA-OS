@@ -1,6 +1,7 @@
 // Creating InPost Von Halsky offers from the Shopify product list, and keeping their prices at
 // Shopify's price plus a markup. Stock follows the normal stock push once an offer exists.
 import { and, asc, eq, isNotNull } from 'drizzle-orm';
+import { markupPrice } from '../../lib/offers';
 import { getDb } from '../db/client';
 import { marketplaceAccounts, productListings, products, type MarketplaceSettings } from '../db/schema';
 import { VonHalskyAdapter, type VonHalskyOfferInput } from '../integrations/marketplaces/vonhalsky/adapter';
@@ -18,15 +19,7 @@ const CATEGORIES_TTL_MS = 7 * 86_400_000;
 
 /** Shopify price × markup, rounded as configured (x.99 / x.00 / none). */
 export function offerPrice(shopifyPrice: string | number, settings: MarketplaceSettings): string {
-  const marked = Number(shopifyPrice) * (1 + (settings.vhMarkupPercent ?? 10) / 100);
-  switch (settings.vhRounding ?? 'x.99') {
-    case 'x.99':
-      return (Math.ceil(marked - 0.005) - 0.01).toFixed(2);
-    case 'x.00':
-      return Math.ceil(marked - 0.005).toFixed(2);
-    default:
-      return marked.toFixed(2);
-  }
+  return markupPrice(shopifyPrice, settings.vhMarkupPercent ?? 10, settings.vhRounding ?? 'x.99');
 }
 
 const fold = (text: string) =>
