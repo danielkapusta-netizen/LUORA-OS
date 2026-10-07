@@ -114,6 +114,9 @@ export async function importListings(accountId: string): Promise<{ listings: num
 
   for await (const listing of adapter.listListings()) {
     count++;
+    const active = listing.active !== false;
+    // What the marketplace can sell: an ended or inactive offer keeps an old stock figure that means nothing.
+    const quantity = active ? listing.quantity : 0;
     let productId: string | null = null;
     if (isShopify) {
       const result = await upsertShopifyProduct(listing);
@@ -130,8 +133,10 @@ export async function importListings(accountId: string): Promise<{ listings: num
         ean: normalizeEan(listing.ean),
         ref: listing.ref,
         productId,
-        lastSeenQty: listing.quantity,
+        lastSeenQty: quantity,
         lastSeenAt: new Date(),
+        active,
+        listingStatus: listing.status ?? null,
       })
       .onConflictDoUpdate({
         target: [productListings.accountId, productListings.externalId],
@@ -141,8 +146,10 @@ export async function importListings(accountId: string): Promise<{ listings: num
           // Allegro's list has no barcode; keep the one read from the offer earlier.
           ean: sql`coalesce(${normalizeEan(listing.ean)}, ${productListings.ean})`,
           ref: listing.ref,
-          lastSeenQty: listing.quantity,
+          lastSeenQty: quantity,
           lastSeenAt: new Date(),
+          active,
+          listingStatus: listing.status ?? null,
           // Shopify listings always belong to their own product; other links are kept as made.
           productId: isShopify ? productId : sql`${productListings.productId}`,
         },
@@ -387,13 +394,34 @@ export async function confirmClearSuggestions(): Promise<number> {
   return linked;
 }
 
-/** Listings whose marketplace quantity differs from the master stock. */
+/** The quantity a listing should show, or null when nothing is to be sent to it (inactive, or managed on the marketplace). */
+export function desiredQuantity(r: { stock: number; active?: boolean; stockMode?: 'master' | 'fixed' | 'off'; fixedQty?: number | null }): number | null {
+  if (r.active === false || r.stockMode === 'off') return null;
+  if (r.stockMode === 'fixed') return r.fixedQty == null ? null : Math.max(0, Math.floor(r.fixedQty));
+  return Math.max(0, r.stock);
+}
+
+/** Listings whose marketplace quantity differs from what they should show. */
 export function pendingUpdatesFor(
-  rows: { listingId: string; externalId: string; sku: string | null; ref: Record<string, string | number | null>; stock: number; lastPushedQty: number | null }[],
+  rows: {
+    listingId: string;
+    externalId: string;
+    sku: string | null;
+    ref: Record<string, string | number | null>;
+    stock: number;
+    lastPushedQty: number | null;
+    active?: boolean;
+    stockMode?: 'master' | 'fixed' | 'off';
+    fixedQty?: number | null;
+  }[],
 ): (StockUpdate & { listingId: string })[] {
-  return rows
-    .filter((r) => r.lastPushedQty !== Math.max(0, r.stock))
-    .map((r) => ({ listingId: r.listingId, externalId: r.externalId, sku: r.sku, ref: r.ref, quantity: Math.max(0, r.stock) }));
+  const out: (StockUpdate & { listingId: string })[] = [];
+  for (const r of rows) {
+    const quantity = desiredQuantity(r);
+    if (quantity === null || r.lastPushedQty === quantity) continue;
+    out.push({ listingId: r.listingId, externalId: r.externalId, sku: r.sku, ref: r.ref, quantity });
+  }
+  return out;
 }
 
 /**
@@ -416,6 +444,9 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
       lastPushedAt: productListings.lastPushedAt,
       lastSeenQty: productListings.lastSeenQty,
       lastSeenAt: productListings.lastSeenAt,
+      active: productListings.active,
+      stockMode: productListings.stockMode,
+      fixedQty: productListings.fixedQty,
     })
     .from(productListings)
     .innerJoin(products, eq(products.id, productListings.productId))
@@ -539,6 +570,10 @@ export async function listProductsWithListings() {
       lastPushedQty: productListings.lastPushedQty,
       lastPushedAt: productListings.lastPushedAt,
       lastPushError: productListings.lastPushError,
+      active: productListings.active,
+      listingStatus: productListings.listingStatus,
+      stockMode: productListings.stockMode,
+      fixedQty: productListings.fixedQty,
     })
     .from(productListings)
     .innerJoin(marketplaceAccounts, eq(marketplaceAccounts.id, productListings.accountId))
@@ -570,4 +605,46 @@ export async function recentStockLog(limit = 50) {
     .leftJoin(productListings, eq(productListings.id, stockSyncLog.listingId))
     .orderBy(sql`${stockSyncLog.createdAt} desc`)
     .limit(limit);
+}
+
+/** Chooses what is sent to one listing: the master stock, a fixed quantity, or nothing. */
+export async function setListingStock(listingId: string, mode: 'master' | 'fixed' | 'off', fixedQty?: number | null): Promise<void> {
+  if (mode === 'fixed' && (fixedQty == null || !Number.isInteger(fixedQty) || fixedQty < 0)) throw new Error('Enter a whole number, 0 or more');
+  const db = getDb();
+  const [listing] = await db.select({ id: productListings.id }).from(productListings).where(eq(productListings.id, listingId));
+  if (!listing) throw new Error('Listing not found');
+  await db
+    .update(productListings)
+    .set({ stockMode: mode, fixedQty: mode === 'fixed' ? fixedQty! : null, lastPushError: null })
+    .where(eq(productListings.id, listingId));
+  await scheduleStockPush();
+}
+
+/** How many listings would be sent a different quantity on the next push, per account. */
+export async function pendingPushCounts(): Promise<Map<string, number>> {
+  const rows = await getDb()
+    .select({
+      accountId: productListings.accountId,
+      listingId: productListings.id,
+      externalId: productListings.externalId,
+      sku: productListings.sku,
+      ref: productListings.ref,
+      stock: products.stock,
+      lastPushedQty: productListings.lastPushedQty,
+      lastSeenQty: productListings.lastSeenQty,
+      lastSeenAt: productListings.lastSeenAt,
+      lastPushedAt: productListings.lastPushedAt,
+      active: productListings.active,
+      stockMode: productListings.stockMode,
+      fixedQty: productListings.fixedQty,
+    })
+    .from(productListings)
+    .innerJoin(products, eq(products.id, productListings.productId))
+    .where(isNotNull(products.shopifyVariantId));
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    const current = marketplaceQuantity(r);
+    if (pendingUpdatesFor([{ ...r, lastPushedQty: current }]).length) counts.set(r.accountId, (counts.get(r.accountId) ?? 0) + 1);
+  }
+  return counts;
 }

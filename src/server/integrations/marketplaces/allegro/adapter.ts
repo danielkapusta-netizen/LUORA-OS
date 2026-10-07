@@ -293,7 +293,7 @@ export class AllegroAdapter implements MarketplaceAdapter {
   async *listListings(): AsyncIterable<Listing> {
     for (let offset = 0; ; offset += 1000) {
       const page = await this.client.call<{
-        offers: { id: string; name: string; external?: { id?: string | null } | null; stock?: { available?: number } | null }[];
+        offers: { id: string; name: string; external?: { id?: string | null } | null; stock?: { available?: number } | null; publication?: { status?: string | null } | null }[];
         totalCount: number;
       }>('GET', '/sale/offers', { query: { limit: 1000, offset } });
       for (const offer of page.offers) {
@@ -302,6 +302,9 @@ export class AllegroAdapter implements MarketplaceAdapter {
           sku: offer.external?.id || null,
           title: offer.name,
           quantity: offer.stock?.available ?? null,
+          // An ended or inactive offer keeps its old stock figure; it is not for sale.
+          active: offer.publication?.status ? offer.publication.status === 'ACTIVE' : undefined,
+          status: offer.publication?.status ?? null,
           ref: { offerId: offer.id },
         };
       }

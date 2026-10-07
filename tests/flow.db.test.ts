@@ -222,6 +222,37 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect((await m.inventory.runStockPush(account.id)).pushed).toBe(0);
   });
 
+  it('sends a fixed quantity, or nothing, to a listing, and skips listings that are off sale', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [empik] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'empik'));
+    await db.update(s.marketplaceAccounts).set({ stockSyncEnabled: true, stockDryRun: false }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
+    await m.inventory.runStockPush(empik.id, { force: true });
+    const listings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, empik.id));
+    const [fixed, off, inactive] = listings;
+
+    await m.inventory.setListingStock(fixed.id, 'fixed', 3);
+    await m.inventory.setListingStock(off.id, 'off');
+    await db.update(s.productListings).set({ active: false, lastPushedQty: null, lastSeenQty: 0 }).where(orm.eq(s.productListings.id, inactive.id));
+    await db.update(s.productListings).set({ lastPushedQty: null }).where(orm.inArray(s.productListings.id, [off.id]));
+
+    const result = await m.inventory.runStockPush(empik.id);
+    expect(result.dryRun).toBe(false);
+    const rows = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, empik.id));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(fixed.id)!.lastPushedQty).toBe(3);
+    expect(byId.get(off.id)!.lastPushedQty).toBeNull();
+    expect(byId.get(inactive.id)!.lastPushedQty).toBeNull();
+    await expect(m.inventory.setListingStock(fixed.id, 'fixed', -1)).rejects.toThrow(/whole number/);
+    // Leave the account as the demo data has it, for the tests that follow.
+    await db
+      .update(s.productListings)
+      .set({ stockMode: 'master', fixedQty: null, active: true, lastPushedQty: null, lastPushedAt: null })
+      .where(orm.eq(s.productListings.accountId, empik.id));
+    await db.update(s.marketplaceAccounts).set({ stockDryRun: true }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
+    await db.delete(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, empik.id));
+  });
+
   it('builds the product list from Shopify and matches Allegro / Empik listings to it', async () => {
     const db = m.db.getDb();
     const { schema: s, orm } = m;

@@ -273,6 +273,8 @@ export class EmpikAdapter implements MarketplaceAdapter {
           sku: offer.shop_sku || null,
           title: offer.product_title,
           quantity: offer.quantity,
+          active: offer.active,
+          status: offer.active === undefined ? null : offer.active ? 'active' : 'inactive',
           ean: offer.product_references?.find((r) => /^(EAN|GTIN|EAN13)$/i.test(r.reference_type))?.reference ?? null,
           ref: { shopSku: offer.shop_sku },
         };

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireUser } from '@/server/auth';
 import { enqueue, JOBS } from '@/server/jobs/queue';
-import { adjustStock, confirmClearSuggestions, linkGroup, linkListing } from '@/server/services/inventory';
+import { adjustStock, confirmClearSuggestions, linkGroup, linkListing, setListingStock } from '@/server/services/inventory';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 
 export async function adjustStockAction(productId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -73,5 +73,18 @@ export async function syncAllStockAction(): Promise<ActionResult> {
     ]
       .filter(Boolean)
       .join(' ');
+  });
+}
+
+/** What one listing is sent: the master stock, a fixed quantity, or nothing (managed on the marketplace itself). */
+export async function setListingStockAction(listingId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  await requireUser();
+  const choice = String(formData.get('mode') ?? 'master');
+  const mode = choice === 'fixed' || choice === 'off' ? choice : 'master';
+  return attempt(async () => {
+    const raw = String(formData.get('qty') ?? '').trim();
+    await setListingStock(listingId, mode, mode === 'fixed' ? (raw === '' ? null : Number(raw)) : null);
+    revalidatePath('/inventory');
+    return mode === 'master' ? 'Follows the master stock' : mode === 'off' ? 'Not sent any more' : 'Fixed quantity saved';
   });
 }

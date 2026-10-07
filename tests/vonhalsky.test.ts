@@ -241,8 +241,8 @@ describe('VonHalskyAdapter', () => {
     const listings = [];
     for await (const l of new VonHalskyAdapter(store()).listListings()) listings.push(l);
     expect(listings).toEqual([
-      { externalId: 'offer-1', sku: 'LUA024', title: 'Anua Toner', quantity: 7, ean: '8809640735455', ref: { offerId: 'offer-1', status: 'PUBLISHED', externalId: null, price: null } },
-      { externalId: 'offer-2', sku: null, title: 'Cream', quantity: 0, ean: null, ref: { offerId: 'offer-2', status: 'SOLDOUT', externalId: null, price: null } },
+      { externalId: 'offer-1', sku: 'LUA024', title: 'Anua Toner', quantity: 7, active: true, status: 'PUBLISHED', ean: '8809640735455', ref: { offerId: 'offer-1', status: 'PUBLISHED', externalId: null, price: null } },
+      { externalId: 'offer-2', sku: null, title: 'Cream', quantity: 0, active: true, status: 'SOLDOUT', ean: null, ref: { offerId: 'offer-2', status: 'SOLDOUT', externalId: null, price: null } },
     ]);
   });
 
@@ -458,7 +458,7 @@ describe('offers created from Shopify', () => {
     const out = [];
     for await (const l of new VonHalskyAdapter(store()).listListings()) out.push(l);
     expect(out).toEqual([
-      { externalId: 'o1', sku: 'S1', title: 'Serum', quantity: 3, ean: input.ean, ref: { offerId: 'o1', status: 'PUBLISHED', externalId: 'luora:p1', price: 98.99 } },
+      { externalId: 'o1', sku: 'S1', title: 'Serum', quantity: 3, active: true, status: 'PUBLISHED', ean: input.ean, ref: { offerId: 'o1', status: 'PUBLISHED', externalId: 'luora:p1', price: 98.99 } },
     ]);
   });
 

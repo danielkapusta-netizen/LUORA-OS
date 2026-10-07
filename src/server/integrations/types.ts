@@ -152,6 +152,10 @@ export interface Listing {
   sku: string | null;
   title: string;
   quantity: number | null;
+  /** False when the offer is ended, inactive or not published yet. Unknown (undefined) counts as active. */
+  active?: boolean;
+  /** The marketplace's status text, shown as is. */
+  status?: string | null;
   /** Barcode (EAN/GTIN), when the marketplace exposes it. */
   ean?: string | null;
   /** Provider ids needed to update stock later (inventory item id, offer sku, ...). */

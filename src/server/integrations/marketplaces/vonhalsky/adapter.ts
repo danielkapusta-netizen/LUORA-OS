@@ -259,6 +259,9 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
           sku: offer.product.sku || null,
           title: offer.product.name,
           quantity: offer.stock?.quantity ?? null,
+          // SOLDOUT is a live offer with no stock; PENDING and the rest are not on sale.
+          active: offer.status ? ['PUBLISHED', 'SOLDOUT'].includes(offer.status) : undefined,
+          status: offer.status ?? null,
           ean: offer.product.ean ?? null,
           ref: { offerId: offer.id, status: offer.status ?? null, externalId: offer.externalId ?? null, price: offer.price?.grossPrice?.amount ?? null },
         };

@@ -486,6 +486,13 @@ export const productListings = sqliteTable(
     lastPushedQty: integer('last_pushed_qty'),
     lastPushedAt: ts('last_pushed_at'),
     lastPushError: text('last_push_error'),
+    /** False while the offer is ended, inactive or not yet published: its quantity is not for sale, and nothing is sent to it. */
+    active: bool('active').notNull().default(true),
+    /** The marketplace's own status text (Allegro: ACTIVE, INACTIVE, ENDED...), for display. */
+    listingStatus: text('listing_status'),
+    /** What is sent to this listing: the product's master stock, a fixed quantity, or nothing (managed on the marketplace). */
+    stockMode: text('stock_mode', { enum: ['master', 'fixed', 'off'] }).notNull().default('master'),
+    fixedQty: integer('fixed_qty'),
     createdAt: createdAt(),
   },
   (t) => [
