@@ -40,8 +40,9 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const to = new Date();
   const from = new Date(to.getTime() - days * 86_400_000);
   const data = await analytics({ from, to, marketplace });
-  const currency = data.kpis.currencies.length === 1 ? data.kpis.currencies[0] : 'PLN';
-  const mixedCurrency = data.kpis.currencies.length > 1;
+  // Every amount is converted to PLN by the service.
+  const currency = 'PLN';
+  const mixedCurrency = data.kpis.currencies.some((c) => c !== 'PLN');
 
   // One row per day with a column per marketplace, including empty days.
   const marketplaces = [...new Set(data.daily.map((d) => d.marketplace))].sort();
@@ -92,7 +93,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       </div>
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Revenue" value={formatMoney(data.kpis.revenue, currency)} note={mixedCurrency ? `Mixed currencies: ${data.kpis.currencies.join(', ')}` : 'incl. shipping'} />
+        <Stat label="Revenue" value={formatMoney(data.kpis.revenue, currency)} note={mixedCurrency ? `incl. shipping; ${data.kpis.currencies.filter((c) => c !== 'PLN').join(', ')} converted at the NBP rate` : 'incl. shipping'} />
         <Stat label="Orders" value={data.kpis.orders.toLocaleString('pl-PL')} note={`${data.kpis.cancelled} cancelled`} />
         <Stat label="Average order" value={formatMoney(data.kpis.aov, currency)} />
         <Stat label="Shipped" value={data.kpis.shipped.toLocaleString('pl-PL')} note={data.kpis.orders ? `${Math.round((data.kpis.shipped / data.kpis.orders) * 100)}% of orders` : undefined} />

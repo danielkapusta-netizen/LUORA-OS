@@ -546,6 +546,41 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(data.carriers.length).toBeGreaterThan(0);
   });
 
+  it('reports revenue in PLN and keeps products without a SKU apart', async () => {
+    const { MockMarketplaceAdapter } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const db = m.db.getDb();
+    const [allegro] = await db.select().from(m.schema.marketplaceAccounts).where(m.orm.eq(m.schema.marketplaceAccounts.type, 'allegro'));
+    const mock = new MockMarketplaceAdapter('allegro', allegro.id);
+    const base = mock.buildOrder(9101, new Date());
+    const order = {
+      ...base,
+      externalId: 'czk-order-1',
+      externalNumber: 'CZK-1',
+      currency: 'CZK',
+      totalAmount: '4000.00',
+      shippingAmount: '0.00',
+      items: [
+        { ...base.items[0], externalLineId: 'czk-1', sku: null, name: 'Zzz Cream With No Sku', quantity: 10, unitPrice: '400.00' },
+        { ...base.items[0], externalLineId: 'czk-2', sku: null, name: 'Aaa Serum With No Sku', quantity: 1, unitPrice: '10.00' },
+      ],
+    };
+    await m.orders.upsertOrders(allegro, [order], { historical: true });
+    const data = await m.analytics.analytics({ from: new Date(Date.now() - 2 * 86_400_000), to: new Date(Date.now() + 60_000) });
+    const [stored] = await db.select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.externalId, 'czk-order-1'));
+    await db.delete(m.schema.salesLines).where(m.orm.eq(m.schema.salesLines.orderId, stored.id));
+    await db.delete(m.schema.orders).where(m.orm.eq(m.schema.orders.id, stored.id));
+    const cream = data.topSkus.find((p) => p.name === 'Zzz Cream With No Sku');
+    const serum = data.topSkus.find((p) => p.name === 'Aaa Serum With No Sku');
+    // Two products, not one "no SKU" row named after whichever sorts first.
+    expect(cream?.quantity).toBe(10);
+    expect(serum?.quantity).toBe(1);
+    // 10 x 400 CZK is about 800 PLN, nowhere near 4,000.
+    expect(cream!.revenue).toBeGreaterThan(100);
+    expect(cream!.revenue).toBeLessThan(2_000);
+    const czkDay = data.daily.reduce((sum, d) => sum + d.revenue, 0);
+    expect(czkDay).toBeLessThan(data.kpis.orders * 5_000);
+  });
+
   it('keeps the tracking number when the label download fails, and fetches the file on "Check now"', async () => {
     const { MockCarrierAdapter } = await import('@/server/integrations/carriers/mock/adapter');
     const order = (await allOrders()).find((o) => o.marketplace === 'shopify' && o.status === 'new' && o.pickupPointId)!;
@@ -968,4 +1003,5 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const { getCfEnv } = await import('@/server/cf');
     for (const key of labelKeys) expect(await getCfEnv().LABELS.get(key)).toBeNull();
   });
+
 });
