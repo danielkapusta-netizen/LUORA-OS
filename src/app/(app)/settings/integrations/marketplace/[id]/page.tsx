@@ -229,6 +229,13 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   items={s.allegroOptions?.responsibleProducers}
                   hint="Required by Allegro on every offer. If the list is empty, add the producer first in Allegro (My Allegro → Product safety) and load the choices again."
                 />
+                <AllegroChoice
+                  name="allegroResponsiblePersonId"
+                  label="Responsible person (GPSR)"
+                  selected={s.allegroResponsiblePersonId}
+                  items={s.allegroOptions?.responsiblePersons}
+                  hint="Required by Allegro on every offer. If the list is empty, add the person first in Allegro (My Allegro → Product safety) and load the choices again."
+                />
                 <Field label="Safety information shown on every offer" hint="Allegro refuses offers without it. Leave blank for a standard cosmetics text.">
                   <Textarea name="allegroSafetyText" rows={3} defaultValue={s.allegroSafetyText ?? ''} placeholder={DEFAULT_SAFETY_TEXT} />
                 </Field>

@@ -61,6 +61,7 @@ describe('Allegro offers', () => {
     allegroReturnPolicyId: 'ret-1',
     allegroImpliedWarrantyId: 'imp-1',
     allegroResponsibleProducerId: 'prod-resp-1',
+    allegroResponsiblePersonId: 'pers-1',
     allegroLocation: { province: 'MAZOWIECKIE', city: 'Warszawa', postCode: '00-001' },
     offerHandlingDays: 2,
   };
@@ -70,7 +71,7 @@ describe('Allegro offers', () => {
   });
 
   it('lists what is still missing in the settings', () => {
-    expect(new AllegroAdapter(creds(), {}).publishSetupProblems()).toHaveLength(5);
+    expect(new AllegroAdapter(creds(), {}).publishSetupProblems()).toHaveLength(6);
     expect(new AllegroAdapter(creds(), settings).publishSetupProblems()).toEqual([]);
   });
 
@@ -99,7 +100,7 @@ describe('Allegro offers', () => {
     const result = await new AllegroAdapter(creds(), settings).createOffer(draft, { found: true, ref: 'prod-9' });
     expect(result).toEqual({ externalId: 'offer-1' });
     expect(body).toMatchObject({
-      productSet: [{ product: { id: 'prod-9' }, responsibleProducer: { type: 'ID', id: 'prod-resp-1' }, safetyInformation: { type: 'TEXT', description: expect.stringContaining('Produkt kosmetyczny') } }],
+      productSet: [{ product: { id: 'prod-9' }, responsibleProducer: { type: 'ID', id: 'prod-resp-1' }, responsiblePerson: { id: 'pers-1' }, safetyInformation: { type: 'TEXT', description: expect.stringContaining('Produkt kosmetyczny') } }],
       sellingMode: { format: 'BUY_NOW', price: { amount: '49.99', currency: 'PLN' } },
       stock: { available: 7, unit: 'UNIT' },
       external: { id: 'LUO-1' },
@@ -133,6 +134,7 @@ describe('Allegro offers', () => {
       http.get(`${API}/after-sales-service-conditions/return-policies`, () => HttpResponse.json({ returnPolicies: [{ id: 'r1', name: '14 days' }] })),
       http.get(`${API}/after-sales-service-conditions/implied-warranties`, () => HttpResponse.json({ impliedWarranties: [{ id: 'i1', name: 'Reklamacje' }] })),
       http.get(`${API}/after-sales-service-conditions/warranties`, () => HttpResponse.json({ warranties: [] })),
+      http.get(`${API}/sale/responsible-persons`, () => HttpResponse.json({ responsiblePersons: [{ id: 'pp1', name: 'Jan Kowalski' }] })),
       http.get(`${API}/sale/responsible-producers`, () => HttpResponse.json({ responsibleProducers: [{ id: 'rp1', name: 'Luora Sp. z o.o.' }, { id: 'rp2', producerData: { tradeName: 'Other Ltd' } }] })),
     );
     expect(await new AllegroAdapter(creds(), settings).publishOptions()).toEqual({
@@ -144,6 +146,7 @@ describe('Allegro offers', () => {
         { id: 'rp1', name: 'Luora Sp. z o.o.' },
         { id: 'rp2', name: 'Other Ltd' },
       ],
+      responsiblePersons: [{ id: 'pp1', name: 'Jan Kowalski' }],
     });
   });
 });
