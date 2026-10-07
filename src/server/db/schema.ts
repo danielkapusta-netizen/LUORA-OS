@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { TASK_COMMENT_KINDS, TASK_PRIORITIES, TASK_STATUSES, type ChecklistItem } from '../../lib/tasks/model';
 import type { Address, Buyer, InvoiceRequest, ParcelSpec, SenderSettings } from '../integrations/types';
 
 // SQLite on D1: ids are UUID text, timestamps are integer milliseconds, JSON is text.
@@ -753,6 +754,10 @@ export const customerNotes = sqliteTable(
   (t) => [index('customer_notes_customer_idx').on(t.customerId, t.createdAt)],
 );
 
+/**
+ * @deprecated Replaced by `tasks` (a customer task is a task with a customerId); the rows were copied by migration
+ * 0011. Kept, unused, so a rollback to the previous worker still finds its table. Drop in a later migration.
+ */
 export const customerTasks = sqliteTable(
   'customer_tasks',
   {
@@ -769,6 +774,91 @@ export const customerTasks = sqliteTable(
   },
   (t) => [index('customer_tasks_open_idx').on(t.doneAt, t.dueAt), index('customer_tasks_customer_idx').on(t.customerId)],
 );
+
+// ---------------------------------------------------------------- tasks
+
+export const projects = sqliteTable(
+  'projects',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    description: text('description'),
+    /** Key of the palette in lib/tasks/model.ts. */
+    color: text('color').notNull().default('lime'),
+    ownerId: text('owner_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Created by the demo-mode seed; removed with the other demo data. */
+    demo: bool('demo').notNull().default(false),
+    archivedAt: ts('archived_at'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('projects_archived_idx').on(t.archivedAt)],
+);
+
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: id(),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status', { enum: TASK_STATUSES }).notNull().default('todo'),
+    priority: text('priority', { enum: TASK_PRIORITIES }).notNull().default('normal'),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    /** The planned day, YYYY-MM-DD in Warsaw time. Plain text on purpose: no time-zone arithmetic. */
+    dueDate: text('due_date'),
+    /** Optional slot within the day, HH:MM. */
+    startTime: text('start_time'),
+    endTime: text('end_time'),
+    tags: json<string[]>('tags').notNull().$defaultFn(() => []),
+    checklist: json<ChecklistItem[]>('checklist').notNull().$defaultFn(() => []),
+    customerId: text('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+    orderId: text('order_id').references(() => orders.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: ts('done_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('tasks_status_due_idx').on(t.status, t.dueDate),
+    index('tasks_project_idx').on(t.projectId),
+    index('tasks_customer_idx').on(t.customerId),
+    index('tasks_order_idx').on(t.orderId),
+  ],
+);
+
+/** Who a task is for. A task can have several people. */
+export const taskAssignees = sqliteTable(
+  'task_assignees',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.taskId, t.userId] }), index('task_assignees_user_idx').on(t.userId)],
+);
+
+/** Comments by people, and "events" the service writes when something changes (the activity trail). */
+export const taskComments = sqliteTable(
+  'task_comments',
+  {
+    id: id(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    kind: text('kind', { enum: TASK_COMMENT_KINDS }).notNull().default('comment'),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('task_comments_task_idx').on(t.taskId, t.createdAt)],
+);
+
+export type Task = typeof tasks.$inferSelect;
+export type Project = typeof projects.$inferSelect;
 
 export interface CrmSettings {
   /** Segments whose tag ("luora-vip", …) is written to Shopify customers. */
