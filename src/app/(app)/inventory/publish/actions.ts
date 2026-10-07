@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin } from '@/server/auth';
+import { importListings } from '@/server/services/inventory';
+import { listMarketplaceAccounts } from '@/server/services/settings';
 import { loadAllegroOptions, MAX_OFFERS_PER_RUN, publishOffers } from '@/server/services/marketplace-offers';
 
 export async function createOffersAction(accountId: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
@@ -26,5 +28,18 @@ export async function loadAllegroOptionsAction(accountId: string): Promise<Actio
     const o = await loadAllegroOptions(accountId, true);
     revalidatePath(`/settings/integrations/marketplace/${accountId}`);
     return `Loaded ${o.shippingRates.length} shipping rates, ${o.returnPolicies.length} return policies and ${o.impliedWarranties.length} warranty terms from Allegro`;
+  });
+}
+
+/** Reads the products, titles and barcodes from Shopify again, so what was just typed there shows at once. */
+export async function refreshFromShopifyAction(accountId: string): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    const shopify = (await listMarketplaceAccounts()).find((a) => a.type === 'shopify' && a.enabled);
+    if (!shopify) throw new Error('There is no Shopify account');
+    const { listings, created } = await importListings(shopify.id);
+    revalidatePath(`/inventory/publish/${accountId}`);
+    revalidatePath('/inventory');
+    return `Read ${listings} products from Shopify (${created} new)`;
   });
 }

@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () => {
   const persistTo = mkdtempSync(path.join(tmpdir(), 'luora-offers-'));
@@ -68,6 +68,22 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     const result = await m.offers.publishOffers(empikId, ids);
     expect(result.created).toEqual(['New cream A']);
     expect(result.failed).toEqual([{ name: 'New cream B', error: 'not ready: not in the catalogue' }]);
+  });
+
+  it('uses the barcode as the offer SKU when Shopify has none, and does not offer the product twice', async () => {
+    const db = m.db.getDb();
+    await db.insert(m.schema.products).values({ sku: 'shopify:777', name: 'No SKU cream', ean: '5900000000020', stock: 2, shopifyVariantId: 'gid://shopify/ProductVariant/777' });
+    const row = (await m.offers.publishPreview(empikId)).rows.find((r) => r.name.startsWith('No SKU'))!;
+    expect(row).toMatchObject({ sku: 'shopify:777', catalogue: 'found', problems: [] });
+    const product = (await db.select().from(m.schema.products).where(m.orm.eq(m.schema.products.sku, 'shopify:777')))[0];
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await m.offers.publishOffers(empikId, [product.id]);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('create offer 5900000000020 '));
+    log.mockRestore();
+    // Once Empik lists it under the barcode, it is no longer offered.
+    const empik = (await db.select().from(m.schema.marketplaceAccounts).where(m.orm.eq(m.schema.marketplaceAccounts.id, empikId)))[0];
+    await db.insert(m.schema.productListings).values({ accountId: empik.id, externalId: 'x1', sku: '5900000000020', title: 'No SKU cream', ref: {}, productId: null, lastSeenQty: 2, lastSeenAt: new Date() });
+    expect((await m.offers.publishPreview(empikId)).rows.some((r) => r.name.startsWith('No SKU'))).toBe(false);
   });
 
   it('refuses an empty choice and more than the limit', async () => {

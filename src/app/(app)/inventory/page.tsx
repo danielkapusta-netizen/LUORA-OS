@@ -25,7 +25,7 @@ type ListingRow = Awaited<ReturnType<typeof listProductsWithListings>>['listings
 
 const PAGE_SIZE = 20;
 const PERIODS = [7, 30, 90] as const;
-const SORTS = { sales: 'Best selling', name: 'Name', stock: 'Lowest stock' } as const;
+const SORTS = { sales: 'Best selling', name: 'Name', stock: 'Lowest stock', new: 'Newest' } as const;
 type Sort = keyof typeof SORTS;
 const PLATFORMS = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
 const PLATFORM_LABEL: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', vonhalsky: 'Von Halsky' };
@@ -223,7 +223,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     ? products.filter((p) => [p.sku, p.name, p.ean ?? '', ...(byProduct.get(p.id) ?? []).map((l) => l.title)].some((v) => v.toLowerCase().includes(needle)))
     : products;
   const sorted = [...filtered].sort((a, b) =>
-    sort === 'name' ? a.name.localeCompare(b.name, 'pl') : sort === 'stock' ? a.stock - b.stock : perf(b.id).units - perf(a.id).units || a.name.localeCompare(b.name, 'pl'),
+    sort === 'name'
+      ? a.name.localeCompare(b.name, 'pl')
+      : sort === 'stock'
+        ? a.stock - b.stock
+        : sort === 'new'
+          ? b.createdAt.getTime() - a.createdAt.getTime()
+          : perf(b.id).units - perf(a.id).units || a.name.localeCompare(b.name, 'pl'),
   );
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number(params.page) || 1));

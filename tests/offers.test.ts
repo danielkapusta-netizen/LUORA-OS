@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { markupPrice } from '@/lib/offers';
+import { cleanShopifyTitle } from '@/lib/sku';
 import { allegroHandlingTime, AllegroAdapter } from '@/server/integrations/marketplaces/allegro/adapter';
 import type { AllegroCredentials } from '@/server/integrations/marketplaces/allegro/client';
 import { buildOfferCsv, EmpikAdapter } from '@/server/integrations/marketplaces/empik/adapter';
@@ -30,6 +31,14 @@ const draft: OfferDraft = {
   price: '49.99',
   currency: 'PLN',
 };
+
+describe('Shopify titles', () => {
+  it('drops the default variant name', () => {
+    expect(cleanShopifyTitle('Cream 50 ml - Default Title')).toBe('Cream 50 ml');
+    expect(cleanShopifyTitle('MOEV Shampoo - Default')).toBe('MOEV Shampoo');
+    expect(cleanShopifyTitle('Cream - Travel size')).toBe('Cream - Travel size');
+  });
+});
 
 describe('offer prices', () => {
   it('adds the markup and rounds as configured', () => {

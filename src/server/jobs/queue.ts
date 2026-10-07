@@ -13,6 +13,7 @@ export const JOBS = {
   marketplaceProcessing: 'marketplace-processing',
   deliveryCheck: 'delivery-check',
   listingsImport: 'listings-import',
+  shopifyCatalogue: 'shopify-catalogue',
   stockPush: 'stock-push',
   stockReconcile: 'stock-reconcile',
   stockSyncAll: 'stock-sync-all',
@@ -40,6 +41,7 @@ export interface JobPayloads {
   [JOBS.marketplaceProcessing]: { orderId: string };
   [JOBS.deliveryCheck]: Record<string, never>;
   [JOBS.listingsImport]: { accountId: string };
+  [JOBS.shopifyCatalogue]: Record<string, never>;
   /** force: compare with the quantity last read from the marketplace, not with our last push. */
   [JOBS.stockPush]: { accountId: string; force?: boolean };
   [JOBS.stockReconcile]: Record<string, never>;
@@ -91,6 +93,7 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.marketplaceProcessing]: { retries: 3, delaySeconds: 60 },
   [JOBS.deliveryCheck]: { retries: 0, delaySeconds: 0 },
   [JOBS.listingsImport]: { retries: 1, delaySeconds: 60 },
+  [JOBS.shopifyCatalogue]: { retries: 0, delaySeconds: 0 },
   [JOBS.stockPush]: { retries: 3, delaySeconds: 60 },
   [JOBS.stockReconcile]: { retries: 0, delaySeconds: 0 },
   [JOBS.stockSyncAll]: { retries: 0, delaySeconds: 0 },

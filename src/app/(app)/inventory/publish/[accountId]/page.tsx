@@ -6,7 +6,8 @@ import { Badge, buttonClass, Card, CardBody, PageHeader } from '@/components/ui'
 import { requireAdmin } from '@/server/auth';
 import { publishPreview, type CatalogueState, type PublishPreview } from '@/server/services/marketplace-offers';
 import { listMarketplaceAccounts } from '@/server/services/settings';
-import { createOffersAction } from '../actions';
+import { createOffersAction, refreshFromShopifyAction } from '../actions';
+import { hasRealSku } from '@/lib/sku';
 
 export const metadata: Metadata = { title: 'Publish offers' };
 
@@ -44,6 +45,11 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
             <Link className={buttonClass('secondary')} href="/inventory">
               Back to inventory
             </Link>
+            <ActionForm action={refreshFromShopifyAction.bind(null, account.id)} popup="Reading Shopify">
+              <SubmitButton variant="secondary" pendingText="Reading…">
+                Refresh from Shopify
+              </SubmitButton>
+            </ActionForm>
             <Link className={buttonClass('secondary')} href={settingsHref}>
               {label} settings
             </Link>
@@ -82,7 +88,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{r.name}</p>
                     <p className="truncate text-xs text-slate-500">
-                      SKU {r.sku} · EAN {r.ean ?? '—'}
+                      {hasRealSku(r.sku) ? `SKU ${r.sku}` : 'no SKU in Shopify (the EAN is used)'} · EAN {r.ean ?? '—'}
                     </p>
                   </div>
                   <div className="text-right text-sm">

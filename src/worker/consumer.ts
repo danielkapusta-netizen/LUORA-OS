@@ -33,7 +33,7 @@ export const CRON_JOBS: Record<string, JobName[]> = {
   '*/2 * * * *': [JOBS.shipmentSweep],
   '15 */2 * * *': [JOBS.deliveryCheck, JOBS.feesSyncAll],
   '30 2 * * *': [JOBS.stockReconcile, JOBS.fxSync, JOBS.profitRecompute, JOBS.crmSync],
-  '*/15 * * * *': [JOBS.orderBackfill, JOBS.customersBackfill],
+  '*/15 * * * *': [JOBS.orderBackfill, JOBS.customersBackfill, JOBS.shopifyCatalogue],
 };
 
 export async function handleScheduled(controller: ScheduledController, env: CfEnv): Promise<void> {

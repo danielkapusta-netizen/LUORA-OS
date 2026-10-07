@@ -33,6 +33,15 @@ export const handlers: Handlers = {
   [JOBS.marketplaceProcessing]: ({ orderId }) => runMarketplaceProcessing(orderId),
   [JOBS.deliveryCheck]: () => runDeliveryCheck(),
   [JOBS.listingsImport]: ({ accountId }) => importListings(accountId),
+  // New products, barcodes and titles typed into Shopify show up in Inventory within minutes, without pressing Import.
+  [JOBS.shopifyCatalogue]: async () => {
+    const accounts = await getDb()
+      .select({ id: marketplaceAccounts.id })
+      .from(marketplaceAccounts)
+      .where(and(eq(marketplaceAccounts.enabled, true), eq(marketplaceAccounts.type, 'shopify')));
+    for (const account of accounts) await importListings(account.id);
+    return { accounts: accounts.length };
+  },
   [JOBS.stockPush]: ({ accountId, force }) => runStockPush(accountId, { force }),
   [JOBS.stockSyncAll]: () => syncAllStock(),
   [JOBS.stockReconcile]: () => runReconcile(),

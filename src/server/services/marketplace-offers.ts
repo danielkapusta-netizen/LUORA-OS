@@ -3,6 +3,7 @@
 // importing the account's listings links it to the product and the normal stock sync takes over.
 import { and, asc, eq, isNotNull } from 'drizzle-orm';
 import { markupPrice } from '../../lib/offers';
+import { hasRealSku } from '../../lib/sku';
 import { getDb } from '../db/client';
 import { marketplaceAccounts, productListings, products, type MarketplaceSettings } from '../db/schema';
 import { isMockMode } from '../env';
@@ -103,7 +104,7 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
   const linked = new Set(listings.map((l) => l.productId).filter(Boolean));
   const eans = new Set(listings.map((l) => l.ean).filter(Boolean));
   const skus = new Set(listings.map((l) => l.sku?.toLowerCase()).filter(Boolean));
-  const missing = items.filter((p) => !linked.has(p.id) && !(p.ean && eans.has(p.ean)) && !skus.has(p.sku.toLowerCase()) && (!onlyIds || onlyIds.has(p.id)));
+  const missing = items.filter((p) => !linked.has(p.id) && !(p.ean && eans.has(p.ean)) && !skus.has(p.sku.toLowerCase()) && !(p.ean && skus.has(p.ean)) && (!onlyIds || onlyIds.has(p.id)));
   if (missing.length === 0) return { rows: [], setupProblems, settings: account.settings };
 
   const details = await shopifyDetails(missing.map((p) => p.variantId!), missing);
@@ -167,7 +168,8 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
       continue;
     }
     const draft: OfferDraft = {
-      sku: row.sku,
+      // Products without a SKU in Shopify carry a made-up one; the barcode identifies the offer instead.
+      sku: hasRealSku(row.sku) ? row.sku : row.ean!,
       ean: row.ean!,
       name: details.title,
       descriptionHtml: details.descriptionHtml,
