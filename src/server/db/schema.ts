@@ -101,6 +101,8 @@ export interface MarketplaceSettings {
   allegroImpliedWarrantyId?: string;
   allegroWarrantyId?: string;
   allegroResponsibleProducerId?: string;
+  /** Allegro: the safety information (GPSR) shown on every new offer. */
+  allegroSafetyText?: string;
   allegroLocation?: { province: string; city: string; postCode: string };
   /** Allegro: create offers as inactive drafts instead of publishing them at once. */
   allegroCreateAsDraft?: boolean;
@@ -111,6 +113,7 @@ export interface MarketplaceSettings {
     returnPolicies: { id: string; name: string }[];
     impliedWarranties: { id: string; name: string }[];
     warranties: { id: string; name: string }[];
+    responsibleProducers?: { id: string; name: string }[];
   };
   /** Empik: offer state code of new offers (Mirakl "new"). */
   empikOfferState?: string;

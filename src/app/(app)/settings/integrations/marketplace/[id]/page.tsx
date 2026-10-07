@@ -3,11 +3,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ActionForm, SubmitButton } from '@/components/forms';
-import { Badge, buttonClass, Card, CardBody, CardHeader, Checkbox, Field, Input, Select } from '@/components/ui';
+import { Badge, buttonClass, Card, CardBody, CardHeader, Checkbox, Field, Input, Select, Textarea } from '@/components/ui';
 import { formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireAdmin } from '@/server/auth';
 import type { MarketplaceAccount } from '@/server/db/schema';
 import { env } from '@/server/env';
+import { DEFAULT_SAFETY_TEXT } from '@/server/integrations/marketplaces/allegro/adapter';
 import { ALLEGRO_REDIRECT_PATH } from '@/server/integrations/marketplaces/allegro/client';
 import { EMPIK_CARRIER_CODES, resolveEmpikCarrier } from '@/server/integrations/marketplaces/empik/adapter';
 import { VON_HALSKY_REDIRECT_PATH } from '@/server/integrations/marketplaces/vonhalsky/client';
@@ -78,10 +79,10 @@ function OfferPricing({ s }: { s: MarketplaceSettings }) {
 }
 
 /** A list read from Allegro to pick from; before it is loaded the saved id can still be seen and kept. */
-function AllegroChoice({ name, label, selected, items, optional }: { name: string; label: string; selected?: string; items?: { id: string; name: string }[]; optional?: boolean }) {
+function AllegroChoice({ name, label, selected, items, optional, hint }: { name: string; label: string; selected?: string; items?: { id: string; name: string }[]; optional?: boolean; hint?: string }) {
   const known = items?.some((i) => i.id === selected);
   return (
-    <Field label={label} hint={items ? undefined : 'Press “Load choices from Allegro” below first'}>
+    <Field label={label} hint={items ? hint : 'Press “Load choices from Allegro” below first'}>
       <Select name={name} defaultValue={selected ?? ''}>
         <option value="">{optional ? 'None' : 'Choose…'}</option>
         {selected && !known && <option value={selected}>{selected} (saved)</option>}
@@ -221,8 +222,15 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                     <Input name="allegroPostCode" defaultValue={s.allegroLocation?.postCode ?? ''} placeholder="00-000" />
                   </Field>
                 </div>
-                <Field label="Responsible producer id (optional)" hint="From Allegro's GPSR list, if offers are refused for missing producer information">
-                  <Input name="allegroResponsibleProducerId" defaultValue={s.allegroResponsibleProducerId ?? ''} />
+                <AllegroChoice
+                  name="allegroResponsibleProducerId"
+                  label="Responsible producer (GPSR)"
+                  selected={s.allegroResponsibleProducerId}
+                  items={s.allegroOptions?.responsibleProducers}
+                  hint="Required by Allegro on every offer. If the list is empty, add the producer first in Allegro (My Allegro → Product safety) and load the choices again."
+                />
+                <Field label="Safety information shown on every offer" hint="Allegro refuses offers without it. Leave blank for a standard cosmetics text.">
+                  <Textarea name="allegroSafetyText" rows={3} defaultValue={s.allegroSafetyText ?? ''} placeholder={DEFAULT_SAFETY_TEXT} />
                 </Field>
                 <Checkbox name="allegroCreateAsDraft" label="Create offers as inactive drafts instead of publishing them at once" defaultChecked={s.allegroCreateAsDraft ?? false} />
               </fieldset>

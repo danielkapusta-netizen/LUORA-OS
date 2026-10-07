@@ -60,6 +60,9 @@ const BILLING_PAGE = 100;
 const EAN_PARAMETER_ID = '225693';
 
 /** Allegro's handling time as an ISO 8601 duration (it accepts only a fixed set). */
+/** Safety information every cosmetic offer carries when none is configured (Allegro refuses offers without it). */
+export const DEFAULT_SAFETY_TEXT = 'Produkt kosmetyczny. Stosować zgodnie z instrukcją na opakowaniu. Chronić przed dziećmi. Unikać kontaktu z oczami. Przechowywać w suchym miejscu, z dala od źródeł ciepła.';
+
 export function allegroHandlingTime(days: number): string {
   if (days <= 0) return 'PT0S';
   if (days === 1) return 'PT24H';
@@ -379,6 +382,7 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
     const s = this.settings;
     const problems: string[] = [];
     if (!s.allegroShippingRateId) problems.push('choose the shipping rates');
+    if (!s.allegroResponsibleProducerId) problems.push('choose the responsible producer (GPSR)');
     if (!s.allegroReturnPolicyId) problems.push('choose the return policy');
     if (!s.allegroImpliedWarrantyId) problems.push('choose the implied warranty (complaints)');
     if (!s.allegroLocation?.province || !s.allegroLocation.city || !s.allegroLocation.postCode) problems.push('fill in where the goods are sent from');
@@ -408,8 +412,8 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
         productSet: [
           {
             product: { id: match.ref },
-            safetyInformation: { type: 'NO_SAFETY_INFORMATION' },
-            ...(s.allegroResponsibleProducerId ? { responsibleProducer: { type: 'ID', id: s.allegroResponsibleProducerId } } : {}),
+            responsibleProducer: { type: 'ID', id: s.allegroResponsibleProducerId },
+            safetyInformation: { type: 'TEXT', description: s.allegroSafetyText?.trim() || DEFAULT_SAFETY_TEXT },
           },
         ],
         sellingMode: { format: 'BUY_NOW', price: { amount: draft.price, currency: draft.currency } },
@@ -445,14 +449,21 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
   }
 
   /** The choices every new offer needs, for the settings page (needs the settings read scope). */
-  async publishOptions(): Promise<{ shippingRates: NamedItem[]; returnPolicies: NamedItem[]; impliedWarranties: NamedItem[]; warranties: NamedItem[] }> {
-    const [rates, returns, implied, warranties] = await Promise.all([
+  async publishOptions(): Promise<{ shippingRates: NamedItem[]; returnPolicies: NamedItem[]; impliedWarranties: NamedItem[]; warranties: NamedItem[]; responsibleProducers: NamedItem[] }> {
+    const [rates, returns, implied, warranties, producers] = await Promise.all([
       this.client.call<{ shippingRates?: NamedItem[] }>('GET', '/sale/shipping-rates'),
       this.client.call<{ returnPolicies?: NamedItem[] }>('GET', '/after-sales-service-conditions/return-policies'),
       this.client.call<{ impliedWarranties?: NamedItem[] }>('GET', '/after-sales-service-conditions/implied-warranties'),
       this.client.call<{ warranties?: NamedItem[] }>('GET', '/after-sales-service-conditions/warranties'),
+      this.client.call<{ responsibleProducers?: { id: string; name?: string; producerData?: { tradeName?: string } }[] }>('GET', '/sale/responsible-producers', { query: { limit: 100 } }),
     ]);
     const pick = (items?: NamedItem[]) => (items ?? []).map((i) => ({ id: i.id, name: i.name }));
-    return { shippingRates: pick(rates.shippingRates), returnPolicies: pick(returns.returnPolicies), impliedWarranties: pick(implied.impliedWarranties), warranties: pick(warranties.warranties) };
+    return {
+      shippingRates: pick(rates.shippingRates),
+      returnPolicies: pick(returns.returnPolicies),
+      impliedWarranties: pick(implied.impliedWarranties),
+      warranties: pick(warranties.warranties),
+      responsibleProducers: (producers.responsibleProducers ?? []).map((p) => ({ id: p.id, name: p.name ?? p.producerData?.tradeName ?? p.id })),
+    };
   }
 }
