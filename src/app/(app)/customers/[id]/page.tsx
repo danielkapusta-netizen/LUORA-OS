@@ -6,6 +6,7 @@ import { formatValue, MARKETPLACE_COLORS } from '@/components/analytics/format';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Badge, Card, CardBody, CardHeader, Field, Input, Select, Textarea, td, th } from '@/components/ui';
 import { overdueCustomers, SEGMENTS, segmentCustomers } from '@/lib/crm/segments';
+import { shortDay } from '@/lib/tasks/dates';
 import { cn, formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { allCustomers, loadCustomer } from '@/server/services/customers';
@@ -188,18 +189,20 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
             <CardHeader title="Tasks" />
             <CardBody className="space-y-4">
               <ul className="space-y-2">
-                {tasks.map(({ task, assigneeName }) => (
+                {tasks.map((task) => (
                   <li key={task.id} className="flex items-start gap-2 text-sm">
-                    <form action={toggleTaskAction.bind(null, task.id, !task.doneAt, path)}>
-                      <button aria-label={task.doneAt ? 'Mark as not done' : 'Mark as done'} className="mt-0.5 text-slate-400 hover:text-brand-600">
-                        {task.doneAt ? <CheckCircle2 className="size-4 text-emerald-600" /> : <Circle className="size-4" />}
+                    <form action={toggleTaskAction.bind(null, task.id, task.status !== 'done', path)}>
+                      <button aria-label={task.status === 'done' ? 'Mark as not done' : 'Mark as done'} className="mt-0.5 text-slate-400 hover:text-brand-600">
+                        {task.status === 'done' ? <CheckCircle2 className="size-4 text-emerald-600" /> : <Circle className="size-4" />}
                       </button>
                     </form>
-                    <span className={cn(task.doneAt && 'text-slate-400 line-through')}>
-                      {task.title}
+                    <span className={cn(task.status === 'done' && 'text-slate-400 line-through')}>
+                      <Link href={`/tasks/${task.id}`} className="hover:underline">
+                        {task.title}
+                      </Link>
                       <span className="block text-xs text-slate-500">
-                        {task.dueAt ? `due ${formatDate(task.dueAt, false)}` : 'no due date'}
-                        {assigneeName && ` · ${assigneeName}`}
+                        {task.dueDate ? `due ${shortDay(task.dueDate)}` : 'no due date'}
+                        {task.assignees.length > 0 && ` · ${task.assignees.map((a) => a.name).join(', ')}`}
                       </span>
                     </span>
                   </li>

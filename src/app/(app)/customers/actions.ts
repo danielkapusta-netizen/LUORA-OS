@@ -6,7 +6,8 @@ import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
 import { enqueue, JOBS } from '@/server/jobs/queue';
 import { saveCrmSettings } from '@/server/services/crm-sync';
-import { addCustomerNote, addCustomerTask, mergeCustomers, setCustomerTags, setTaskDone } from '@/server/services/customers';
+import { addCustomerNote, mergeCustomers, setCustomerTags } from '@/server/services/customers';
+import { createTask, setTaskDone } from '@/server/services/tasks';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 
@@ -28,22 +29,22 @@ export async function saveTagsAction(customerId: string, _prev: ActionResult, fd
   });
 }
 
+/** A task about this customer: it lives with all the other tasks and links back here. */
 export async function addTaskAction(customerId: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
   const user = await requireUser();
   return attempt(async () => {
-    const due = text(fd, 'dueAt');
-    await addCustomerTask(customerId, { title: text(fd, 'title'), dueAt: due ? new Date(`${due}T09:00:00`) : null, assigneeId: text(fd, 'assigneeId') || null }, user.id);
-    revalidatePath(`/customers/${customerId}`);
-    revalidatePath('/customers/tasks');
+    const assignee = text(fd, 'assigneeId');
+    await createTask({ title: text(fd, 'title'), dueDate: text(fd, 'dueAt') || null, customerId, assigneeIds: assignee ? [assignee] : [] }, user);
+    revalidatePath('/', 'layout');
     return 'Task added';
   });
 }
 
 export async function toggleTaskAction(taskId: string, done: boolean, path: string): Promise<void> {
-  await requireUser();
-  await setTaskDone(taskId, done);
+  const user = await requireUser();
+  await setTaskDone(taskId, done, user).catch((err) => console.error(err));
   revalidatePath(path);
-  revalidatePath('/');
+  revalidatePath('/', 'layout');
 }
 
 export async function mergeAction(targetId: string, sourceIds: string[]): Promise<void> {

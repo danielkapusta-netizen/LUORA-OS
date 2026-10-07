@@ -7,6 +7,8 @@ import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { setProductCost } from '../services/costs';
 import { importListings } from '../services/inventory';
 import { createDefaultRules, ensureDefaultPresets } from '../services/settings';
+import { DEMO_USER_DOMAIN } from '../services/tasks';
+import { seedDemoTasks } from './seed-tasks';
 import { getDb } from './client';
 import { carrierAccounts, marketplaceAccounts, products, shippingRules, users } from './schema';
 
@@ -30,6 +32,7 @@ export async function seed(admin: { email?: string; password?: string } = {}): P
     await db.insert(users).values({ email, name: 'Admin', role: 'admin', passwordHash: await hashPassword(password) });
     console.log(`Created admin ${email}`);
   }
+  const [adminUser] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
   await ensureDefaultPresets();
 
   if (!isMockMode()) return;
@@ -65,5 +68,14 @@ export async function seed(admin: { email?: string; password?: string } = {}): P
     const price = MOCK_CATALOG.find((c) => c.sku === p.sku)!.price;
     await setProductCost(p.id, { unitCost: Math.round(price * 0.32 * 100) / 100 }, null, 'manual');
   }
-  console.log('Created demo accounts and shipping rules (mock mode)');
+  // Two colleagues, so tasks can be shared out in the demo (they share the admin's password).
+  const colleague = async (name: string, mail: string) => {
+    const address = `${mail}@${DEMO_USER_DOMAIN}`;
+    const [found] = await db.select({ id: users.id }).from(users).where(eq(users.email, address));
+    if (found) return found.id;
+    const [row] = await db.insert(users).values({ email: address, name, role: 'staff', passwordHash: await hashPassword(password) }).returning({ id: users.id });
+    return row.id;
+  };
+  await seedDemoTasks({ admin: adminUser.id, ola: await colleague('Ola Nowak', 'ola'), marek: await colleague('Marek Zieliński', 'marek') });
+  console.log('Created demo accounts, shipping rules and tasks (mock mode)');
 }

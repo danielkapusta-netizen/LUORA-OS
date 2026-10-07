@@ -8,7 +8,6 @@ const TABS = [
   { href: '/customers', label: 'Customers', exact: true },
   { href: '/customers/segments', label: 'Segments' },
   { href: '/customers/duplicates', label: 'Possible duplicates' },
-  { href: '/customers/tasks', label: 'Tasks' },
 ];
 
 export function CustomerTabs() {
@@ -17,7 +16,7 @@ export function CustomerTabs() {
     <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
       {TABS.map((t) => {
         // A customer's own page sits under /customers but belongs to the list tab.
-        const active = t.exact ? pathname === t.href || /^\/customers\/(?!segments|duplicates|tasks)[^/]+$/.test(pathname) : pathname.startsWith(t.href);
+        const active = t.exact ? pathname === t.href || /^\/customers\/(?!segments|duplicates)[^/]+$/.test(pathname) : pathname.startsWith(t.href);
         return (
           <Link
             key={t.href}

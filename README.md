@@ -112,8 +112,23 @@ How it fits together: `services/profit.ts` keeps `sales_lines` (profit per order
 
 - Every order is linked to a customer (`services/customers.ts`). A buyer is recognised by the marketplace's buyer id (Allegro, Empik) or a real e-mail; Allegro and Empik relay e-mails are never used to join people. The same real e-mail on two marketplaces makes one customer. Orders synced before the CRM are linked in the background (`customers-backfill`, every 15 minutes).
 - **Customers** (`/customers`): lifetime revenue and profit, orders, basket, segment, marketplaces and tags; filters, sorting and a CSV export (admins). Each customer has a profile with their orders and profit, what they buy, contact details and identities, notes, tags and tasks.
-- **Segments**: VIP, Loyal, Promising, New, One-time, At risk, Can't lose and Lost (by recency, number of orders and spend), monthly cohorts, and regulars who went quiet. **Possible duplicates** lists customers with the same phone, or the same name at the same postcode, to merge. **Tasks** lists open follow-ups; yours also show on the Dashboard.
+- **Segments**: VIP, Loyal, Promising, New, One-time, At risk, Can't lose and Lost (by recency, number of orders and spend), monthly cohorts, and regulars who went quiet. **Possible duplicates** lists customers with the same phone, or the same name at the same postcode, to merge. Follow-ups you add on a customer are ordinary tasks (see Tasks), linked back to the customer.
 - **Shopify tags**: chosen segments (and optionally staff tags) are written to Shopify customers as tags such as `luora-vip`, for Shopify Email or Klaviyo. It needs the `read_customers` and `write_customers` scopes, starts in dry run, and only covers customers who bought on Shopify: Allegro and Empik buyer data may not be used for your own marketing.
+
+## Tasks
+
+What the team has to do, who is on it and when (`/tasks`, in the sidebar with a badge for your tasks due today or late).
+
+- **Overview**: Projects (cards with the people on them and "N tasks open"), Tags, the tasks of a day as cards (overdue first, then the day, then tasks without a day, then what is coming up), productivity (tasks done today, finished on time, and a bar for each of the last seven days) and a week calendar. Click a day to see it.
+- **Board**: To do, In progress and Done as columns of cards. Drag a card to another column; on a touch screen use the card's menu ("Move to…").
+- **Calendar**: a month, Monday first, with each day's tasks as chips in the colour of their project; click a day to list it and add a task to it.
+- **Projects**: a card per project with progress, open and overdue counts and its people; a project page shows its tasks as a board. Archive a project to hide it; delete is only possible while it has no tasks.
+- **A task** has a title, description, status, priority, project, a day with an optional time slot, tags, a checklist, comments, and **several people** it is assigned to. Every change (status, people, day, priority, project) is written to the task's activity trail. A task can be linked to a customer or an order: the order page has a Tasks card, the customer page lists its tasks.
+- Filters on every page: everyone, mine, one person or unassigned; a project; a tag; a search. They live in the address, so a view can be shared.
+- Anyone who is signed in can create and edit tasks; only the person who created a task, or an admin, can delete it. There are no e-mail notifications: people see their tasks in the sidebar badge and on the Dashboard ("My tasks").
+- In demo mode the seed adds two colleagues, four projects and about thirty tasks around today; "Remove demo data" takes them away.
+
+Dates are plain Warsaw days (`YYYY-MM-DD`) and times (`HH:MM`), so the calendar needs no time-zone arithmetic. The code is in `services/tasks.ts` (database), `src/lib/tasks/` (dates, colours, grouping and figures, with no database) and `src/components/tasks/`.
 
 ## How it works
 

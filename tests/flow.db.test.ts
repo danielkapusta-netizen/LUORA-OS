@@ -971,14 +971,16 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const source = [...byBuyer('Relay BUYER-2')][0]!;
     const userId = await adminId();
     await customers.addCustomerNote(source, 'Prefers fragrance-free', userId);
-    await customers.addCustomerTask(source, { title: 'Send a sample', dueAt: null, assigneeId: userId }, userId);
+    const taskService = await import('@/server/services/tasks');
+    await taskService.createTask({ title: 'Send a sample', customerId: source, assigneeIds: [userId] }, { id: userId });
     await customers.mergeCustomers(target, [source]);
     const merged = await customers.loadCustomer(target);
     expect(merged!.orders).toHaveLength(3);
     expect(merged!.notes.map((n) => n.note.body)).toContain('Prefers fragrance-free');
     expect(merged!.identities.map((i) => i.value).sort()).toEqual(['BUYER-1', 'BUYER-2']);
     expect(await customers.loadCustomer(source)).toBeNull();
-    expect((await customers.openTasks(userId)).map((t) => t.task.title)).toContain('Send a sample');
+    // The task moved with the merge: it is now about the customer that was kept.
+    expect((await taskService.listTasks({ assignee: userId, status: 'open' })).map((t) => [t.title, t.customerId])).toContainEqual(['Send a sample', target]);
     const dupes = await customers.duplicateSuggestions();
     expect(Array.isArray(dupes)).toBe(true);
   });

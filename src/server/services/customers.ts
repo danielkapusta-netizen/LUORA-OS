@@ -7,14 +7,15 @@ import {
   customerIdentities,
   customerNotes,
   customers,
-  customerTasks,
   orders,
   salesLines,
+  tasks,
   users,
   type Customer,
   type CustomerIdentityKind,
   type Order,
 } from '../db/schema';
+import { listTasks } from './tasks';
 
 /** E-mail domains that are marketplace relays, not the buyer's own address. */
 const RELAY = /@(.+\.)?(allegromail\.(pl|com)|allegro\.pl|mirakl\.net|empik\.com|marketplace\.empik\.com|inpost\.pl|members\.ebay\.com)$/i;
@@ -138,7 +139,7 @@ export async function mergeCustomers(targetId: string, sourceIds: string[], know
     db.update(salesLines).set({ customerId: targetId }).where(inArray(salesLines.customerId, sources)),
     db.update(customerIdentities).set({ customerId: targetId }).where(inArray(customerIdentities.customerId, sources)),
     db.update(customerNotes).set({ customerId: targetId }).where(inArray(customerNotes.customerId, sources)),
-    db.update(customerTasks).set({ customerId: targetId }).where(inArray(customerTasks.customerId, sources)),
+    db.update(tasks).set({ customerId: targetId }).where(inArray(tasks.customerId, sources)),
     db.update(customers).set({ tags, email }).where(eq(customers.id, targetId)),
     db.delete(customers).where(inArray(customers.id, sources)),
   ]);
@@ -210,7 +211,7 @@ export async function loadCustomer(id: string) {
   const db = getDb();
   const [customer] = await db.select().from(customers).where(eq(customers.id, id));
   if (!customer) return null;
-  const [identities, orderRows, notes, tasks, products] = await Promise.all([
+  const [identities, orderRows, notes, customerTasks, products] = await Promise.all([
     db.select().from(customerIdentities).where(eq(customerIdentities.customerId, id)),
     db.all<{ id: string; externalNumber: string; marketplace: string; status: string; placedAt: number; totalAmount: string; currency: string; gross: number | null; profit: number | null; items: number }>(sql`
       select o.id, o.external_number as externalNumber, o.marketplace, o.status, o.placed_at as placedAt, o.total_amount as totalAmount, o.currency,
@@ -224,12 +225,7 @@ export async function loadCustomer(id: string) {
       .leftJoin(users, eq(users.id, customerNotes.userId))
       .where(eq(customerNotes.customerId, id))
       .orderBy(desc(customerNotes.createdAt)),
-    db
-      .select({ task: customerTasks, assigneeName: users.name })
-      .from(customerTasks)
-      .leftJoin(users, eq(users.id, customerTasks.assigneeId))
-      .where(eq(customerTasks.customerId, id))
-      .orderBy(asc(customerTasks.doneAt), asc(customerTasks.dueAt)),
+    listTasks({ customerId: id }),
     db.all<{ name: string; units: number; gross: number }>(sql`
       select coalesce(p.name, i.name) as name, sum(l.quantity) as units, sum(l.gross) as gross
       from ${salesLines} l join order_items i on i.id = l.item_id left join products p on p.id = l.product_id
@@ -238,7 +234,7 @@ export async function loadCustomer(id: string) {
   const addresses = await db.all<{ address: string }>(sql`
     select distinct json_extract(shipping_address, '$.street') || ', ' || json_extract(shipping_address, '$.postalCode') || ' ' || json_extract(shipping_address, '$.city') as address
     from ${orders} where customer_id = ${id} limit 10`);
-  return { customer, identities, orders: orderRows.map((o) => ({ ...o, placedAt: new Date(o.placedAt) })), notes, tasks, products, addresses: addresses.map((a) => a.address) };
+  return { customer, identities, orders: orderRows.map((o) => ({ ...o, placedAt: new Date(o.placedAt) })), notes, tasks: customerTasks, products, addresses: addresses.map((a) => a.address) };
 }
 
 export async function allCustomers(): Promise<Customer[]> {
@@ -285,7 +281,7 @@ export async function duplicateSuggestions(limit = 50) {
   return wanted.map((p) => ({ reason: p.reason, customers: p.ids.map((id) => people.get(id)).filter((c): c is Customer => Boolean(c)) })).filter((p) => p.customers.length > 1);
 }
 
-// ---------------------------------------------------------------- notes, tags, tasks
+// ---------------------------------------------------------------- notes and tags (tasks live in services/tasks.ts)
 
 export async function addCustomerNote(customerId: string, body: string, userId: string): Promise<void> {
   const text = body.trim();
@@ -295,25 +291,4 @@ export async function addCustomerNote(customerId: string, body: string, userId: 
 export async function setCustomerTags(customerId: string, tags: string[]): Promise<void> {
   const clean = [...new Set(tags.map((t) => t.trim().toLowerCase().replace(/\s+/g, '-')).filter(Boolean))];
   await getDb().update(customers).set({ tags: clean }).where(eq(customers.id, customerId));
-}
-
-export async function addCustomerTask(customerId: string, input: { title: string; dueAt: Date | null; assigneeId: string | null }, userId: string): Promise<void> {
-  const title = input.title.trim();
-  if (!title) throw new Error('Describe the task');
-  await getDb().insert(customerTasks).values({ customerId, title, dueAt: input.dueAt, assigneeId: input.assigneeId, createdBy: userId });
-}
-
-export async function setTaskDone(taskId: string, done: boolean): Promise<void> {
-  await getDb().update(customerTasks).set({ doneAt: done ? new Date() : null }).where(eq(customerTasks.id, taskId));
-}
-
-/** Open tasks, soonest due first; for one person when `assigneeId` is given. */
-export async function openTasks(assigneeId?: string) {
-  return getDb()
-    .select({ task: customerTasks, customerName: customers.displayName, assigneeName: users.name })
-    .from(customerTasks)
-    .innerJoin(customers, eq(customers.id, customerTasks.customerId))
-    .leftJoin(users, eq(users.id, customerTasks.assigneeId))
-    .where(and(isNull(customerTasks.doneAt), assigneeId ? eq(customerTasks.assigneeId, assigneeId) : undefined))
-    .orderBy(sql`${customerTasks.dueAt} is null`, asc(customerTasks.dueAt));
 }

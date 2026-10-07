@@ -7,12 +7,18 @@ import { PrintLabelButton } from '@/components/print-label-button';
 import { MarketplaceBadge, ShipmentBadge, StatusBadge } from '@/components/badges';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Alert, buttonClass, Card, CardBody, CardHeader, Field, Input, Select, td, Textarea, th } from '@/components/ui';
+import { AvatarStack } from '@/components/tasks/avatars';
+import { DueChip } from '@/components/tasks/chips';
+import { DoneToggle } from '@/components/tasks/done-toggle';
+import { NewTaskDialog } from '@/components/tasks/task-dialog';
+import { today as warsawToday } from '@/lib/tasks/dates';
 import { CARRIER_LABELS, cn, formatDate, formatMoney, SERVICE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { getOrderDetail } from '@/server/services/orders';
 import { orderProfit } from '@/server/analytics/dataset';
 import { ProfitBreakdown } from '@/components/analytics/profit-breakdown';
 import { listUsers } from '@/server/services/settings';
+import { listProjects, listTasks, tagCounts } from '@/server/services/tasks';
 import { shippingFormData } from '@/server/services/shipping';
 import { canTransition, MANUAL_TARGETS, STATUS_LABELS } from '@/server/services/workflow';
 import {
@@ -45,12 +51,13 @@ const EVENT_DOT: Record<string, string> = {
 };
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   const detail = await getOrderDetail(id);
   if (!detail) notFound();
   const { order, account, items, events, shipments } = detail;
-  const [users, profitLines] = await Promise.all([listUsers(), orderProfit(order.id)]);
+  const [users, profitLines, orderTasks, projectCards, tagList] = await Promise.all([listUsers(), orderProfit(order.id), listTasks({ orderId: id }), listProjects(), tagCounts({ limit: 20 })]);
+  const todayKey = warsawToday();
 
   const active = shipments.find((s) => s.state === 'pending' || s.state === 'created');
   const canShip = !active && order.readyToShip && !['cancelled', 'shipped', 'delivered'].includes(order.status);
@@ -332,6 +339,47 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 </Field>
                 <SubmitButton variant="secondary">Save</SubmitButton>
               </ActionForm>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Tasks"
+              description="Things to do about this order."
+              actions={
+                <NewTaskDialog
+                  people={users.map((u) => ({ id: u.id, name: u.name }))}
+                  projects={projectCards.map((p) => ({ id: p.project.id, name: p.project.name }))}
+                  tags={tagList.map((t) => t.tag)}
+                  meId={user.id}
+                  label="Add"
+                  variant="secondary"
+                  size="sm"
+                  defaults={{ orderId: order.id, title: `Order ${order.externalNumber}: ` }}
+                />
+              }
+            />
+            <CardBody>
+              {orderTasks.length === 0 ? (
+                <p className="text-sm text-slate-500">No tasks for this order.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {orderTasks.map((t) => (
+                    <li key={t.id} className="flex items-start gap-2.5">
+                      <DoneToggle id={t.id} done={t.status === 'done'} title={t.title} />
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/tasks/${t.id}`} className={cn('text-sm font-medium hover:underline', t.status === 'done' && 'text-slate-400 line-through')}>
+                          {t.title}
+                        </Link>
+                        <div className="mt-1">
+                          <DueChip task={t} today={todayKey} />
+                        </div>
+                      </div>
+                      <AvatarStack people={t.assignees} size="sm" />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardBody>
           </Card>
 

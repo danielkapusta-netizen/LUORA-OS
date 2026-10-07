@@ -20,6 +20,7 @@ import { BUYER_CHOICE } from '../integrations/carriers/allegro-shipping/adapter'
 import { EmpikAdapter } from '../integrations/marketplaces/empik/adapter';
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { getCarrierAdapter, getMarketplaceAdapter, loadCarrierAccount, loadMarketplaceAccount, readCredentials, withConfigured } from './accounts';
+import { removeDemoTasks } from './tasks';
 
 export const DEFAULT_PRESETS = [
   { name: 'Paczkomat A (small)', lengthCm: 64, widthCm: 38, heightCm: 8, weightKg: '5', inpostTemplate: 'small', isDefault: false },
@@ -113,8 +114,10 @@ export async function removeDemoData(): Promise<{ accounts: number; carriers: nu
       and not exists (select 1 from product_listings l where l.product_id = products.id)
       and not exists (select 1 from order_items i where i.product_id = products.id)`);
 
-  // Demo customers left without orders (notes and tasks cascade).
+  // Demo customers left without orders (notes cascade; their tasks stay, unlinked).
   await db.run(sql`delete from customers where not exists (select 1 from orders o where o.customer_id = customers.id)`);
+  // The demo projects with their tasks, and the demo colleagues.
+  await removeDemoTasks();
 
   return { accounts: markets.length, carriers: carriers.length, orders: orderIds.length };
 }

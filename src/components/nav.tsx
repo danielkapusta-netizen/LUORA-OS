@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, Truck, Users } from 'lucide-react';
+import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Truck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -11,12 +11,13 @@ const ITEMS = [
   { href: '/shipments', label: 'Shipments', icon: Truck },
   { href: '/inventory', label: 'Inventory', icon: Boxes },
   { href: '/customers', label: 'Customers', icon: Users },
+  { href: '/tasks', label: 'Tasks', icon: SquareCheckBig },
   { href: '/accounting', label: 'Accounting', icon: ReceiptText },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-export function Nav({ userName, mock, logoutAction }: { userName: string; mock: boolean; logoutAction: () => Promise<void> }) {
+export function Nav({ userName, mock, taskBadge = 0, logoutAction }: { userName: string; mock: boolean; /** My tasks due today or already late. */ taskBadge?: number; logoutAction: () => Promise<void> }) {
   const pathname = usePathname();
   return (
     <aside className="no-print flex w-full shrink-0 flex-col bg-sidebar text-white md:sticky md:top-0 md:h-screen md:w-60">
@@ -39,6 +40,11 @@ export function Nav({ userName, mock, logoutAction }: { userName: string; mock: 
             >
               <Icon className="size-4" />
               {label}
+              {href === '/tasks' && taskBadge > 0 && (
+                <span className="ml-auto rounded-full bg-orange-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white" title="Your tasks due today or late">
+                  {taskBadge > 99 ? '99+' : taskBadge}
+                </span>
+              )}
             </Link>
           );
         })}

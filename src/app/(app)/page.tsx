@@ -12,7 +12,10 @@ import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { statusCounts } from '@/server/services/orders';
-import { allCustomers, openTasks, orderDatesByCustomer } from '@/server/services/customers';
+import { allCustomers, orderDatesByCustomer } from '@/server/services/customers';
+import { listTasks } from '@/server/services/tasks';
+import { dayLabel, today as warsawToday } from '@/lib/tasks/dates';
+import { dueState } from '@/lib/tasks/model';
 import { overdueCustomers, repeatStats } from '@/lib/crm/segments';
 
 export const metadata: Metadata = { title: 'Dashboard' };
@@ -27,7 +30,8 @@ const OPEN = [
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<ViewParams & { rank?: string; pulse?: string }> }) {
   const user = await requireUser();
   const params = await searchParams;
-  const [view, counts, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), openTasks(user.id), allCustomers(), orderDatesByCustomer()]);
+  const [view, counts, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), listTasks({ assignee: user.id, status: 'open', limit: 40 }), allCustomers(), orderDatesByCustomer()]);
+  const todayKey = warsawToday();
   const repeat = repeatStats(customerList, dates);
   const byCustomer = new Map(customerList.map((c) => [c.id, c]));
   const quietRegulars = overdueCustomers(dates).filter((o) => byCustomer.get(o.id));
@@ -67,20 +71,26 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <CardBody className="space-y-2">
               <p className="flex items-center justify-between text-sm font-semibold">
                 My tasks
-                <Link href="/customers/tasks" className="text-xs font-normal text-brand-700 hover:underline">
+                <Link href="/tasks?who=me" className="text-xs font-normal text-brand-700 hover:underline">
                   All tasks →
                 </Link>
               </p>
               {tasks.length ? (
                 <ul className="space-y-1 text-sm">
-                  {tasks.slice(0, 5).map(({ task, customerName }) => (
-                    <li key={task.id} className="flex justify-between gap-3">
-                      <Link href={`/customers/${task.customerId}`} className="truncate hover:underline">
-                        {task.title} <span className="text-slate-500">· {customerName}</span>
-                      </Link>
-                      <span className="shrink-0 text-xs text-slate-500">{task.dueAt ? formatDate(task.dueAt) : ''}</span>
-                    </li>
-                  ))}
+                  {tasks.slice(0, 5).map((task) => {
+                    const state = dueState(task, todayKey);
+                    return (
+                      <li key={task.id} className="flex justify-between gap-3">
+                        <Link href={`/tasks/${task.id}`} className="truncate hover:underline">
+                          {task.title}
+                          {(task.customer || task.project) && <span className="text-slate-500"> · {task.customer?.name ?? task.project?.name}</span>}
+                        </Link>
+                        <span className={cn('shrink-0 text-xs text-slate-500', state === 'overdue' && 'font-medium text-red-700', state === 'today' && 'font-medium text-brand-700')}>
+                          {task.dueDate ? dayLabel(task.dueDate, todayKey) : ''}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="text-sm text-slate-500">Nothing assigned to you.</p>
