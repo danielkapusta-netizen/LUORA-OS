@@ -59,6 +59,37 @@ export interface NormalizedOrderItem {
   /** Offer id (Allegro, Empik) or variant id (Shopify) the line was bought from. */
   externalProductId?: string | null;
   imageUrl?: string | null;
+  /** Discount on the whole line (all units); `unitPrice` is before it. */
+  discountAmount?: string | null;
+}
+
+export type FeeKind = 'commission' | 'promotion' | 'delivery' | 'payment' | 'other';
+
+/** A charge for the order, reported inside the order itself (Empik commission, Shopify Payments fee). */
+export interface NormalizedFee {
+  /** Unique within the source. */
+  externalId: string;
+  kind: FeeKind;
+  label?: string | null;
+  /** Line the fee belongs to, when the provider says. */
+  externalLineId?: string | null;
+  /** Gross amount (VAT included), positive for a charge, negative when the fee is given back. */
+  amount: string;
+  taxAmount?: string | null;
+  currency: string;
+  occurredAt: Date;
+}
+
+export interface NormalizedRefund {
+  /** Unique within the order. */
+  externalId: string;
+  externalLineId?: string | null;
+  /** Positive amount returned to the buyer. */
+  amount: string;
+  currency: string;
+  quantity?: number | null;
+  restocked?: boolean;
+  refundedAt: Date;
 }
 
 export interface NormalizedOrder {
@@ -87,6 +118,12 @@ export interface NormalizedOrder {
   items: NormalizedOrderItem[];
   /** Set when the buyer asked for an invoice. */
   invoiceRequest?: InvoiceRequest | null;
+  /** Discounts on the whole order; prices and the total are already after them. */
+  discountAmount?: string | null;
+  /** Fees the order payload itself reports. Undefined = the marketplace reports none here. */
+  fees?: NormalizedFee[];
+  /** Refunds the order payload reports. Undefined = refunds come from elsewhere. */
+  refunds?: NormalizedRefund[];
   revision?: string | null;
   raw: unknown;
 }
@@ -115,11 +152,18 @@ export interface Listing {
   sku: string | null;
   title: string;
   quantity: number | null;
+  /** False when the offer is ended, inactive or not published yet. Unknown (undefined) counts as active. */
+  active?: boolean;
+  /** The marketplace's status text, shown as is. */
+  status?: string | null;
   /** Barcode (EAN/GTIN), when the marketplace exposes it. */
   ean?: string | null;
   /** Provider ids needed to update stock later (inventory item id, offer sku, ...). */
   ref: Record<string, string | number | null>;
   imageUrl?: string | null;
+  /** Shopify: product vendor and type, used as brand and category in analytics. */
+  brand?: string | null;
+  category?: string | null;
 }
 
 export interface StockUpdate {

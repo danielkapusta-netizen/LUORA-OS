@@ -1,6 +1,7 @@
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getCfEnv } from '../cf';
 import { encryptJson, hashPassword } from '../crypto';
+import { isRole, type Role } from '../../lib/permissions';
 import { chunk, getDb } from '../db/client';
 import {
   carrierAccounts,
@@ -20,6 +21,7 @@ import { BUYER_CHOICE } from '../integrations/carriers/allegro-shipping/adapter'
 import { EmpikAdapter } from '../integrations/marketplaces/empik/adapter';
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { getCarrierAdapter, getMarketplaceAdapter, loadCarrierAccount, loadMarketplaceAccount, readCredentials, withConfigured } from './accounts';
+import { removeDemoTasks } from './tasks';
 
 export const DEFAULT_PRESETS = [
   { name: 'Paczkomat A (small)', lengthCm: 64, widthCm: 38, heightCm: 8, weightKg: '5', inpostTemplate: 'small', isDefault: false },
@@ -112,6 +114,11 @@ export async function removeDemoData(): Promise<{ accounts: number; carriers: nu
     delete from products where sku in (${sql.join(demoSkus.map((s) => sql`${s}`), sql`, `)})
       and not exists (select 1 from product_listings l where l.product_id = products.id)
       and not exists (select 1 from order_items i where i.product_id = products.id)`);
+
+  // Demo customers left without orders (notes cascade; their tasks stay, unlinked).
+  await db.run(sql`delete from customers where not exists (select 1 from orders o where o.customer_id = customers.id)`);
+  // The demo projects with their tasks, and the demo colleagues.
+  await removeDemoTasks();
 
   return { accounts: markets.length, carriers: carriers.length, orders: orderIds.length };
 }
@@ -299,15 +306,30 @@ export async function listUsers() {
     .orderBy(asc(users.createdAt));
 }
 
-export async function createUser(input: { email: string; name: string; password: string; role: 'admin' | 'staff' }): Promise<void> {
+export async function createUser(input: { email: string; name: string; password: string; role: Role }): Promise<void> {
   if (input.password.length < 8) throw new Error('Password must have at least 8 characters');
   await getDb()
     .insert(users)
     .values({ email: input.email.trim().toLowerCase(), name: input.name.trim(), role: input.role, passwordHash: await hashPassword(input.password) });
 }
 
+async function adminCount(): Promise<number> {
+  const [row] = await getDb().select({ n: sql<number>`count(*)` }).from(users).where(eq(users.role, 'admin'));
+  return row?.n ?? 0;
+}
+
 export async function deleteUser(id: string): Promise<void> {
+  const [target] = await getDb().select({ role: users.role }).from(users).where(eq(users.id, id));
+  if (target?.role === 'admin' && (await adminCount()) <= 1) throw new Error('There must be at least one admin');
   await getDb().delete(users).where(eq(users.id, id));
+}
+
+export async function setUserRole(id: string, role: Role): Promise<void> {
+  if (!isRole(role)) throw new Error('Unknown role');
+  const [target] = await getDb().select({ role: users.role }).from(users).where(eq(users.id, id));
+  if (!target) throw new Error('User not found');
+  if (target.role === 'admin' && role !== 'admin' && (await adminCount()) <= 1) throw new Error('There must be at least one admin');
+  await getDb().update(users).set({ role }).where(eq(users.id, id));
 }
 
 export async function resetPassword(id: string, password: string): Promise<void> {

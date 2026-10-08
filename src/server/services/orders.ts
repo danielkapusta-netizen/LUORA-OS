@@ -1,14 +1,18 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { courierOf, type Courier } from '../../lib/couriers';
 import { chunk, getDb, insertStatements, type Tx } from '../db/client';
 import {
   marketplaceAccounts,
   orderEvents,
+  orderFees,
   orderItems,
+  orderRefunds,
   orders,
   productListings,
   products,
   shipments,
   users,
+  type FeeSource,
   type MarketplaceAccount,
   type Order,
   type OrderStatus,
@@ -18,6 +22,8 @@ import type { Address, NormalizedOrder, OrderRef } from '../integrations/types';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
 import { applyOrderStock, scheduleStockPush, stockCoversOrder } from './inventory';
+import { resolveCustomers } from './customers';
+import { refreshProfit } from './profit';
 import { awaitingPacking, changeStatus } from './workflow';
 
 const MAX_ROUNDS_PER_SYNC = 20;
@@ -62,11 +68,19 @@ export async function syncAccount(accountId: string): Promise<SyncSummary> {
   }
 }
 
-function initialStatus(n: NormalizedOrder): OrderStatus {
+function initialStatus(n: NormalizedOrder, historical: boolean): OrderStatus {
   if (n.cancelled) return 'cancelled';
-  if (n.fulfilled) return 'shipped';
+  // A past order was dealt with outside Luora (or before it): it is closed, never put on To do.
+  if (n.fulfilled || historical) return 'shipped';
   return 'new';
 }
+
+/** Where fees reported inside an order come from, by marketplace. */
+const FEE_SOURCE: Partial<Record<MarketplaceAccount['type'], FeeSource>> = {
+  shopify: 'shopify_payments',
+  empik: 'mirakl',
+  allegro: 'allegro_billing',
+};
 
 /** The import event. An order that reaches us days after it was placed says so, so it doesn't look new. */
 export function importMessage(accountName: string, placedAt: Date, now = new Date()): string {
@@ -80,10 +94,16 @@ const EDITABLE: OrderStatus[] = ['new', 'processing', 'on_hold'];
 export async function upsertOrders(
   account: Pick<MarketplaceAccount, 'id' | 'type' | 'name'>,
   incoming: NormalizedOrder[],
+  /** historical: past orders from the history import (no stock, labels or invoices). */
+  options: { historical?: boolean } = {},
 ): Promise<SyncSummary & { newOrderIds: string[] }> {
+  const historical = options.historical ?? false;
   const db = getDb();
   const newOrderIds: string[] = [];
+  let created = 0;
   let updated = 0;
+  /** Orders whose profit lines need rebuilding. */
+  const touched: string[] = [];
   let stockChanged = false;
 
   for (const n of incoming) {
@@ -105,7 +125,7 @@ export async function upsertOrders(
             externalNumber: n.externalNumber,
             marketplaceStatus: n.marketplaceStatus,
             readyToShip: n.readyToShip,
-            status: initialStatus(n),
+            status: initialStatus(n, historical),
             buyer: n.buyer,
             shippingAddress: n.shippingAddress,
             deliveryMethodId: n.deliveryMethodId ?? null,
@@ -117,22 +137,33 @@ export async function upsertOrders(
             currency: n.currency,
             placedAt: n.placedAt,
             paidAt: n.paidAt ?? null,
-            shippedAt: n.fulfilled ? new Date() : null,
+            shippedAt: n.fulfilled && !historical ? new Date() : null,
             revision: n.revision ?? null,
             invoiceRequest: n.invoiceRequest ?? null,
+            discountAmount: n.discountAmount ?? null,
+            historical,
             raw: n.raw as object,
           });
         await tx.batch([
           insertOrder,
           ...(await itemStatements(tx, account.id, id, n)),
-          tx.insert(orderEvents).values({ orderId: id, type: 'sync', message: importMessage(account.name, n.placedAt) }),
+          tx.insert(orderEvents).values({
+            orderId: id,
+            type: 'sync',
+            message: historical ? `Imported from ${account.name} history` : importMessage(account.name, n.placedAt),
+          }),
         ] as unknown as Parameters<Tx['batch']>[0]);
+        await storeMoneyEvents(tx, account.type, id, n);
+        created++;
+        touched.push(id);
+        if (historical) return;
         if (!n.cancelled && !n.fulfilled) stockChanged = (await applyOrderStock(tx, id)) || stockChanged;
         newOrderIds.push(id);
         return;
       }
 
       updated++;
+      touched.push(existing.id);
       await tx
         .update(orders)
         .set({
@@ -142,6 +173,7 @@ export async function upsertOrders(
           paidAt: n.paidAt ?? existing.paidAt,
           // Buyers can add invoice details after buying, so this always follows the marketplace.
           invoiceRequest: n.invoiceRequest ?? null,
+          discountAmount: n.discountAmount ?? existing.discountAmount,
           raw: n.raw as object,
           ...(EDITABLE.includes(existing.status)
             ? {
@@ -157,6 +189,16 @@ export async function upsertOrders(
             : {}),
         })
         .where(eq(orders.id, existing.id));
+
+      // Discounts can change after the order (e.g. a price correction); the lines follow the marketplace.
+      for (const item of n.items) {
+        if (item.discountAmount === undefined) continue;
+        await tx
+          .update(orderItems)
+          .set({ discountAmount: item.discountAmount ?? null })
+          .where(and(eq(orderItems.orderId, existing.id), eq(orderItems.externalLineId, item.externalLineId)));
+      }
+      await storeMoneyEvents(tx, account.type, existing.id, n);
 
       // Fill in product photos for orders imported before photos were stored.
       for (const item of n.items) {
@@ -192,7 +234,62 @@ export async function upsertOrders(
   }
 
   if (stockChanged) await scheduleStockPush();
-  return { created: newOrderIds.length, updated, newOrderIds };
+  // Customers first, so the profit lines carry the customer.
+  await linkCustomers(touched);
+  await refreshProfit(touched);
+  return { created, updated, newOrderIds };
+}
+
+/** Never lets a CRM problem break the order sync. */
+async function linkCustomers(orderIds: string[]): Promise<void> {
+  if (!orderIds.length) return;
+  try {
+    await resolveCustomers(orderIds);
+  } catch (err) {
+    console.error('[customers] linking failed; the backfill will retry:', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Saves the fees and refunds an order payload reports. Re-imports update them in place (keyed by
+ * the provider's id), so they are never counted twice.
+ */
+async function storeMoneyEvents(tx: Tx, marketplace: MarketplaceAccount['type'], orderId: string, n: NormalizedOrder): Promise<void> {
+  const source = FEE_SOURCE[marketplace];
+  const fees = source ? (n.fees ?? []) : [];
+  const refunds = n.refunds ?? [];
+  if (!fees.length && !refunds.length) return;
+  const lines = await tx.select({ id: orderItems.id, externalLineId: orderItems.externalLineId }).from(orderItems).where(eq(orderItems.orderId, orderId));
+  const itemId = (externalLineId: string | null | undefined) => (externalLineId ? (lines.find((l) => l.externalLineId === externalLineId)?.id ?? null) : null);
+  for (const f of fees) {
+    const values = {
+      orderItemId: itemId(f.externalLineId),
+      kind: f.kind,
+      label: f.label ?? null,
+      amount: f.amount,
+      taxAmount: f.taxAmount ?? null,
+      currency: f.currency,
+      occurredAt: f.occurredAt,
+    };
+    await tx
+      .insert(orderFees)
+      .values({ orderId, source: source!, externalId: f.externalId, ...values })
+      .onConflictDoUpdate({ target: [orderFees.source, orderFees.externalId], set: { orderId, ...values } });
+  }
+  for (const r of refunds) {
+    const values = {
+      orderItemId: itemId(r.externalLineId),
+      amount: r.amount,
+      currency: r.currency,
+      quantity: r.quantity ?? null,
+      restocked: r.restocked ?? false,
+      refundedAt: r.refundedAt,
+    };
+    await tx
+      .insert(orderRefunds)
+      .values({ orderId, externalId: r.externalId, ...values })
+      .onConflictDoUpdate({ target: [orderRefunds.orderId, orderRefunds.externalId], set: values });
+  }
 }
 
 async function itemStatements(tx: Tx, accountId: string, orderId: string, n: NormalizedOrder) {
@@ -229,6 +326,7 @@ async function itemStatements(tx: Tx, accountId: string, orderId: string, n: Nor
       // Allegro and Empik don't always send a photo; fall back to the product's (from Shopify).
       imageUrl: i.imageUrl ?? productFor(i)?.imageUrl ?? null,
       productId: productFor(i)?.id ?? null,
+      discountAmount: i.discountAmount ?? null,
     })),
   );
 }
@@ -314,6 +412,7 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
         eq(orders.deliveryMethodId, 'PACKSTATION'),
         isNull(orders.pickupPointId),
         inArray(orders.status, EDITABLE),
+        eq(orders.historical, false),
       ),
     )
     .orderBy(desc(orders.placedAt))
@@ -327,6 +426,8 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
         or(isNull(orderItems.imageUrl), like(orderItems.imageUrl, '/%')),
         or(isNotNull(orderItems.sku), isNotNull(orderItems.externalProductId)),
         ne(orders.status, 'cancelled'),
+        // Past orders are many and take their photo from the product instead.
+        eq(orders.historical, false),
       ),
     )
     .orderBy(desc(orders.placedAt))
@@ -339,6 +440,7 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
       and(
         isNull(orders.invoiceRequest),
         ne(orders.status, 'cancelled'),
+        eq(orders.historical, false),
         or(
           sql`${orders.marketplace} = 'allegro' and json_extract(${orders.raw}, '$.invoice.required') = 1`,
           sql`${orders.marketplace} = 'empik' and exists (select 1 from json_each(${orders.raw}, '$.order_additional_fields') f where json_extract(f.value, '$.code') = 'nip')`,
@@ -389,6 +491,8 @@ export interface OrderFilters {
   invoiceRequested?: boolean;
   from?: string;
   to?: string;
+  /** Only orders whose customer ordered (and did not cancel) before. */
+  returning?: boolean;
   page?: number;
 }
 
@@ -403,6 +507,9 @@ function filterConditions(f: OrderFilters): SQL[] {
   if (f.accountId) where.push(eq(orders.accountId, f.accountId));
   if (f.assigneeId) where.push(eq(orders.assigneeId, f.assigneeId));
   if (f.invoiceRequested) where.push(isNotNull(orders.invoiceRequest));
+  if (f.returning) {
+    where.push(sql`exists (select 1 from orders o2 where o2.customer_id = ${orders.customerId} and o2.status <> 'cancelled' and o2.placed_at < ${orders.placedAt})`);
+  }
   if (f.tag) where.push(sql`exists (select 1 from json_each(${orders.tags}) t where t.value = ${f.tag})`);
   if (f.from) where.push(gte(orders.placedAt, new Date(f.from)));
   if (f.to) where.push(lte(orders.placedAt, new Date(`${f.to}T23:59:59`)));
@@ -428,6 +535,34 @@ function filterConditions(f: OrderFilters): SQL[] {
     );
   }
   return where;
+}
+
+export interface ReturningInfo {
+  /** 2 for the second order, 3 for the third... */
+  orderNumber: number;
+  firstOrderAt: Date;
+}
+
+/** For orders whose customer ordered (and did not cancel) before: which order of theirs this is, and when they first ordered. */
+export async function returningInfo(rows: { id: string; customerId: string | null; placedAt: Date }[]): Promise<Map<string, ReturningInfo>> {
+  const result = new Map<string, ReturningInfo>();
+  const customerIds = [...new Set(rows.map((r) => r.customerId).filter((c): c is string => Boolean(c)))];
+  if (customerIds.length === 0) return result;
+  const history = new Map<string, Date[]>();
+  for (const ids of chunk(customerIds)) {
+    const found = await getDb()
+      .select({ customerId: orders.customerId, placedAt: orders.placedAt })
+      .from(orders)
+      .where(and(inArray(orders.customerId, ids), ne(orders.status, 'cancelled')));
+    for (const f of found) history.set(f.customerId!, [...(history.get(f.customerId!) ?? []), f.placedAt]);
+  }
+  for (const r of rows) {
+    if (!r.customerId) continue;
+    const earlier = (history.get(r.customerId) ?? []).filter((d) => d.getTime() < r.placedAt.getTime());
+    if (earlier.length === 0) continue;
+    result.set(r.id, { orderNumber: earlier.length + 1, firstOrderAt: new Date(Math.min(...earlier.map((d) => d.getTime()))) });
+  }
+  return result;
 }
 
 export async function listOrders(f: OrderFilters) {
@@ -463,7 +598,8 @@ export async function listOrders(f: OrderFilters) {
   const latest = new Map<string, (typeof live)[number]>();
   for (const s of live) if (!latest.has(s.orderId)) latest.set(s.orderId, s);
 
-  return { rows: rows.map((r) => ({ ...r, shipment: latest.get(r.order.id) ?? null })), total: count, page, pageSize: PAGE_SIZE };
+  const returning = await returningInfo(rows.map((r) => ({ id: r.order.id, customerId: r.order.customerId, placedAt: r.order.placedAt })));
+  return { rows: rows.map((r) => ({ ...r, shipment: latest.get(r.order.id) ?? null, returning: returning.get(r.order.id) ?? null })), total: count, page, pageSize: PAGE_SIZE };
 }
 
 export async function statusCounts(): Promise<Record<string, number>> {
@@ -472,6 +608,23 @@ export async function statusCounts(): Promise<Record<string, number>> {
     .from(orders)
     .groupBy(orders.status);
   return Object.fromEntries(rows.map((r) => [r.status, r.count]));
+}
+
+/** Orders still to be packed and sent (not on hold), grouped by the courier the buyer chose. Busiest first. */
+export async function ordersToShipByCourier(): Promise<{ courier: Courier; count: number; labelled: number }[]> {
+  const rows = await getDb()
+    .select({ method: orders.deliveryMethodName, status: orders.status, carrier: sql<string | null>`(select s.carrier from shipments s where s.order_id = ${orders.id} and s.state != 'cancelled' order by s.created_at desc limit 1)` })
+    .from(orders)
+    .where(and(inArray(orders.status, ['new', 'processing', 'label_created']), eq(orders.historical, false)));
+  const byCourier = new Map<Courier, { count: number; labelled: number }>();
+  for (const r of rows) {
+    const courier = courierOf(r.method, r.carrier);
+    const entry = byCourier.get(courier) ?? { count: 0, labelled: 0 };
+    entry.count += 1;
+    if (r.status === 'label_created') entry.labelled += 1;
+    byCourier.set(courier, entry);
+  }
+  return [...byCourier].map(([courier, v]) => ({ courier, ...v })).sort((a, b) => b.count - a.count || a.courier.localeCompare(b.courier));
 }
 
 /** Items of many orders at once (e.g. for the Shipments pages), keyed by order id. */

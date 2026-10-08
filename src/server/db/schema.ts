@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { TASK_COMMENT_KINDS, TASK_PRIORITIES, TASK_STATUSES, type ChecklistItem } from '../../lib/tasks/model';
 import type { Address, Buyer, InvoiceRequest, ParcelSpec, SenderSettings } from '../integrations/types';
 
 // SQLite on D1: ids are UUID text, timestamps are integer milliseconds, JSON is text.
@@ -14,7 +15,7 @@ const updatedAt = () =>
     .$defaultFn(() => new Date())
     .$onUpdate(() => new Date());
 
-export const userRoleValues = ['admin', 'staff'] as const;
+export const userRoleValues = ['admin', 'logistics', 'marketing'] as const;
 export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
 export const carrierTypeValues = ['inpost', 'allegro_shipping'] as const;
 export const orderStatusValues = [
@@ -32,6 +33,9 @@ export const labelSizeValues = ['A4', 'A6'] as const;
 // 'external' = invoiced outside Luora (marked by hand), so the order leaves "To issue".
 export const invoiceStateValues = ['pending', 'issued', 'failed', 'manual', 'external'] as const;
 export const invoiceKindValues = ['domestic', 'oss'] as const;
+export const historyStateValues = ['idle', 'running', 'done', 'error'] as const;
+export const feeKindValues = ['commission', 'promotion', 'delivery', 'payment', 'other'] as const;
+export const feeSourceValues = ['allegro_billing', 'mirakl', 'shopify_payments', 'mock'] as const;
 
 // ---------------------------------------------------------------- users
 
@@ -40,7 +44,8 @@ export const users = sqliteTable('users', {
   email: text('email').notNull().unique(),
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
-  role: text('role', { enum: userRoleValues }).notNull().default('staff'),
+  // The database default stays 'staff' (changing it would rebuild the users table); every insert sets the role.
+  role: text('role', { enum: userRoleValues }).notNull().default(sql`'staff'`),
   createdAt: createdAt(),
 });
 
@@ -85,6 +90,35 @@ export interface MarketplaceSettings {
   vhCategoryMap?: Record<string, string>;
   /** Von Halsky: categories to choose from (leaves), read from InPost and cached. */
   vhCategories?: { fetchedAt: string; items: { id: string; path: string }[] };
+  /** Allegro and Empik: offers created from Shopify (price = Shopify price × (1 + markup/100), then rounded). */
+  offerMarkupPercent?: number;
+  offerRounding?: 'x.99' | 'x.00' | 'none';
+  /** Allegro and Empik: days from the order to dispatch, shown on new offers. */
+  offerHandlingDays?: number;
+  /** Allegro: what every new offer needs besides the product (ids come from Allegro's own lists). */
+  allegroShippingRateId?: string;
+  allegroReturnPolicyId?: string;
+  allegroImpliedWarrantyId?: string;
+  allegroWarrantyId?: string;
+  allegroResponsibleProducerId?: string;
+  allegroResponsiblePersonId?: string;
+  /** Allegro: the safety information (GPSR) shown on every new offer. */
+  allegroSafetyText?: string;
+  allegroLocation?: { province: string; city: string; postCode: string };
+  /** Allegro: create offers as inactive drafts instead of publishing them at once. */
+  allegroCreateAsDraft?: boolean;
+  /** Allegro: the choices above, read from Allegro and cached. */
+  allegroOptions?: {
+    fetchedAt: string;
+    shippingRates: { id: string; name: string }[];
+    returnPolicies: { id: string; name: string }[];
+    impliedWarranties: { id: string; name: string }[];
+    warranties: { id: string; name: string }[];
+    responsibleProducers?: { id: string; name: string }[];
+    responsiblePersons?: { id: string; name: string }[];
+  };
+  /** Empik: offer state code of new offers (Mirakl "new"). */
+  empikOfferState?: string;
 }
 
 export const marketplaceAccounts = sqliteTable('marketplace_accounts', {
@@ -101,6 +135,16 @@ export const marketplaceAccounts = sqliteTable('marketplace_accounts', {
   stockSyncEnabled: bool('stock_sync_enabled').notNull().default(false),
   /** When true, stock pushes are only logged, never sent. */
   stockDryRun: bool('stock_dry_run').notNull().default(true),
+  /** One-off import of all past orders (for analytics): progress cursor, state and counts. */
+  historyCursor: text('history_cursor'),
+  historyState: text('history_state', { enum: historyStateValues }).notNull().default('idle'),
+  historyImported: integer('history_imported').notNull().default(0),
+  historyError: text('history_error'),
+  historyUpdatedAt: ts('history_updated_at'),
+  /** Marketplace fee import (Allegro billing): cursor, last run and last error. */
+  feesCursor: text('fees_cursor'),
+  feesSyncedAt: ts('fees_synced_at'),
+  feesError: text('fees_error'),
   createdAt: createdAt(),
 });
 
@@ -171,6 +215,12 @@ export const orders = sqliteTable(
     stockApplied: bool('stock_applied').notNull().default(false),
     /** Who the invoice is made out to, when the buyer asked for one. */
     invoiceRequest: json<InvoiceRequest>('invoice_request'),
+    /** Discounts on the whole order, in the order currency (informational; prices are already after discounts). */
+    discountAmount: text('discount_amount'),
+    /** Imported by the history import: never routed, labelled, invoiced or taken from stock. */
+    historical: bool('historical').notNull().default(false),
+    /** The CRM customer this order belongs to (services/customers.ts). */
+    customerId: text('customer_id'),
     raw: json<unknown>('raw'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -179,6 +229,7 @@ export const orders = sqliteTable(
     uniqueIndex('orders_account_external_idx').on(t.accountId, t.externalId),
     index('orders_status_idx').on(t.status),
     index('orders_placed_at_idx').on(t.placedAt),
+    index('orders_customer_idx').on(t.customerId),
   ],
 );
 
@@ -198,8 +249,62 @@ export const orderItems = sqliteTable(
     /** Product photo from the marketplace. */
     imageUrl: text('image_url'),
     productId: text('product_id').references(() => products.id, { onDelete: 'set null' }),
+    /** Discount on the whole line (all units), in the order currency; unit_price is before it. */
+    discountAmount: text('discount_amount'),
   },
   (t) => [index('order_items_order_idx').on(t.orderId), index('order_items_sku_idx').on(t.sku)],
+);
+
+/**
+ * What a marketplace or payment provider charged for an order (commission, promotion, delivery…),
+ * as reported by its API. Amounts are positive costs; a refunded fee is negative.
+ */
+export const orderFees = sqliteTable(
+  'order_fees',
+  {
+    id: id(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    orderItemId: text('order_item_id').references(() => orderItems.id, { onDelete: 'set null' }),
+    kind: text('kind', { enum: feeKindValues }).notNull(),
+    source: text('source', { enum: feeSourceValues }).notNull(),
+    /** Provider's id for the charge; unique per source so re-imports never double count. */
+    externalId: text('external_id').notNull(),
+    /** Name of the charge as the provider calls it, e.g. "Prowizja od sprzedaży". */
+    label: text('label'),
+    /** Gross amount (VAT included). */
+    amount: text('amount').notNull(),
+    /** VAT included in `amount`, when the provider says. */
+    taxAmount: text('tax_amount'),
+    currency: text('currency').notNull(),
+    occurredAt: ts('occurred_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('order_fees_source_external_idx').on(t.source, t.externalId), index('order_fees_order_idx').on(t.orderId)],
+);
+
+/** Money returned to the buyer. Amounts are positive, in the currency of the refund. */
+export const orderRefunds = sqliteTable(
+  'order_refunds',
+  {
+    id: id(),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    orderItemId: text('order_item_id').references(() => orderItems.id, { onDelete: 'set null' }),
+    /** Provider's id, unique per order. Line-level refunds use "<refund id>:<line id>". */
+    externalId: text('external_id').notNull(),
+    amount: text('amount').notNull(),
+    currency: text('currency').notNull(),
+    /** Units returned (null for money-only refunds, e.g. shipping or goodwill). */
+    quantity: integer('quantity'),
+    /** The goods came back and can be sold again. */
+    restocked: bool('restocked').notNull().default(false),
+    refundedAt: ts('refunded_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('order_refunds_order_external_idx').on(t.orderId, t.externalId), index('order_refunds_refunded_idx').on(t.refundedAt)],
 );
 
 export const orderEvents = sqliteTable(
@@ -345,9 +450,53 @@ export const products = sqliteTable('products', {
   shopifyVariantId: text('shopify_variant_id').unique(),
   /** Barcode from Shopify, used to match Empik offers automatically. */
   ean: text('ean'),
+  /** Shopify product vendor and type, used as brand and category in analytics. */
+  brand: text('brand'),
+  category: text('category'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Landed cost of one unit, valid from a date until the next entry. Kept as history so a new
+ * purchase price never rewrites the margin of past sales.
+ */
+export const productCosts = sqliteTable(
+  'product_costs',
+  {
+    id: id(),
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    /** Everything one unit costs to get on the shelf, in PLN net: purchase + freight + duty. */
+    unitCost: text('unit_cost').notNull(),
+    /** Optional breakdown, as entered. */
+    purchasePrice: text('purchase_price'),
+    purchaseCurrency: text('purchase_currency'),
+    freight: text('freight'),
+    duty: text('duty'),
+    /** YYYY-MM-DD; the cost applies to orders placed on or after this day. */
+    effectiveFrom: text('effective_from').notNull(),
+    /** manual | import | sheet | shopify */
+    source: text('source').notNull().default('manual'),
+    note: text('note'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('product_costs_product_from_idx').on(t.productId, t.effectiveFrom)],
+);
+
+/** NBP table A mid rates: PLN per one unit of the currency, per business day. */
+export const fxRates = sqliteTable(
+  'fx_rates',
+  {
+    currency: text('currency').notNull(),
+    /** YYYY-MM-DD, the NBP effective date. */
+    day: text('day').notNull(),
+    rate: real('rate').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.currency, t.day] })],
+);
 
 export const productListings = sqliteTable(
   'product_listings',
@@ -368,6 +517,13 @@ export const productListings = sqliteTable(
     lastPushedQty: integer('last_pushed_qty'),
     lastPushedAt: ts('last_pushed_at'),
     lastPushError: text('last_push_error'),
+    /** False while the offer is ended, inactive or not yet published: its quantity is not for sale, and nothing is sent to it. */
+    active: bool('active').notNull().default(true),
+    /** The marketplace's own status text (Allegro: ACTIVE, INACTIVE, ENDED...), for display. */
+    listingStatus: text('listing_status'),
+    /** What is sent to this listing: the product's master stock, a fixed quantity, or nothing (managed on the marketplace). */
+    stockMode: text('stock_mode', { enum: ['master', 'fixed', 'off'] }).notNull().default('master'),
+    fixedQty: integer('fixed_qty'),
     createdAt: createdAt(),
   },
   (t) => [
@@ -476,6 +632,297 @@ export const invoices = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------- analytics
+
+export interface AnalyticsSettings {
+  /**
+   * Commission (fraction of the gross price) used when a marketplace reports no fee for an order,
+   * e.g. { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1 }.
+   */
+  fallbackCommission?: Partial<Record<(typeof marketplaceTypeValues)[number], number>>;
+  /** Net cost of one label in PLN, by carrier service ("inpost_locker_standard", …). */
+  labelCosts?: Record<string, number>;
+  /** Label cost for services without their own entry and for orders shipped outside Luora. */
+  defaultLabelCost?: number;
+  /** Packaging and other per-parcel costs in PLN net. */
+  packagingCost?: number;
+  /** Fees on marketplace invoices include VAT that the business deducts (count them net). */
+  feesVatDeductible?: boolean;
+  /** Margin thresholds as fractions of gross revenue. */
+  targetMargin?: number;
+  healthyMargin?: number;
+  thinMargin?: number;
+  criticalMargin?: number;
+}
+
+/**
+ * Profit per order line, in PLN, worked out from the order, its fees, refunds, shipments, the
+ * product cost of the day and the profit settings (services/profit.ts). Rebuilt whenever any of
+ * those change, so analytics reads plain numbers instead of recalculating every order.
+ * Cancelled orders have no lines.
+ */
+export const salesLines = sqliteTable(
+  'sales_lines',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => orderItems.id, { onDelete: 'cascade' }),
+    orderId: text('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    accountId: text('account_id').notNull(),
+    marketplace: text('marketplace', { enum: marketplaceTypeValues }).notNull(),
+    productId: text('product_id').references(() => products.id, { onDelete: 'set null' }),
+    /** Filled by the CRM (customers). */
+    customerId: text('customer_id'),
+    placedAt: ts('placed_at').notNull(),
+    /** YYYY-MM-DD in Europe/Warsaw. */
+    day: text('day').notNull(),
+    currency: text('currency').notNull(),
+    /** PLN per unit of `currency` used for this order. */
+    fxRate: real('fx_rate').notNull(),
+    vatRate: real('vat_rate').notNull(),
+    quantity: integer('quantity').notNull(),
+    refundedQuantity: integer('refunded_quantity').notNull().default(0),
+    /** What the buyer paid for the goods, VAT included (after discounts). */
+    gross: real('gross').notNull(),
+    /** `gross` without VAT. */
+    net: real('net').notNull(),
+    discount: real('discount').notNull().default(0),
+    /** Marketplace and payment fees, without deductible VAT. */
+    fees: real('fees').notNull(),
+    /** No fee was reported yet: `fees` uses the fallback commission. */
+    feesEstimated: bool('fees_estimated').notNull(),
+    /** Landed cost of the units sold. */
+    cost: real('cost').notNull(),
+    costKnown: bool('cost_known').notNull(),
+    /** Share of the shipping the buyer paid, without VAT. */
+    shipping: real('shipping').notNull(),
+    /** Share of label, packaging and marketplace delivery charges. */
+    delivery: real('delivery').notNull(),
+    /** Money returned to the buyer without VAT, less the cost of goods that came back. */
+    refunds: real('refunds').notNull(),
+    /** net − fees − cost + shipping − delivery − refunds. */
+    profit: real('profit').notNull(),
+    computedAt: ts('computed_at').notNull(),
+  },
+  (t) => [
+    index('sales_lines_day_idx').on(t.day),
+    index('sales_lines_order_idx').on(t.orderId),
+    index('sales_lines_product_idx').on(t.productId, t.day),
+    index('sales_lines_customer_idx').on(t.customerId),
+  ],
+);
+
+// ---------------------------------------------------------------- CRM
+
+/**
+ * A buyer, across marketplaces. Allegro and Empik hide the real e-mail behind a relay address, so a
+ * person is recognised by their marketplace id and, where it is real, their e-mail. Aggregates are
+ * refreshed from the orders and their profit lines.
+ */
+export const customers = sqliteTable(
+  'customers',
+  {
+    id: id(),
+    displayName: text('display_name').notNull(),
+    /** Real e-mail when known (never a marketplace relay address). */
+    email: text('email'),
+    phone: text('phone'),
+    /** Last known delivery city and country, for the list. */
+    city: text('city'),
+    countryCode: text('country_code'),
+    firstOrderAt: ts('first_order_at'),
+    lastOrderAt: ts('last_order_at'),
+    ordersCount: integer('orders_count').notNull().default(0),
+    /** PLN, from the profit lines (cancelled orders left out). */
+    revenue: real('revenue').notNull().default(0),
+    profit: real('profit').notNull().default(0),
+    /** Marketplaces bought on, e.g. ["allegro","shopify"]. */
+    marketplaces: json<string[]>('marketplaces').notNull().$defaultFn(() => []),
+    tags: json<string[]>('tags').notNull().$defaultFn(() => []),
+    /** Shopify e-mail marketing consent, when read. */
+    marketingConsent: bool('marketing_consent'),
+    shopifyCustomerId: text('shopify_customer_id'),
+    /** Luora tags last written to the Shopify customer, so only changes are sent. */
+    syncedTags: json<string[]>('synced_tags'),
+    syncedAt: ts('synced_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('customers_last_order_idx').on(t.lastOrderAt), index('customers_email_idx').on(t.email)],
+);
+
+export const customerIdentityKinds = ['shopify', 'allegro', 'empik', 'vonhalsky', 'email'] as const;
+
+/** Keys a customer is recognised by: a marketplace buyer id, or a real e-mail. */
+export const customerIdentities = sqliteTable(
+  'customer_identities',
+  {
+    id: id(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: customerIdentityKinds }).notNull(),
+    value: text('value').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('customer_identities_kind_value_idx').on(t.kind, t.value), index('customer_identities_customer_idx').on(t.customerId)],
+);
+
+export const customerNotes = sqliteTable(
+  'customer_notes',
+  {
+    id: id(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('customer_notes_customer_idx').on(t.customerId, t.createdAt)],
+);
+
+/**
+ * @deprecated Replaced by `tasks` (a customer task is a task with a customerId); the rows were copied by migration
+ * 0011. Kept, unused, so a rollback to the previous worker still finds its table. Drop in a later migration.
+ */
+export const customerTasks = sqliteTable(
+  'customer_tasks',
+  {
+    id: id(),
+    customerId: text('customer_id')
+      .notNull()
+      .references(() => customers.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    dueAt: ts('due_at'),
+    assigneeId: text('assignee_id').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: ts('done_at'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('customer_tasks_open_idx').on(t.doneAt, t.dueAt), index('customer_tasks_customer_idx').on(t.customerId)],
+);
+
+// ---------------------------------------------------------------- tasks
+
+export const projects = sqliteTable(
+  'projects',
+  {
+    id: id(),
+    name: text('name').notNull(),
+    description: text('description'),
+    /** Key of the palette in lib/tasks/model.ts. */
+    color: text('color').notNull().default('lime'),
+    ownerId: text('owner_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Created by the demo-mode seed; removed with the other demo data. */
+    demo: bool('demo').notNull().default(false),
+    archivedAt: ts('archived_at'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('projects_archived_idx').on(t.archivedAt)],
+);
+
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: id(),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status', { enum: TASK_STATUSES }).notNull().default('todo'),
+    priority: text('priority', { enum: TASK_PRIORITIES }).notNull().default('normal'),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    /** The planned day, YYYY-MM-DD in Warsaw time. Plain text on purpose: no time-zone arithmetic. */
+    dueDate: text('due_date'),
+    /** Optional slot within the day, HH:MM. */
+    startTime: text('start_time'),
+    endTime: text('end_time'),
+    tags: json<string[]>('tags').notNull().$defaultFn(() => []),
+    checklist: json<ChecklistItem[]>('checklist').notNull().$defaultFn(() => []),
+    customerId: text('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+    orderId: text('order_id').references(() => orders.id, { onDelete: 'set null' }),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    doneAt: ts('done_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('tasks_status_due_idx').on(t.status, t.dueDate),
+    index('tasks_project_idx').on(t.projectId),
+    index('tasks_customer_idx').on(t.customerId),
+    index('tasks_order_idx').on(t.orderId),
+  ],
+);
+
+/** Who a task is for. A task can have several people. */
+export const taskAssignees = sqliteTable(
+  'task_assignees',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.taskId, t.userId] }), index('task_assignees_user_idx').on(t.userId)],
+);
+
+/** Comments by people, and "events" the service writes when something changes (the activity trail). */
+export const taskComments = sqliteTable(
+  'task_comments',
+  {
+    id: id(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    kind: text('kind', { enum: TASK_COMMENT_KINDS }).notNull().default('comment'),
+    body: text('body').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('task_comments_task_idx').on(t.taskId, t.createdAt)],
+);
+
+export type Task = typeof tasks.$inferSelect;
+export type Project = typeof projects.$inferSelect;
+
+export interface CrmSettings {
+  /** Segments whose tag ("luora-vip", …) is written to Shopify customers. */
+  syncSegments?: string[];
+  /** Also write the tags staff add here. */
+  syncManualTags?: boolean;
+  /** Only log what would change in Shopify. */
+  dryRun?: boolean;
+}
+
+/** Single row: Shopify marketing sync options. */
+export const crmSettings = sqliteTable('crm_settings', {
+  id: text('id').primaryKey().$defaultFn(() => 'main'),
+  settings: json<CrmSettings>('settings').notNull().$defaultFn(() => ({})),
+  updatedAt: updatedAt(),
+});
+
+/** Products considered for purchase on the Calculator page, kept for comparison. */
+export const calculatorCandidates = sqliteTable('calculator_candidates', {
+  id: id(),
+  /** The calculator's candidate as entered (label, cost parts, price, channel, commission override). */
+  data: json<Record<string, unknown>>('data').notNull(),
+  createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** Single row: how profit is calculated. VAT rates come from the accounting settings. */
+export const analyticsSettings = sqliteTable('analytics_settings', {
+  id: text('id').primaryKey().$defaultFn(() => 'main'),
+  settings: json<AnalyticsSettings>('settings').notNull().$defaultFn(() => ({})),
+  updatedAt: updatedAt(),
+});
+
 /** Singleton/debounce keys for queued jobs (Cloudflare Queues has no built-in dedupe). */
 export const jobLocks = sqliteTable('job_locks', {
   key: text('key').primaryKey(),
@@ -495,3 +942,11 @@ export type Product = typeof products.$inferSelect;
 export type ProductListing = typeof productListings.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type AccountingSettingsRow = typeof accountingSettings.$inferSelect;
+export type OrderFee = typeof orderFees.$inferSelect;
+export type OrderRefund = typeof orderRefunds.$inferSelect;
+export type ProductCost = typeof productCosts.$inferSelect;
+export type FeeKind = (typeof feeKindValues)[number];
+export type SalesLine = typeof salesLines.$inferSelect;
+export type Customer = typeof customers.$inferSelect;
+export type CustomerIdentityKind = (typeof customerIdentityKinds)[number];
+export type FeeSource = (typeof feeSourceValues)[number];

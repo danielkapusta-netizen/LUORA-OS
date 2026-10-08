@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Badge, Card, CardBody, CardHeader, Field, Input, Select } from '@/components/ui';
+import { ROLES, ROLE_DESCRIPTION, ROLE_LABEL } from '@/lib/permissions';
 import { formatDate } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { listUsers } from '@/server/services/settings';
-import { createUserAction, deleteUserAction, resetPasswordAction } from '../actions';
+import { createUserAction, deleteUserAction, resetPasswordAction, setRoleAction } from '../actions';
 
 export const metadata: Metadata = { title: 'Users' };
 
@@ -16,7 +17,7 @@ export default async function UsersPage() {
   return (
     <div className="max-w-3xl space-y-5">
       <Card>
-        <CardHeader title="Team" description="Admins manage integrations, rules and users. Staff work on orders, labels and stock." />
+        <CardHeader title="Team" description="What each role can see is shown below. Admins also manage integrations, rules and users." />
         <ul className="divide-y divide-slate-100">
           {users.map((u) => (
             <li key={u.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -29,9 +30,21 @@ export default async function UsersPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={u.role === 'admin' ? 'violet' : 'gray'}>{u.role}</Badge>
+                {!admin && <Badge tone={u.role === 'admin' ? 'violet' : 'gray'}>{ROLE_LABEL[u.role]}</Badge>}
                 {admin && (
                   <>
+                    <ActionForm action={setRoleAction.bind(null, u.id)} className="flex gap-1.5" showOk={false}>
+                      <Select name="role" defaultValue={u.role} className="h-8 w-32" aria-label={`Role of ${u.name}`}>
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_LABEL[r]}
+                          </option>
+                        ))}
+                      </Select>
+                      <SubmitButton size="sm" variant="secondary">
+                        Save
+                      </SubmitButton>
+                    </ActionForm>
                     <ActionForm action={resetPasswordAction.bind(null, u.id)} className="flex gap-1.5" resetOnSuccess>
                       <Input name="password" type="password" placeholder="New password" className="h-8 w-40" minLength={8} required autoComplete="new-password" />
                       <SubmitButton size="sm" variant="secondary">
@@ -52,6 +65,17 @@ export default async function UsersPage() {
           ))}
         </ul>
       </Card>
+      <Card>
+        <CardHeader title="Roles" />
+        <dl className="divide-y divide-slate-100 text-sm">
+          {ROLES.map((r) => (
+            <div key={r} className="grid gap-1 px-4 py-3 sm:grid-cols-[8rem_1fr]">
+              <dt className="font-medium">{ROLE_LABEL[r]}</dt>
+              <dd className="text-slate-600">{ROLE_DESCRIPTION[r]}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
       {admin && (
         <Card>
           <CardHeader title="Add a user" />
@@ -67,9 +91,12 @@ export default async function UsersPage() {
                 <Input name="password" type="password" minLength={8} required autoComplete="new-password" />
               </Field>
               <Field label="Role">
-                <Select name="role" defaultValue="staff">
-                  <option value="staff">Staff</option>
-                  <option value="admin">Admin</option>
+                <Select name="role" defaultValue="logistics">
+                  {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABEL[r]}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <div>

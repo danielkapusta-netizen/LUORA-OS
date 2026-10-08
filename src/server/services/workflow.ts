@@ -101,13 +101,14 @@ export async function changeStatus(
   if (to === 'cancelled' && order.stockApplied) {
     if (await restockOrder(db, orderId)) await scheduleStockPush();
   }
-  if (order.status === 'cancelled' && !order.stockApplied) {
+  if (order.status === 'cancelled' && !order.stockApplied && !order.historical) {
     if (await applyOrderStock(db, orderId)) await scheduleStockPush();
   }
-  if (to === 'processing' && order.marketplace === 'allegro') {
+  if (to === 'processing' && order.marketplace === 'allegro' && !order.historical) {
     await enqueue(JOBS.marketplaceProcessing, { orderId });
   }
-  if (to === 'shipped' && order.invoiceRequest) {
+  // Past orders (history import) were invoiced, or not, before Luora.
+  if (to === 'shipped' && order.invoiceRequest && !order.historical) {
     // Issues the invoice the buyer asked for, if automatic invoicing is on (checked by the job).
     await enqueue(JOBS.invoiceAuto, { orderId });
   }

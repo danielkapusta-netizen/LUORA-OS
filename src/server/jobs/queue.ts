@@ -13,6 +13,7 @@ export const JOBS = {
   marketplaceProcessing: 'marketplace-processing',
   deliveryCheck: 'delivery-check',
   listingsImport: 'listings-import',
+  shopifyCatalogue: 'shopify-catalogue',
   stockPush: 'stock-push',
   stockReconcile: 'stock-reconcile',
   stockSyncAll: 'stock-sync-all',
@@ -21,6 +22,13 @@ export const JOBS = {
   invoiceCreate: 'invoice-create',
   invoiceUpload: 'invoice-upload',
   invoiceKsef: 'invoice-ksef',
+  historyImport: 'history-import',
+  feesSyncAll: 'fees-sync-all',
+  feesSync: 'fees-sync',
+  fxSync: 'fx-sync',
+  profitRecompute: 'profit-recompute',
+  customersBackfill: 'customers-backfill',
+  crmSync: 'crm-shopify-sync',
 } as const;
 
 export interface JobPayloads {
@@ -33,6 +41,7 @@ export interface JobPayloads {
   [JOBS.marketplaceProcessing]: { orderId: string };
   [JOBS.deliveryCheck]: Record<string, never>;
   [JOBS.listingsImport]: { accountId: string };
+  [JOBS.shopifyCatalogue]: Record<string, never>;
   /** force: compare with the quantity last read from the marketplace, not with our last push. */
   [JOBS.stockPush]: { accountId: string; force?: boolean };
   [JOBS.stockReconcile]: Record<string, never>;
@@ -42,6 +51,14 @@ export interface JobPayloads {
   [JOBS.invoiceCreate]: { invoiceId: string };
   [JOBS.invoiceUpload]: { invoiceId: string };
   [JOBS.invoiceKsef]: { invoiceId: string };
+  [JOBS.historyImport]: { accountId: string };
+  [JOBS.feesSyncAll]: Record<string, never>;
+  [JOBS.feesSync]: { accountId: string };
+  [JOBS.fxSync]: Record<string, never>;
+  /** orderIds: just these; otherwise every order, continuing after `after`. */
+  [JOBS.profitRecompute]: { orderIds?: string[]; all?: boolean; after?: string };
+  [JOBS.customersBackfill]: Record<string, never>;
+  [JOBS.crmSync]: Record<string, never>;
 }
 
 export type JobName = keyof JobPayloads;
@@ -76,6 +93,7 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.marketplaceProcessing]: { retries: 3, delaySeconds: 60 },
   [JOBS.deliveryCheck]: { retries: 0, delaySeconds: 0 },
   [JOBS.listingsImport]: { retries: 1, delaySeconds: 60 },
+  [JOBS.shopifyCatalogue]: { retries: 0, delaySeconds: 0 },
   [JOBS.stockPush]: { retries: 3, delaySeconds: 60 },
   [JOBS.stockReconcile]: { retries: 0, delaySeconds: 0 },
   [JOBS.stockSyncAll]: { retries: 0, delaySeconds: 0 },
@@ -85,6 +103,14 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.invoiceCreate]: { retries: 0, delaySeconds: 0 },
   [JOBS.invoiceUpload]: { retries: 5, delaySeconds: 60 },
   [JOBS.invoiceKsef]: { retries: 3, delaySeconds: 120 },
+  // The import saves its progress; a failed step is resumed by hand ("Resume").
+  [JOBS.historyImport]: { retries: 0, delaySeconds: 0 },
+  [JOBS.feesSyncAll]: { retries: 0, delaySeconds: 0 },
+  [JOBS.feesSync]: { retries: 1, delaySeconds: 300 },
+  [JOBS.fxSync]: { retries: 2, delaySeconds: 600 },
+  [JOBS.profitRecompute]: { retries: 2, delaySeconds: 120 },
+  [JOBS.customersBackfill]: { retries: 1, delaySeconds: 120 },
+  [JOBS.crmSync]: { retries: 1, delaySeconds: 600 },
 };
 
 /** A singleton lock is dropped after this long even if its job never reports back. */

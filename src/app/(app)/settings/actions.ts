@@ -1,14 +1,18 @@
 'use server';
 
+import { isRole, type Role } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
 import type { CarrierSettings, MarketplaceSettings, RuleConditions } from '@/server/db/schema';
 import { enqueue, JOBS } from '@/server/jobs/queue';
+import { resetFeeCursor } from '@/server/services/fees';
+import { startHistoryImport, stopHistoryImport } from '@/server/services/history';
 import {
   createDefaultRules,
   createUser,
+  setUserRole,
   deleteCarrierAccount,
   deleteMarketplaceAccount,
   deletePreset,
@@ -40,6 +44,14 @@ function secrets(fd: FormData, names: string[]): Record<string, string> {
 
 // ---------------------------------------------------------------- marketplaces
 
+/** Markup, rounding and handling time of offers created from Shopify (Allegro and Empik). */
+function readOfferSettings(fd: FormData, settings: MarketplaceSettings) {
+  settings.offerMarkupPercent = Number(text(fd, 'offerMarkupPercent').replace(',', '.')) || 0;
+  const rounding = text(fd, 'offerRounding');
+  settings.offerRounding = rounding === 'x.00' || rounding === 'none' ? rounding : 'x.99';
+  settings.offerHandlingDays = Math.max(0, Math.floor(Number(text(fd, 'offerHandlingDays')) || 1));
+}
+
 export async function saveMarketplaceAction(id: string | null, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   const type = text(fd, 'type') as 'shopify' | 'allegro' | 'empik' | 'vonhalsky';
@@ -55,6 +67,16 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
     settings.pickupPointKeys = keys ? keys.split(',').map((k) => k.trim()).filter(Boolean) : undefined;
   } else if (type === 'allegro') {
     credentials = { ...secrets(fd, ['clientId', 'clientSecret']), sandbox: bool(fd, 'sandbox') };
+    readOfferSettings(fd, settings);
+    settings.allegroShippingRateId = text(fd, 'allegroShippingRateId') || undefined;
+    settings.allegroReturnPolicyId = text(fd, 'allegroReturnPolicyId') || undefined;
+    settings.allegroImpliedWarrantyId = text(fd, 'allegroImpliedWarrantyId') || undefined;
+    settings.allegroWarrantyId = text(fd, 'allegroWarrantyId') || undefined;
+    settings.allegroResponsibleProducerId = text(fd, 'allegroResponsibleProducerId') || undefined;
+    settings.allegroResponsiblePersonId = text(fd, 'allegroResponsiblePersonId') || undefined;
+    settings.allegroSafetyText = text(fd, 'allegroSafetyText') || undefined;
+    settings.allegroCreateAsDraft = bool(fd, 'allegroCreateAsDraft');
+    settings.allegroLocation = { province: text(fd, 'allegroProvince'), city: text(fd, 'allegroCity'), postCode: text(fd, 'allegroPostCode') };
   } else if (type === 'vonhalsky') {
     credentials = {
       organizationId: text(fd, 'organizationId'),
@@ -73,6 +95,8 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
   } else if (type === 'empik') {
     credentials = { baseUrl: text(fd, 'baseUrl'), ...secrets(fd, ['apiKey']), ...(text(fd, 'shopId') ? { shopId: text(fd, 'shopId') } : {}) };
     settings.autoAccept = bool(fd, 'autoAccept');
+    readOfferSettings(fd, settings);
+    settings.empikOfferState = text(fd, 'empikOfferState') || undefined;
     const codes: Record<string, string> = {};
     if (text(fd, 'carrierCodeInpostLocker')) codes.inpostLocker = text(fd, 'carrierCodeInpostLocker');
     if (text(fd, 'carrierCodeInpostCourier')) codes.inpostCourier = text(fd, 'carrierCodeInpostCourier');
@@ -313,9 +337,20 @@ export async function deletePresetAction(id: string): Promise<ActionResult> {
 export async function createUserAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
   return attempt(async () => {
-    await createUser({ email: text(fd, 'email'), name: text(fd, 'name'), password: String(fd.get('password') ?? ''), role: text(fd, 'role') === 'admin' ? 'admin' : 'staff' });
+    await createUser({ email: text(fd, 'email'), name: text(fd, 'name'), password: String(fd.get('password') ?? ''), role: isRole(text(fd, 'role')) ? (text(fd, 'role') as Role) : 'logistics' });
     revalidatePath('/settings/users');
     return 'User created';
+  });
+}
+
+export async function setRoleAction(id: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    const role = text(fd, 'role');
+    if (!isRole(role)) throw new Error('Unknown role');
+    await setUserRole(id, role);
+    revalidatePath('/settings/users');
+    return 'Role changed';
   });
 }
 
@@ -334,5 +369,35 @@ export async function resetPasswordAction(id: string, _prev: ActionResult, fd: F
   return attempt(async () => {
     await resetPassword(id, String(fd.get('password') ?? ''));
     return 'Password changed';
+  });
+}
+
+// ---------------------------------------------------------------- history and fees
+
+export async function startHistoryAction(accountId: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    await startHistoryImport(accountId, { restart: fd.get('restart') === '1' });
+    revalidatePath(`/settings/integrations/marketplace/${accountId}`);
+    return 'The import of past orders has started; it runs in the background. Reload this page to see its progress.';
+  });
+}
+
+export async function stopHistoryAction(accountId: string): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    await stopHistoryImport(accountId);
+    revalidatePath(`/settings/integrations/marketplace/${accountId}`);
+    return 'Stopped. “Resume” continues where it stopped.';
+  });
+}
+
+export async function syncFeesAction(accountId: string, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    if (fd.get('fromStart') === '1') await resetFeeCursor(accountId);
+    await enqueue(JOBS.feesSync, { accountId }, { singletonKey: accountId });
+    revalidatePath(`/settings/integrations/marketplace/${accountId}`);
+    return 'Fees are being read in the background.';
   });
 }

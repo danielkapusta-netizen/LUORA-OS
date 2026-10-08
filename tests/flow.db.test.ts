@@ -67,6 +67,17 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
   const productStock = async () =>
     Object.fromEntries((await m.db.getDb().select().from(m.schema.products)).map((p) => [p.sku, p.stock]));
   const adminId = async () => (await m.db.getDb().select().from(m.schema.users))[0].id;
+  /** Orders an earlier test gave an extra line, so their total no longer matches their items. */
+  const alteredOrders = async () =>
+    new Set(
+      (
+        await m.db
+          .getDb()
+          .select({ orderId: m.schema.orderItems.orderId })
+          .from(m.schema.orderItems)
+          .where(m.orm.eq(m.schema.orderItems.externalLineId, 'night-1'))
+      ).map((r) => r.orderId),
+    );
 
   it('imports orders from every marketplace and takes stock', async () => {
     const before = await productStock();
@@ -211,6 +222,37 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect((await m.inventory.runStockPush(account.id)).pushed).toBe(0);
   });
 
+  it('sends a fixed quantity, or nothing, to a listing, and skips listings that are off sale', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [empik] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'empik'));
+    await db.update(s.marketplaceAccounts).set({ stockSyncEnabled: true, stockDryRun: false }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
+    await m.inventory.runStockPush(empik.id, { force: true });
+    const listings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, empik.id));
+    const [fixed, off, inactive] = listings;
+
+    await m.inventory.setListingStock(fixed.id, 'fixed', 3);
+    await m.inventory.setListingStock(off.id, 'off');
+    await db.update(s.productListings).set({ active: false, lastPushedQty: null, lastSeenQty: 0 }).where(orm.eq(s.productListings.id, inactive.id));
+    await db.update(s.productListings).set({ lastPushedQty: null }).where(orm.inArray(s.productListings.id, [off.id]));
+
+    const result = await m.inventory.runStockPush(empik.id);
+    expect(result.dryRun).toBe(false);
+    const rows = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, empik.id));
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(fixed.id)!.lastPushedQty).toBe(3);
+    expect(byId.get(off.id)!.lastPushedQty).toBeNull();
+    expect(byId.get(inactive.id)!.lastPushedQty).toBeNull();
+    await expect(m.inventory.setListingStock(fixed.id, 'fixed', -1)).rejects.toThrow(/whole number/);
+    // Leave the account as the demo data has it, for the tests that follow.
+    await db
+      .update(s.productListings)
+      .set({ stockMode: 'master', fixedQty: null, active: true, lastPushedQty: null, lastPushedAt: null })
+      .where(orm.eq(s.productListings.accountId, empik.id));
+    await db.update(s.marketplaceAccounts).set({ stockDryRun: true }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
+    await db.delete(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, empik.id));
+  });
+
   it('builds the product list from Shopify and matches Allegro / Empik listings to it', async () => {
     const db = m.db.getDb();
     const { schema: s, orm } = m;
@@ -321,8 +363,11 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       settings: { ...invoicing.DEFAULT_ACCOUNTING_SETTINGS },
     });
     const taken = new Set((await db.select({ id: m.schema.invoices.orderId }).from(m.schema.invoices)).map((r) => r.id));
+    const altered = await alteredOrders();
     const free = (marketplace: string) =>
-      allOrders().then((rows) => rows.find((o) => o.marketplace === marketplace && o.status !== 'cancelled' && !o.invoiceRequest && !taken.has(o.id) && o.shippingAddress.countryCode === 'PL' && o.currency === 'PLN'));
+      allOrders().then((rows) =>
+        rows.find((o) => o.marketplace === marketplace && o.status !== 'cancelled' && !o.invoiceRequest && !taken.has(o.id) && !altered.has(o.id) && o.shippingAddress.countryCode === 'PL' && o.currency === 'PLN'),
+      );
     const shopifyOrder = (await free('shopify'))!;
     const allegroOrder = (await free('allegro'))!;
     expect(shopifyOrder && allegroOrder).toBeTruthy();
@@ -532,6 +577,41 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(data.carriers.length).toBeGreaterThan(0);
   });
 
+  it('reports revenue in PLN and keeps products without a SKU apart', async () => {
+    const { MockMarketplaceAdapter } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const db = m.db.getDb();
+    const [allegro] = await db.select().from(m.schema.marketplaceAccounts).where(m.orm.eq(m.schema.marketplaceAccounts.type, 'allegro'));
+    const mock = new MockMarketplaceAdapter('allegro', allegro.id);
+    const base = mock.buildOrder(9101, new Date());
+    const order = {
+      ...base,
+      externalId: 'czk-order-1',
+      externalNumber: 'CZK-1',
+      currency: 'CZK',
+      totalAmount: '4000.00',
+      shippingAmount: '0.00',
+      items: [
+        { ...base.items[0], externalLineId: 'czk-1', sku: null, name: 'Zzz Cream With No Sku', quantity: 10, unitPrice: '400.00' },
+        { ...base.items[0], externalLineId: 'czk-2', sku: null, name: 'Aaa Serum With No Sku', quantity: 1, unitPrice: '10.00' },
+      ],
+    };
+    await m.orders.upsertOrders(allegro, [order], { historical: true });
+    const data = await m.analytics.analytics({ from: new Date(Date.now() - 2 * 86_400_000), to: new Date(Date.now() + 60_000) });
+    const [stored] = await db.select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.externalId, 'czk-order-1'));
+    await db.delete(m.schema.salesLines).where(m.orm.eq(m.schema.salesLines.orderId, stored.id));
+    await db.delete(m.schema.orders).where(m.orm.eq(m.schema.orders.id, stored.id));
+    const cream = data.topSkus.find((p) => p.name === 'Zzz Cream With No Sku');
+    const serum = data.topSkus.find((p) => p.name === 'Aaa Serum With No Sku');
+    // Two products, not one "no SKU" row named after whichever sorts first.
+    expect(cream?.quantity).toBe(10);
+    expect(serum?.quantity).toBe(1);
+    // 10 x 400 CZK is about 800 PLN, nowhere near 4,000.
+    expect(cream!.revenue).toBeGreaterThan(100);
+    expect(cream!.revenue).toBeLessThan(2_000);
+    const czkDay = data.daily.reduce((sum, d) => sum + d.revenue, 0);
+    expect(czkDay).toBeLessThan(data.kpis.orders * 5_000);
+  });
+
   it('keeps the tracking number when the label download fails, and fetches the file on "Check now"', async () => {
     const { MockCarrierAdapter } = await import('@/server/integrations/carriers/mock/adapter');
     const order = (await allOrders()).find((o) => o.marketplace === 'shopify' && o.status === 'new' && o.pickupPointId)!;
@@ -575,7 +655,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       invoiceKey: null,
       settings: { autoOnShipped: true, uploadAllegro: true, uploadEmpik: true, sendB2bToKsef: true, defaultVatRate: 0.23 },
     });
-    const candidates = (await allOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount);
+    const altered = await alteredOrders();
+    const candidates = (await allOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id));
     const order = candidates[0];
     const other = candidates[1];
     await db
@@ -611,7 +692,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const userId = await adminId();
     await invoicing.saveAccounting({ enabled: true, login: '', invoiceKey: null, settings: { ...invoicing.DEFAULT_ACCOUNTING_SETTINGS } });
     expect((await invoicing.loadAccounting()).settings.autoOnShipped).toBe(false);
-    const order = (await allOrders()).find((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount)!;
+    const altered = await alteredOrders();
+    const order = (await allOrders()).find((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id))!;
     await db
       .update(m.schema.orders)
       .set({ invoiceRequest: { name: 'Hygge Twist', taxId: '9512513434', euPrefix: null, street: 'Prosta 2', postalCode: '00-001', city: 'Warszawa', countryCode: 'PL' } })
@@ -644,6 +726,301 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(await awaitingIds()).toContain(order.id);
   });
 
+  it('imports past orders as closed history: no stock, labels or invoices, but with their fees and refunds', async () => {
+    const history = await import('@/server/services/history');
+    const { MOCK_HISTORY_ORDERS } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [allegro] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'allegro'));
+    const stockBefore = await productStock();
+    const movementsBefore = (await db.select().from(s.stockMovements)).length;
+    const shipmentsBefore = (await db.select().from(s.shipments)).length;
+    queue.length = 0;
+
+    await history.startHistoryImport(allegro.id);
+    await drain();
+    const account = async () => (await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.id, allegro.id)))[0];
+    expect(await account()).toMatchObject({ historyState: 'done', historyImported: MOCK_HISTORY_ORDERS, historyError: null });
+
+    const past = await db
+      .select()
+      .from(s.orders)
+      .where(orm.and(orm.eq(s.orders.accountId, allegro.id), orm.eq(s.orders.historical, true)));
+    expect(past).toHaveLength(MOCK_HISTORY_ORDERS);
+    expect(new Set(past.map((o) => o.status))).toEqual(new Set(['shipped', 'cancelled']));
+    expect(past.some((o) => o.discountAmount === null)).toBe(true);
+    // Nothing operational happened.
+    expect(await productStock()).toEqual(stockBefore);
+    expect(await db.select().from(s.stockMovements)).toHaveLength(movementsBefore);
+    expect(await db.select().from(s.shipments)).toHaveLength(shipmentsBefore);
+    expect(queue.filter((j) => ['shipment-create', 'invoice-auto', 'stock-push'].includes(j.name))).toHaveLength(0);
+
+    const pastOrder = orm.and(orm.eq(s.orders.accountId, allegro.id), orm.eq(s.orders.historical, true));
+    const feeCount = async () =>
+      (await db.select({ id: s.orderFees.id }).from(s.orderFees).innerJoin(s.orders, orm.eq(s.orders.id, s.orderFees.orderId)).where(pastOrder)).length;
+    const pastRefunds = () =>
+      db.select({ refund: s.orderRefunds }).from(s.orderRefunds).innerJoin(s.orders, orm.eq(s.orders.id, s.orderRefunds.orderId)).where(pastOrder);
+    const refundCount = async () => (await pastRefunds()).length;
+    const live = past.filter((o) => o.status !== 'cancelled').length;
+    expect(await feeCount()).toBe(live * 2); // commission + Smart delivery
+    expect(await refundCount()).toBeGreaterThan(0);
+    const [{ refund }] = await pastRefunds();
+    expect(refund.orderItemId).toBeTruthy();
+
+    // Importing again finds every order already there and never doubles fees or refunds.
+    const fees = await feeCount();
+    const refunds = await refundCount();
+    await history.startHistoryImport(allegro.id, { restart: true });
+    await drain();
+    expect(await account()).toMatchObject({ historyState: 'done', historyImported: 0 });
+    expect(await feeCount()).toBe(fees);
+    expect(await refundCount()).toBe(refunds);
+    expect(await db.select().from(s.orders).where(orm.eq(s.orders.historical, true))).toHaveLength(MOCK_HISTORY_ORDERS);
+  });
+
+  it('stores fees reported inside live orders once, however often they sync', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [empik] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'empik'));
+    const count = async () =>
+      (
+        await db
+          .select({ id: s.orderFees.id })
+          .from(s.orderFees)
+          .innerJoin(s.orders, orm.eq(s.orders.id, s.orderFees.orderId))
+          .where(orm.eq(s.orders.accountId, empik.id))
+      ).length;
+    const before = await count();
+    expect(before).toBeGreaterThan(0);
+    for (const o of (await allOrders()).filter((x) => x.accountId === empik.id).slice(0, 5)) await m.orders.refreshOrder(o.id);
+    expect(await count()).toBe(before);
+    const [fee] = await db.select().from(s.orderFees).where(orm.eq(s.orderFees.source, 'mirakl')).limit(1);
+    expect(fee).toMatchObject({ kind: 'commission' });
+    expect(fee.orderItemId).toBeTruthy();
+  });
+
+  it('keeps product costs by date, converts purchase prices and imports pasted costs', async () => {
+    const costs = await import('@/server/services/costs');
+    const fx = await import('@/server/services/fx');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [mug] = await db.select().from(s.products).where(orm.eq(s.products.sku, 'LUO-MUG-01'));
+    // The demo seed gave every product a cost "always".
+    expect((await costs.currentCosts([mug.id], '2020-01-01')).get(mug.id)?.unitCost).toBe('12.8000');
+
+    await costs.setProductCost(mug.id, { unitCost: 15, effectiveFrom: '2026-01-01' }, null);
+    expect((await costs.currentCosts([mug.id], '2025-12-31')).get(mug.id)?.unitCost).toBe('12.8000');
+    expect((await costs.currentCosts([mug.id], '2026-06-01')).get(mug.id)?.unitCost).toBe('15.0000');
+    // Saving the same date again replaces that entry.
+    await costs.setProductCost(mug.id, { unitCost: 16, effectiveFrom: '2026-01-01' }, null);
+    expect(await costs.costHistory(mug.id)).toHaveLength(2);
+
+    // USD purchase price + freight, at the (demo) NBP rate of a Monday.
+    const entry = await costs.setProductCost(mug.id, { purchasePrice: 3, purchaseCurrency: 'USD', freight: 1, effectiveFrom: '2026-03-02' }, null);
+    const rate = (await fx.loadFxTable(['USD'], '2026-03-02', '2026-03-02')).rate('USD', '2026-03-02');
+    expect(rate).toBeGreaterThan(3);
+    expect(Number(entry.unitCost)).toBeCloseTo(3 * rate! + 1, 3);
+    // A Sunday uses Friday's rate.
+    expect((await fx.loadFxTable(['USD'], '2026-03-01', '2026-03-01')).rate('USD', '2026-03-01')).toBe(
+      (await fx.loadFxTable(['USD'], '2026-02-27', '2026-02-27')).rate('USD', '2026-02-27'),
+    );
+
+    const result = await costs.importCosts(costs.parseCostLines('LUO-TSH-M;30\nNo such product;1'), { userId: null, source: 'import', effectiveFrom: '2026-02-01' });
+    expect(result).toEqual({ saved: 1, unmatched: ['No such product'] });
+    const rows = await costs.listCostRows();
+    expect(rows.every((r) => r.cost)).toBe(true);
+    expect(rows.find((r) => r.product.sku === 'LUO-TSH-M')?.cost?.source).toBe('import');
+    expect(rows.some((r) => r.units90 > 0 && r.revenue90 > 0)).toBe(true);
+
+    await costs.saveAnalyticsSettings({ fallbackCommission: { allegro: 0.1 }, labelCosts: { inpost_locker_standard: 9 } });
+    const settings = await costs.loadAnalyticsSettings();
+    expect(settings.fallbackCommission).toMatchObject({ allegro: 0.1, empik: 0.15 });
+    expect(settings.labelCosts).toMatchObject({ inpost_locker_standard: 9, inpost_courier_standard: 15.5 });
+    await expect(costs.saveAnalyticsSettings({ thinMargin: 0.2, healthyMargin: 0.15 })).rejects.toThrow('Margin bands');
+  });
+
+  it('keeps a profit line for every sold item, rebuilt when costs change', async () => {
+    const profit = await import('@/server/services/profit');
+    const costs = await import('@/server/services/costs');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    queue.length = 0;
+    await profit.recomputeAll();
+    await drain();
+    const lines = await db.select().from(s.salesLines);
+    const live = await db
+      .select({ id: s.orderItems.id })
+      .from(s.orderItems)
+      .innerJoin(s.orders, orm.eq(s.orders.id, s.orderItems.orderId))
+      .where(orm.ne(s.orders.status, 'cancelled'));
+    expect(lines).toHaveLength(live.length);
+    expect(lines.every((l) => l.day.match(/^\d{4}-\d{2}-\d{2}$/) && l.fxRate === 1)).toBe(true);
+    // Demo fees arrive with the orders, so nothing is estimated except Von Halsky (none here).
+    expect(lines.filter((l) => l.feesEstimated)).toHaveLength(0);
+    // Every line linked to a product with a cost knows its cost; unlinked lines don't.
+    const withCost = new Set((await db.select({ productId: s.productCosts.productId }).from(s.productCosts)).map((c) => c.productId));
+    expect(lines.filter((l) => l.productId && withCost.has(l.productId)).every((l) => l.costKnown)).toBe(true);
+    expect(lines.filter((l) => !l.productId).every((l) => !l.costKnown && l.cost === 0)).toBe(true);
+    for (const l of lines.slice(0, 20)) {
+      expect(l.profit).toBeCloseTo(l.net - l.fees - l.cost + l.shipping - l.delivery - l.refunds, 1);
+    }
+    const cancelled = await db.select({ id: s.orders.id }).from(s.orders).where(orm.eq(s.orders.status, 'cancelled'));
+    expect(cancelled.length).toBeGreaterThan(0);
+    expect(lines.some((l) => cancelled.some((c) => c.id === l.orderId))).toBe(false);
+    expect(lines.some((l) => l.refunds > 0)).toBe(true);
+
+    // A cost change from a date applies to orders from that day on.
+    const [mug] = await db.select().from(s.products).where(orm.eq(s.products.sku, 'LUO-MUG-01'));
+    const mugLines = () => db.select().from(s.salesLines).where(orm.eq(s.salesLines.productId, mug.id));
+    const before = await mugLines();
+    const cutoff = [...new Set(before.map((l) => l.day))].sort()[Math.floor(before.length / 2)];
+    await costs.setProductCost(mug.id, { unitCost: 100, effectiveFrom: cutoff }, null);
+    await profit.recomputeAll();
+    await drain();
+    for (const l of await mugLines()) {
+      const unit = l.cost / l.quantity;
+      if (l.day >= cutoff) expect(unit).toBe(100);
+      else expect(unit).toBeLessThan(100);
+    }
+
+    // A new label on an order brings its configured cost in.
+    const order = (await allOrders()).find((o) => o.status === 'new' && o.marketplace === 'shopify' && o.pickupPointId)!;
+    const deliveryOf = async () =>
+      (await db.select().from(s.salesLines).where(orm.eq(s.salesLines.orderId, order.id))).reduce((sum, l) => sum + l.delivery, 0);
+    const form = await m.shipping.shippingFormData(order.id);
+    await m.shipping.requestShipment(
+      { orderId: order.id, carrierAccountId: form.route!.carrierAccountId, service: form.route!.service, parcel: m.shipping.presetToParcel(form.defaultPreset!), options: {} },
+      null,
+    );
+    await drain(['tracking-push']);
+    const settings = await costs.loadAnalyticsSettings();
+    expect(await deliveryOf()).toBeCloseTo((settings.labelCosts[form.route!.service] ?? settings.defaultLabelCost) + settings.packagingCost, 1);
+    queue.length = 0;
+  });
+
+  it('feeds the analytics pages from the profit lines', async () => {
+    const dataset = await import('@/server/analytics/dataset');
+    const { buildAnalyticsView } = await import('@/server/analytics/view');
+    const db = m.db.getDb();
+    const lines = await db.select().from(m.schema.salesLines);
+    const data = await dataset.loadBusinessData();
+    expect(data.lineItems).toHaveLength(lines.length);
+    expect(data.orders).toHaveLength(new Set(lines.map((l) => l.orderId)).size);
+    const gross = lines.reduce((s, l) => s + l.gross, 0);
+    const profit = lines.reduce((s, l) => s + l.profit, 0);
+    expect(data.lineItems.reduce((s, l) => s + l.revenuePLN, 0)).toBeCloseTo(gross, 2);
+
+    const all = dataset.snapshotFor(data, dataset.periodFor(data, 'all'));
+    expect(all.totals.revenuePLN).toBeCloseTo(gross, 2);
+    expect(all.totals.marginPLN).toBeCloseTo(profit, 2);
+    expect(all.kpis).toHaveLength(5);
+    expect(all.health.score).toBeGreaterThan(0);
+    expect(all.products.length).toBeGreaterThan(0);
+    // Brands and categories fall back to the name when Shopify gave none.
+    expect(all.products.every((p) => p.brand && p.category)).toBe(true);
+
+    const empik = await buildAnalyticsView({ marketplace: 'empik', period: 'year' }, true);
+    expect(empik.data.lineItems.length).toBeGreaterThan(0);
+    expect(empik.data.lineItems.every((l) => l.source === 'empik')).toBe(true);
+    expect(empik.params).toMatchObject({ marketplace: 'empik', period: 'year' });
+
+    const margins = await dataset.productMargins(400);
+    expect(margins.size).toBeGreaterThan(0);
+  });
+
+  it('links every order to a customer, across marketplaces, with lifetime totals', async () => {
+    const customers = await import('@/server/services/customers');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    queue.length = 0;
+    // Past orders imported earlier may not be linked yet: the backfill catches up.
+    while ((await customers.resolveMissingCustomers()).remaining);
+    expect(await db.select().from(s.orders).where(orm.isNull(s.orders.customerId))).toHaveLength(0);
+
+    const list = await customers.allCustomers();
+    expect(list.length).toBeGreaterThan(10);
+    // Demo buyers use real-looking e-mails, so one person who bought on two marketplaces is one customer.
+    expect(list.some((c) => c.marketplaces.length > 1)).toBe(true);
+    const [top] = [...list].sort((a, b) => b.ordersCount - a.ordersCount);
+    const lines = await db.select().from(s.salesLines).where(orm.eq(s.salesLines.customerId, top.id));
+    expect(top.revenue).toBeCloseTo(lines.reduce((sum, l) => sum + l.gross, 0), 1);
+    const live = await db
+      .select()
+      .from(s.orders)
+      .where(orm.and(orm.eq(s.orders.customerId, top.id), orm.ne(s.orders.status, 'cancelled')));
+    expect(top.ordersCount).toBe(live.length);
+
+    // The same Allegro buyer behind relay e-mails is one customer; a different buyer id is another.
+    const { MockMarketplaceAdapter } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const [allegro] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'allegro'));
+    const mock = new MockMarketplaceAdapter('allegro', allegro.id);
+    const build = (index: number, buyerId: string, email: string) => {
+      const o = mock.buildOrder(index, new Date());
+      return { ...o, buyer: { ...o.buyer, name: `Relay ${buyerId}`, email }, shippingAddress: { ...o.shippingAddress, email }, raw: { buyer: { id: buyerId } } };
+    };
+    await m.orders.upsertOrders(allegro, [build(9001, 'BUYER-1', 'a1@allegromail.pl'), build(9002, 'BUYER-1', 'zz@allegromail.pl'), build(9003, 'BUYER-2', 'a1@allegromail.pl')], { historical: true });
+    const relay = await db.select().from(s.orders).where(orm.like(orm.sql`json_extract(${s.orders.buyer}, '$.name')`, 'Relay %'));
+    const byBuyer = (name: string) => new Set(relay.filter((o) => o.buyer.name === name).map((o) => o.customerId));
+    expect(byBuyer('Relay BUYER-1').size).toBe(1);
+    expect([...byBuyer('Relay BUYER-2')][0]).not.toBe([...byBuyer('Relay BUYER-1')][0]);
+    const relayCustomer = list.find((c) => c.id === [...byBuyer('Relay BUYER-1')][0]) ?? (await customers.loadCustomer([...byBuyer('Relay BUYER-1')][0]!))!.customer;
+    expect(relayCustomer.email).toBeNull();
+
+    // Merging moves orders, notes and tasks, and the totals follow.
+    const target = [...byBuyer('Relay BUYER-1')][0]!;
+    const source = [...byBuyer('Relay BUYER-2')][0]!;
+    const userId = await adminId();
+    await customers.addCustomerNote(source, 'Prefers fragrance-free', userId);
+    const taskService = await import('@/server/services/tasks');
+    await taskService.createTask({ title: 'Send a sample', customerId: source, assigneeIds: [userId] }, { id: userId });
+    await customers.mergeCustomers(target, [source]);
+    const merged = await customers.loadCustomer(target);
+    expect(merged!.orders).toHaveLength(3);
+    expect(merged!.notes.map((n) => n.note.body)).toContain('Prefers fragrance-free');
+    expect(merged!.identities.map((i) => i.value).sort()).toEqual(['BUYER-1', 'BUYER-2']);
+    expect(await customers.loadCustomer(source)).toBeNull();
+    // The task moved with the merge: it is now about the customer that was kept.
+    expect((await taskService.listTasks({ assignee: userId, status: 'open' })).map((t) => [t.title, t.customerId])).toContainEqual(['Send a sample', target]);
+    const dupes = await customers.duplicateSuggestions();
+    expect(Array.isArray(dupes)).toBe(true);
+  });
+
+  it('writes the chosen segments to Shopify customers as tags, sending only changes', async () => {
+    const crm = await import('@/server/services/crm-sync');
+    const calls: { id: string; add: string[]; remove: string[] }[] = [];
+    crm.setShopifyCustomerApi({
+      findCustomer: async (email) => ({ id: `gid://shopify/Customer/${email}`, tags: [], subscribed: email.startsWith('a') }),
+      updateCustomerTags: async (id, add, remove) => void calls.push({ id, add, remove }),
+    });
+    try {
+      await crm.saveCrmSettings({ syncSegments: ['new', 'one_time', 'promising', 'loyal', 'vip', 'at_risk', 'cant_lose', 'lost'], dryRun: true });
+      const dry = await crm.runCrmSync();
+      expect(dry.dryRun).toBe(true);
+      expect(dry.changes).toBeGreaterThan(0);
+      expect(calls).toHaveLength(0);
+
+      await crm.saveCrmSettings({ syncSegments: ['new', 'one_time', 'promising', 'loyal', 'vip', 'at_risk', 'cant_lose', 'lost'], dryRun: false });
+      queue.length = 0;
+      let result = await crm.runCrmSync();
+      while (queue.some((j) => j.name === 'crm-shopify-sync')) {
+        queue.length = 0;
+        result = await crm.runCrmSync();
+      }
+      expect(result.errors).toEqual([]);
+      expect(calls.length).toBe(dry.changes);
+      expect(calls.every((c) => c.add.length === 1 && c.add[0].startsWith('luora-'))).toBe(true);
+      // Only Shopify buyers: nobody who bought solely on Allegro or Empik.
+      const db = m.db.getDb();
+      const synced = await db.select().from(m.schema.customers).where(m.orm.isNotNull(m.schema.customers.syncedTags));
+      expect(synced.every((c) => c.marketplaces.includes('shopify'))).toBe(true);
+      expect(synced.every((c) => c.shopifyCustomerId?.startsWith('gid://shopify/Customer/'))).toBe(true);
+      expect((await crm.runCrmSync()).changes).toBe(0);
+    } finally {
+      crm.setShopifyCustomerApi(undefined);
+      queue.length = 0;
+    }
+  });
+
   it('removes demo accounts with their orders, labels and rules', async () => {
     const settings = await import('@/server/services/settings');
     expect(await settings.demoAccountCount()).toBe(5);
@@ -659,4 +1036,5 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const { getCfEnv } = await import('@/server/cf');
     for (const key of labelKeys) expect(await getCfEnv().LABELS.get(key)).toBeNull();
   });
+
 });

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { findLockerCode, formatPostalCode } from '../../address';
-import type { NormalizedOrder } from '../../types';
+import type { NormalizedFee, NormalizedOrder, NormalizedRefund } from '../../types';
 
 const money = z.object({ shopMoney: z.object({ amount: z.string(), currencyCode: z.string() }) });
 
@@ -31,6 +31,48 @@ export const shopifyOrderSchema = z.object({
   paymentGatewayNames: z.array(z.string()).default([]),
   totalPriceSet: money,
   totalShippingPriceSet: money.nullish(),
+  totalDiscountsSet: money.nullish(),
+  refunds: z
+    .array(
+      z.object({
+        id: z.string(),
+        createdAt: z.string(),
+        totalRefundedSet: money.nullish(),
+        refundLineItems: z
+          .object({
+            nodes: z.array(
+              z.object({
+                quantity: z.number().int(),
+                restockType: z.string().nullish(),
+                lineItem: z.object({ id: z.string() }).nullish(),
+                subtotalSet: z.object({ shopMoney: z.object({ amount: z.string() }) }).nullish(),
+              }),
+            ),
+          })
+          .nullish(),
+      }),
+    )
+    .nullish(),
+  transactions: z
+    .array(
+      z.object({
+        id: z.string(),
+        kind: z.string().nullish(),
+        status: z.string().nullish(),
+        processedAt: z.string().nullish(),
+        fees: z
+          .array(
+            z.object({
+              id: z.string(),
+              amount: z.object({ amount: z.string(), currencyCode: z.string() }),
+              taxAmount: z.object({ amount: z.string(), currencyCode: z.string() }).nullish(),
+              type: z.string().nullish(),
+            }),
+          )
+          .nullish(),
+      }),
+    )
+    .nullish(),
   shippingAddress: address.nullish(),
   shippingLine: z.object({ title: z.string().nullish(), code: z.string().nullish(), source: z.string().nullish() }).nullish(),
   customAttributes: z.array(z.object({ key: z.string(), value: z.string().nullish() })).default([]),
@@ -42,6 +84,7 @@ export const shopifyOrderSchema = z.object({
         name: z.string(),
         quantity: z.number().int(),
         originalUnitPriceSet: money,
+        totalDiscountSet: money.nullish(),
         image: z.object({ url: z.string() }).nullish(),
         variant: z.object({ id: z.string(), inventoryItem: z.object({ id: z.string() }).nullish() }).nullish(),
       }),
@@ -102,10 +145,67 @@ export function mapShopifyOrder(raw: unknown, pickupPointKeys = DEFAULT_PICKUP_P
       unitPrice: li.originalUnitPriceSet.shopMoney.amount,
       externalProductId: li.variant?.id ?? null,
       imageUrl: li.image?.url ?? null,
+      discountAmount: nonZero(li.totalDiscountSet?.shopMoney.amount),
     })),
+    discountAmount: nonZero(o.totalDiscountsSet?.shopMoney.amount),
+    fees: shopifyFees(o),
+    refunds: shopifyRefunds(o, currency),
     revision: o.updatedAt,
     raw,
   };
+}
+
+function nonZero(amount: string | null | undefined): string | null {
+  return amount && Number(amount) !== 0 ? amount : null;
+}
+
+/** Shopify Payments processing fees, reported on each successful transaction. */
+function shopifyFees(o: ShopifyOrder): NormalizedFee[] {
+  const out: NormalizedFee[] = [];
+  for (const t of o.transactions ?? []) {
+    if (t.status && t.status !== 'SUCCESS') continue;
+    for (const f of t.fees ?? []) {
+      out.push({
+        externalId: f.id,
+        kind: 'payment',
+        // Shopify reports types like "processing_fee" and "foreign_exchange_fee".
+        label: f.type ? `Shopify Payments ${f.type.toLowerCase().replace(/_/g, ' ')}` : 'Shopify Payments fee',
+        amount: f.amount.amount,
+        taxAmount: f.taxAmount?.amount ?? null,
+        currency: f.amount.currencyCode,
+        occurredAt: new Date(t.processedAt ?? o.createdAt),
+      });
+    }
+  }
+  return out;
+}
+
+/** One refund per returned line, plus the rest of the refund (shipping, goodwill) as an order-level one. */
+function shopifyRefunds(o: ShopifyOrder, currency: string): NormalizedRefund[] {
+  const out: NormalizedRefund[] = [];
+  for (const r of o.refunds ?? []) {
+    const total = Number(r.totalRefundedSet?.shopMoney.amount ?? 0);
+    const refundCurrency = r.totalRefundedSet?.shopMoney.currencyCode ?? currency;
+    const refundedAt = new Date(r.createdAt);
+    let lines = 0;
+    for (const li of r.refundLineItems?.nodes ?? []) {
+      const amount = Number(li.subtotalSet?.shopMoney.amount ?? 0);
+      if (!li.lineItem) continue;
+      lines += amount;
+      out.push({
+        externalId: `${r.id}:${li.lineItem.id}`,
+        externalLineId: li.lineItem.id,
+        amount: amount.toFixed(2),
+        currency: refundCurrency,
+        quantity: li.quantity,
+        restocked: Boolean(li.restockType && li.restockType !== 'NO_RESTOCK'),
+        refundedAt,
+      });
+    }
+    const rest = Math.round((total - lines) * 100) / 100;
+    if (rest > 0) out.push({ externalId: r.id, amount: rest.toFixed(2), currency: refundCurrency, refundedAt });
+  }
+  return out;
 }
 
 /**

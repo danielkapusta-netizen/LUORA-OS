@@ -74,8 +74,8 @@ curl -X POST https://<your-app>/api/admin/seed   # first run only: creates the a
 
 | Account | What you need | Where to get it |
 |---|---|---|
-| **Shopify** | Shop domain, Client ID, Client secret | Shopify **Dev Dashboard** → create an app, install it on the store. Since January 2026 new apps use client credentials, and tokens expire every 24 h (the app refreshes them automatically). A legacy `shpat_…` token also works. Scopes: `read_orders`, `read_products`, `read_locations`, `write_inventory`, `write_merchant_managed_fulfillment_orders`. |
-| **Allegro** | Client ID, Client secret | [apps.developer.allegro.pl](https://apps.developer.allegro.pl) (or the sandbox). Set the redirect URI to `APP_URL/api/oauth/allegro/callback`, save the account, then press **Connect Allegro**. |
+| **Shopify** | Shop domain, Client ID, Client secret | Shopify **Dev Dashboard** → create an app, install it on the store. Since January 2026 new apps use client credentials, and tokens expire every 24 h (the app refreshes them automatically). A legacy `shpat_…` token also works. Scopes: `read_orders`, `read_products`, `read_locations`, `write_inventory`, `write_merchant_managed_fulfillment_orders`. For the history import add `read_all_orders` (otherwise Shopify only returns the last 60 days). |
+| **Allegro** | Client ID, Client secret | [apps.developer.allegro.pl](https://apps.developer.allegro.pl) (or the sandbox). Set the redirect URI to `APP_URL/api/oauth/allegro/callback`, save the account, then press **Connect Allegro**. For fees and refunds in analytics the app also needs the **Billing (read)** and **Payments (read)** permissions; after enabling them press **Connect Allegro** again. |
 | **Empik** | Marketplace URL, API key | Empik seller panel → My account → API key (Empik runs on Mirakl). |
 | **InPost** | API token, Organization ID | InPost Manager Paczek → My account → API (ShipX). A sandbox is available. |
 | **Allegro Delivery** | A connected Allegro account, an IBAN for cash on delivery | No extra keys: it uses the Allegro account's connection. |
@@ -83,6 +83,73 @@ curl -X POST https://<your-app>/api/admin/seed   # first run only: creates the a
 For Shopify you can also add webhooks for `orders/create` and `orders/updated`, pointing at the URL shown on the Integrations page. They make new orders appear within seconds instead of at the next sync.
 
 Parcel locker codes for Shopify orders are read from order note attributes whose key contains `paczkomat`, `inpost_point`, `pickup_point`, and so on (you can change the list per account). If a code isn't found, it can be typed on the order page.
+
+## Analytics data: history, fees and costs
+
+Profit per order needs more than the order itself. This is where each part comes from:
+
+| Data | Source |
+|---|---|
+| Past orders | **Settings → Integrations → (account) → Import past orders.** A one-off, resumable import of every past order. Past orders are stored with `historical = true` and status Shipped or Cancelled: they never get labels, invoices or stock movements. Open orders from the last few days are left to the regular sync. |
+| Marketplace fees | Empik commission and Shopify Payments fees come inside the order. Allegro commission, Smart delivery and promotion charges come from `/billing/billing-entries`, read every two hours (`fees-sync`). Stored in `order_fees`, one row per charge, keyed by the provider's id. |
+| Refunds | Shopify and Empik refunds come inside the order; Allegro refunds from `/payments/refunds`. Stored in `order_refunds`. |
+| Discounts | Per line (`order_items.discount_amount`) and per order. Prices stay as paid. |
+| Exchange rates | NBP table A, stored per day in `fx_rates` (`fx-sync`, nightly). Each order converts at the rate of its day. |
+| Product costs | **Settings → Costs & margins.** Landed cost per unit in PLN, dated so that a new cost never rewrites past margins. Enter it by hand (or from a purchase price in USD/EUR/KRW at the NBP rate), paste two columns from a spreadsheet, import the Luora Analytics Google Sheet once, or take Shopify's "Cost per item". |
+| Profit settings | Same page: fallback commission per marketplace (only for orders without a reported fee), label and packaging cost, margin targets. VAT comes from the Accounting settings. |
+
+## Dashboard and analytics
+
+The analytics from the former Luora Analytics app (Google Sheet) now run on Luora OS data:
+
+- **Dashboard** (`/`): executive brief, KPIs with sparklines, top products, questions answered from your numbers, business health, risks and opportunities, the business pulse and the channel split, plus today's open orders.
+- **Analytics** (`/analytics`): Operations (labels, time to ship, backlog), Action centre, Business review, Products (by product, brand or category, with monthly history), Pricing (price needed for a margin, recommendations, simulator, margin at risk), Trends (any metric with previous period, last year, moving average and projection), Orders P&L, and the pre-purchase Calculator.
+- Every order shows its profit breakdown, and Inventory shows each product's margin.
+
+How it fits together: `services/profit.ts` keeps `sales_lines` (profit per order line, PLN) up to date; `src/server/analytics/dataset.ts` turns those lines into the domain model; the calculations in `src/lib/analytics/` are the Luora Analytics domain modules, ported almost unchanged (they keep that project's code style).
+
+## Customers (CRM)
+
+- Every order is linked to a customer (`services/customers.ts`). A buyer is recognised by the marketplace's buyer id (Allegro, Empik) or a real e-mail; Allegro and Empik relay e-mails are never used to join people. The same real e-mail on two marketplaces makes one customer. Orders synced before the CRM are linked in the background (`customers-backfill`, every 15 minutes).
+- **Customers** (`/customers`): lifetime revenue and profit, orders, basket, segment, marketplaces and tags; filters, sorting and a CSV export (admins). Each customer has a profile with their orders and profit, what they buy, contact details and identities, notes, tags and tasks.
+- **Segments**: VIP, Loyal, Promising, New, One-time, At risk, Can't lose and Lost (by recency, number of orders and spend), monthly cohorts, and regulars who went quiet. **Possible duplicates** lists customers with the same phone, or the same name at the same postcode, to merge. Follow-ups you add on a customer are ordinary tasks (see Tasks), linked back to the customer.
+- **Shopify tags**: chosen segments (and optionally staff tags) are written to Shopify customers as tags such as `luora-vip`, for Shopify Email or Klaviyo. It needs the `read_customers` and `write_customers` scopes, starts in dry run, and only covers customers who bought on Shopify: Allegro and Empik buyer data may not be used for your own marketing.
+
+## Tasks
+
+What the team has to do, who is on it and when (`/tasks`, in the sidebar with a badge for your tasks due today or late).
+
+- **Overview**: Projects (cards with the people on them and "N tasks open"), Tags, the tasks of a day as cards (overdue first, then the day, then tasks without a day, then what is coming up), productivity (tasks done today, finished on time, and a bar for each of the last seven days) and a week calendar. Click a day to see it.
+- **Board**: To do, In progress and Done as columns of cards. Drag a card to another column; on a touch screen use the card's menu ("Move to…").
+- **Calendar**: a month, Monday first, with each day's tasks as chips in the colour of their project; click a day to list it and add a task to it.
+- **Projects**: a card per project with progress, open and overdue counts and its people; a project page shows its tasks as a board. Archive a project to hide it; delete is only possible while it has no tasks.
+- **A task** has a title, description, status, priority, project, a day with an optional time slot, tags, a checklist, comments, and **several people** it is assigned to. Every change (status, people, day, priority, project) is written to the task's activity trail. A task can be linked to a customer or an order: the order page has a Tasks card, the customer page lists its tasks.
+- Filters on every page: everyone, mine, one person or unassigned; a project; a tag; a search. They live in the address, so a view can be shared.
+- Anyone who is signed in can create and edit tasks; only the person who created a task, or an admin, can delete it. There are no e-mail notifications: people see their tasks in the sidebar badge and on the Dashboard ("My tasks").
+- In demo mode the seed adds two colleagues, four projects and about thirty tasks around today; "Remove demo data" takes them away.
+
+Dates are plain Warsaw days (`YYYY-MM-DD`) and times (`HH:MM`), so the calendar needs no time-zone arithmetic. The code is in `services/tasks.ts` (database), `src/lib/tasks/` (dates, colours, grouping and figures, with no database) and `src/components/tasks/`.
+
+## Publishing products to Allegro and Empik
+
+Inventory → **Publish to Allegro / Empik** (admins) lists the Shopify products that have no offer in that account yet, and creates offers for the ones you tick (25 at a time). Only products the marketplace's catalogue already knows by EAN can be listed; others show "Not in the catalogue". Price = Shopify price + the account's markup % (Settings → Integrations → the account → "Offers created from Shopify"), stock = the master stock; once the offer exists the normal stock sync takes over.
+
+- **Allegro:** the Allegro app needs the permissions "Offers: read and write" and "Seller settings: read" (reconnect Allegro after enabling them). In the account settings press "Load choices from Allegro", then pick the shipping rates, return policy and implied warranty, and fill in where the goods are sent from. Offers are published at once unless "create as drafts" is ticked.
+- **Empik:** offers are sent with an OF01 import for the EAN; the offer state code defaults to 11 (new).
+
+## Roles and access
+
+Every user has one role (Settings → Users; admins change it with the Role selector, and the last admin can't be demoted or deleted):
+
+| Role | Sees | Doesn't see |
+| --- | --- | --- |
+| **Admin** | everything | |
+| **Logistics** | Orders, Shipments, Inventory, Customers, Tasks, Accounting. The Dashboard shows only the orders still to send, the parcels per courier and your tasks | Analytics, Settings, and profit or margin anywhere (order page, inventory, customers) |
+| **Marketing** | every page except Settings, with margins in % | how much profit was made: profit amounts, columns, charts, and the sentences and findings that quote them |
+
+The rules live in one table, `src/lib/permissions.ts`, used by the sidebar, the page guards (`requireCapability`) and the data loaders. For marketing the profit figures are removed on the server (`src/server/analytics/view.ts`, `src/lib/analytics/redact.ts`), not just hidden, so they never reach the browser. Courier names come from the delivery method the buyer chose (`src/lib/couriers.ts`).
+
+Migration `0012_roles` turns the old `staff` users into `logistics`.
 
 ## How it works
 
@@ -103,7 +170,7 @@ One Worker (src/worker/cloudflare.ts)
   - `mapper.ts`: provider JSON ↔ the app's own types.
   - `adapter.ts`: the actions the rest of the app calls.
 - The rest of the app only talks to the `MarketplaceAdapter` and `CarrierAdapter` interfaces.
-- Business logic lives in `src/server/services/`: `orders`, `shipping`, `routing`, `workflow`, `tracking`, `inventory` and `analytics`.
+- Business logic lives in `src/server/services/`: `orders`, `shipping`, `routing`, `workflow`, `tracking`, `inventory` and `analytics`, plus `history`, `fees`, `fx` and `costs` for the analytics data.
 
 Guards against buying a label twice:
 

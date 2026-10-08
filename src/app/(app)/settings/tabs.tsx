@@ -8,6 +8,7 @@ const TABS = [
   { href: '/settings/integrations', label: 'Integrations' },
   { href: '/settings/shipping', label: 'Shipping rules & packages' },
   { href: '/settings/accounting', label: 'Accounting' },
+  { href: '/settings/costs', label: 'Costs & margins' },
   { href: '/settings/users', label: 'Users' },
 ];
 

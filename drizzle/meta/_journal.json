@@ -43,6 +43,55 @@
       "when": 1790939385512,
       "tag": "0005_inventory_shopify",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791318030449,
+      "tag": "0006_analytics",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791321704952,
+      "tag": "0007_sales_lines",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791323085286,
+      "tag": "0008_calculator",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791325048104,
+      "tag": "0009_crm",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1791377922036,
+      "tag": "0010_stock_modes",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1791380798723,
+      "tag": "0011_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1791384711097,
+      "tag": "0012_roles",
+      "breakpoints": true
     }
   ]
 }

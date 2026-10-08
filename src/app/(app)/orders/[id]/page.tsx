@@ -7,10 +7,19 @@ import { PrintLabelButton } from '@/components/print-label-button';
 import { MarketplaceBadge, ShipmentBadge, StatusBadge } from '@/components/badges';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Alert, buttonClass, Card, CardBody, CardHeader, Field, Input, Select, td, Textarea, th } from '@/components/ui';
+import { AvatarStack } from '@/components/tasks/avatars';
+import { DueChip } from '@/components/tasks/chips';
+import { DoneToggle } from '@/components/tasks/done-toggle';
+import { NewTaskDialog } from '@/components/tasks/task-dialog';
+import { today as warsawToday } from '@/lib/tasks/dates';
 import { CARRIER_LABELS, cn, formatDate, formatMoney, SERVICE_LABELS } from '@/lib/utils';
+import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import { getOrderDetail } from '@/server/services/orders';
+import { orderProfit } from '@/server/analytics/dataset';
+import { ProfitBreakdown } from '@/components/analytics/profit-breakdown';
 import { listUsers } from '@/server/services/settings';
+import { listProjects, listTasks, tagCounts } from '@/server/services/tasks';
 import { shippingFormData } from '@/server/services/shipping';
 import { canTransition, MANUAL_TARGETS, STATUS_LABELS } from '@/server/services/workflow';
 import {
@@ -43,12 +52,16 @@ const EVENT_DOT: Record<string, string> = {
 };
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { id } = await params;
   const detail = await getOrderDetail(id);
   if (!detail) notFound();
   const { order, account, items, events, shipments } = detail;
-  const users = await listUsers();
+  const [users, allProfitLines, orderTasks, projectCards, tagList] = await Promise.all([listUsers(), orderProfit(order.id), listTasks({ orderId: id }), listProjects(), tagCounts({ limit: 20 })]);
+  const todayKey = warsawToday();
+  const profitLines = can(user.role, 'profit') ? allProfitLines : [];
+  const orderGross = allProfitLines.reduce((sum, l) => sum + Number(l.gross ?? 0), 0);
+  const orderMargin = orderGross > 0 ? (allProfitLines.reduce((sum, l) => sum + Number(l.profit ?? 0), 0) / orderGross) * 100 : null;
 
   const active = shipments.find((s) => s.state === 'pending' || s.state === 'created');
   const canShip = !active && order.readyToShip && !['cancelled', 'shipped', 'delivered'].includes(order.status);
@@ -245,7 +258,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <CardHeader title="Buyer and shipping address" description="Edits here are used for new labels; the marketplace is not changed." />
             <CardBody>
               <p className="mb-3 text-sm text-slate-600">
-                {order.buyer.name}
+                {order.customerId ? (
+                  <Link href={`/customers/${order.customerId}`} className="font-medium text-brand-700 hover:underline">
+                    {order.buyer.name}
+                  </Link>
+                ) : (
+                  order.buyer.name
+                )}
                 {order.buyer.login ? ` (${order.buyer.login})` : ''} · {order.buyer.email ?? 'no email'} · {order.buyer.phone ?? 'no phone'}
               </p>
               <ActionForm action={updateAddressAction.bind(null, order.id)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -285,6 +304,24 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <div className="space-y-5">
+          {can(user.role, 'profit') ? (
+            <Card>
+              <CardHeader title="Profit" description="After VAT, fees, product cost, shipping and refunds, in PLN." />
+              <CardBody>
+                <ProfitBreakdown lines={profitLines} />
+              </CardBody>
+            </Card>
+          ) : (
+            can(user.role, 'margin') &&
+            orderMargin !== null && (
+              <Card>
+                <CardHeader title="Margin" description="After VAT, fees, product cost, shipping and refunds." />
+                <CardBody>
+                  <p className={cn('text-2xl font-semibold tabular-nums', orderMargin < 0 ? 'text-red-700' : 'text-slate-900')}>{orderMargin.toFixed(1)}%</p>
+                </CardBody>
+              </Card>
+            )
+          )}
           <Card>
             <CardHeader title="Workflow" />
             <CardBody className="space-y-4">
@@ -318,6 +355,47 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 </Field>
                 <SubmitButton variant="secondary">Save</SubmitButton>
               </ActionForm>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Tasks"
+              description="Things to do about this order."
+              actions={
+                <NewTaskDialog
+                  people={users.map((u) => ({ id: u.id, name: u.name }))}
+                  projects={projectCards.map((p) => ({ id: p.project.id, name: p.project.name }))}
+                  tags={tagList.map((t) => t.tag)}
+                  meId={user.id}
+                  label="Add"
+                  variant="secondary"
+                  size="sm"
+                  defaults={{ orderId: order.id, title: `Order ${order.externalNumber}: ` }}
+                />
+              }
+            />
+            <CardBody>
+              {orderTasks.length === 0 ? (
+                <p className="text-sm text-slate-500">No tasks for this order.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {orderTasks.map((t) => (
+                    <li key={t.id} className="flex items-start gap-2.5">
+                      <DoneToggle id={t.id} done={t.status === 'done'} title={t.title} />
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/tasks/${t.id}`} className={cn('text-sm font-medium hover:underline', t.status === 'done' && 'text-slate-400 line-through')}>
+                          {t.title}
+                        </Link>
+                        <div className="mt-1">
+                          <DueChip task={t} today={todayKey} />
+                        </div>
+                      </div>
+                      <AvatarStack people={t.assignees} size="sm" />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardBody>
           </Card>
 
