@@ -51,6 +51,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     invoiceRequested: params.invoice === 'requested',
     from: params.from,
     to: params.to,
+    returning: params.returning === '1',
     page: Number(params.page ?? 1) || 1,
   };
 
@@ -68,7 +69,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // The details panel shows the chosen order, or the first one on the page.
   const selectedId = params.order ?? rows[0]?.order.id ?? null;
 
-  const tableRows: OrderRow[] = rows.map(({ order, accountName, assigneeName, itemCount, shipment }) => ({
+  const tableRows: OrderRow[] = rows.map(({ order, accountName, assigneeName, itemCount, shipment, returning }) => ({
     id: order.id,
     number: order.externalNumber,
     marketplace: order.marketplace,
@@ -85,6 +86,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     marketplaceStatus: order.marketplaceStatus,
     assignee: assigneeName,
     courier: shipment && shipment.state !== 'failed' ? (CARRIER_LABELS[shipment.carrier] ?? shipment.carrier) : order.deliveryMethodName,
+    returning: returning ? { orderNumber: returning.orderNumber, since: returning.firstOrderAt.toISOString() } : null,
     shipment: shipment
       ? { id: shipment.id, state: shipment.state, trackingNumber: shipment.trackingNumber, carrier: shipment.carrier, hasLabel: shipment.state === 'created' }
       : null,
@@ -142,6 +144,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             </Link>
           );
         })}
+        <Link
+          href={hrefWith(params, { returning: params.returning === '1' ? undefined : '1', page: undefined, order: undefined })}
+          className={cn(
+            'rounded-full border px-4 py-1.5 text-sm font-medium transition-colors',
+            params.returning === '1' ? 'border-violet-600 bg-violet-600 text-white' : 'border-violet-200 bg-violet-50 text-violet-800 hover:border-violet-300',
+          )}
+          aria-pressed={params.returning === '1'}
+        >
+          Returning customers
+        </Link>
         <details className="relative ml-auto" open={filtersActive}>
           <summary className={cn(buttonClass('secondary', 'sm'), 'cursor-pointer list-none')}>
             <SlidersHorizontal className="size-3.5" /> Filters{filtersActive ? ' •' : ''}

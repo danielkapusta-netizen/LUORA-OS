@@ -491,6 +491,8 @@ export interface OrderFilters {
   invoiceRequested?: boolean;
   from?: string;
   to?: string;
+  /** Only orders whose customer ordered (and did not cancel) before. */
+  returning?: boolean;
   page?: number;
 }
 
@@ -505,6 +507,9 @@ function filterConditions(f: OrderFilters): SQL[] {
   if (f.accountId) where.push(eq(orders.accountId, f.accountId));
   if (f.assigneeId) where.push(eq(orders.assigneeId, f.assigneeId));
   if (f.invoiceRequested) where.push(isNotNull(orders.invoiceRequest));
+  if (f.returning) {
+    where.push(sql`exists (select 1 from orders o2 where o2.customer_id = ${orders.customerId} and o2.status <> 'cancelled' and o2.placed_at < ${orders.placedAt})`);
+  }
   if (f.tag) where.push(sql`exists (select 1 from json_each(${orders.tags}) t where t.value = ${f.tag})`);
   if (f.from) where.push(gte(orders.placedAt, new Date(f.from)));
   if (f.to) where.push(lte(orders.placedAt, new Date(`${f.to}T23:59:59`)));
@@ -530,6 +535,34 @@ function filterConditions(f: OrderFilters): SQL[] {
     );
   }
   return where;
+}
+
+export interface ReturningInfo {
+  /** 2 for the second order, 3 for the third... */
+  orderNumber: number;
+  firstOrderAt: Date;
+}
+
+/** For orders whose customer ordered (and did not cancel) before: which order of theirs this is, and when they first ordered. */
+export async function returningInfo(rows: { id: string; customerId: string | null; placedAt: Date }[]): Promise<Map<string, ReturningInfo>> {
+  const result = new Map<string, ReturningInfo>();
+  const customerIds = [...new Set(rows.map((r) => r.customerId).filter((c): c is string => Boolean(c)))];
+  if (customerIds.length === 0) return result;
+  const history = new Map<string, Date[]>();
+  for (const ids of chunk(customerIds)) {
+    const found = await getDb()
+      .select({ customerId: orders.customerId, placedAt: orders.placedAt })
+      .from(orders)
+      .where(and(inArray(orders.customerId, ids), ne(orders.status, 'cancelled')));
+    for (const f of found) history.set(f.customerId!, [...(history.get(f.customerId!) ?? []), f.placedAt]);
+  }
+  for (const r of rows) {
+    if (!r.customerId) continue;
+    const earlier = (history.get(r.customerId) ?? []).filter((d) => d.getTime() < r.placedAt.getTime());
+    if (earlier.length === 0) continue;
+    result.set(r.id, { orderNumber: earlier.length + 1, firstOrderAt: new Date(Math.min(...earlier.map((d) => d.getTime()))) });
+  }
+  return result;
 }
 
 export async function listOrders(f: OrderFilters) {
@@ -565,7 +598,8 @@ export async function listOrders(f: OrderFilters) {
   const latest = new Map<string, (typeof live)[number]>();
   for (const s of live) if (!latest.has(s.orderId)) latest.set(s.orderId, s);
 
-  return { rows: rows.map((r) => ({ ...r, shipment: latest.get(r.order.id) ?? null })), total: count, page, pageSize: PAGE_SIZE };
+  const returning = await returningInfo(rows.map((r) => ({ id: r.order.id, customerId: r.order.customerId, placedAt: r.order.placedAt })));
+  return { rows: rows.map((r) => ({ ...r, shipment: latest.get(r.order.id) ?? null, returning: returning.get(r.order.id) ?? null })), total: count, page, pageSize: PAGE_SIZE };
 }
 
 export async function statusCounts(): Promise<Record<string, number>> {
