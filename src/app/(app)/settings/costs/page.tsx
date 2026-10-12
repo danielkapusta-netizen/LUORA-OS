@@ -8,6 +8,7 @@ import { costHistory, filterCostRows, LABEL_COST_SERVICES, listCostRows, loadAna
 import { loadAccounting } from '@/server/services/invoicing';
 import {
   deleteProductCostAction,
+  invoiceCostsAction,
   pasteCostsAction,
   saveProductCostAction,
   saveProfitSettingsAction,
@@ -22,7 +23,7 @@ const LUORA_ANALYTICS_SHEET =
   'https://script.google.com/macros/s/AKfycbxM8GUKKRaprp8MVAP7V5fL1JnBA6l-X8DdKUJsW_y7XGIjsfeo4GBAESTrwB73nB3Fnw/exec';
 
 const pct = (v: number | undefined) => (v === undefined ? '' : String(Math.round(v * 10000) / 100));
-const SOURCES: Record<string, string> = { manual: 'entered', import: 'pasted', sheet: 'sheet', shopify: 'Shopify' };
+const SOURCES: Record<string, string> = { manual: 'entered', import: 'pasted', sheet: 'sheet', shopify: 'Shopify', invoice: 'invoice' };
 
 export default async function CostsPage({ searchParams }: { searchParams: Promise<{ q?: string; missing?: string; history?: string }> }) {
   await requireAdmin();
@@ -275,6 +276,64 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
             </table>
           </div>
         )}
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Import a purchase invoice"
+          description="Paste the invoice lines (barcode, quantity, unit price). Each product's cost becomes its price in PLN at the NBP rate of the invoice date, plus its share of delivery and extras, from that date on. Press Check first to see the result."
+        />
+        <CardBody>
+          <ActionForm action={invoiceCostsAction} className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
+            <div className="space-y-2">
+              <Textarea name="lines" rows={9} required placeholder={'8809562191438;3;6.25\n8809151133610;3;5.37\nOr whole rows copied from the invoice table'} />
+              <p className="text-xs text-slate-500">
+                One product per line: barcode, SKU or name, then quantity and unit price. A whole table row works too (the barcode column is found; the amount column is ignored).
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Invoice date" hint="Costs apply from this day.">
+                <Input name="effectiveFrom" type="date" required />
+              </Field>
+              <Field label="Invoice no. (optional)">
+                <Input name="invoiceNumber" />
+              </Field>
+              <Field label="Currency">
+                <Select name="currency" defaultValue="EUR">
+                  {['EUR', 'USD', 'PLN', 'GBP', 'CZK', 'HUF', 'CNY'].map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Unit prices are">
+                <Select name="prices" defaultValue="net">
+                  <option value="net">net (without VAT)</option>
+                  <option value="gross">gross (with VAT)</option>
+                </Select>
+              </Field>
+              <Field label="VAT rate (%)">
+                <Input name="vatRate" inputMode="decimal" defaultValue="23" />
+              </Field>
+              <Field label="Delivery charge" hint="In the invoice currency, spread over all pieces.">
+                <Input name="delivery" inputMode="decimal" placeholder="0" />
+              </Field>
+              <div className="col-span-2">
+                <Checkbox name="deliveryGross" label="The delivery charge includes VAT" />
+              </div>
+              <Field label="Customs and other extras, PLN" hint="Net, for the whole delivery." className="col-span-2">
+                <Input name="extraPln" inputMode="decimal" placeholder="0" />
+              </Field>
+              <div className="col-span-2 flex flex-wrap gap-2">
+                <SubmitButton variant="secondary" name="mode" value="check">
+                  Check
+                </SubmitButton>
+                <SubmitButton name="mode" value="save">
+                  Save costs
+                </SubmitButton>
+              </div>
+            </div>
+          </ActionForm>
+        </CardBody>
       </Card>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">

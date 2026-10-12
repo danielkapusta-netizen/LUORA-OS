@@ -9,6 +9,7 @@ import {
   importCosts,
   importCostsFromSheet,
   importCostsFromShopify,
+  importInvoice,
   LABEL_COST_SERVICES,
   parseAmount,
   parseCostLines,
@@ -127,5 +128,37 @@ export async function shopifyCostsAction(_prev: ActionResult, fd: FormData): Pro
     if (result.saved) await scheduleFullRecompute();
     revalidatePath('/settings/costs');
     return describe(result);
+  });
+}
+
+const pln = (n: number) => `${n.toFixed(2)} zł`;
+
+/** Costs from a purchase invoice. "Check" only shows what would be saved. */
+export async function invoiceCostsAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  const user = await requireAdmin();
+  return attempt(async () => {
+    const preview = text(fd, 'mode') !== 'save';
+    const vatRate = (amount(fd, 'vatRate') ?? 23) / 100;
+    const result = await importInvoice(
+      {
+        lines: text(fd, 'lines'),
+        currency: text(fd, 'currency') || 'EUR',
+        effectiveFrom: text(fd, 'effectiveFrom'),
+        invoiceNumber: text(fd, 'invoiceNumber') || undefined,
+        vatIncluded: text(fd, 'prices') === 'gross',
+        vatRate,
+        deliveryTotal: amount(fd, 'delivery') ?? 0,
+        deliveryIncludesVat: fd.get('deliveryGross') === 'on',
+        extraPln: amount(fd, 'extraPln') ?? 0,
+        preview,
+      },
+      user.id,
+    );
+    if (!preview && result.saved) await scheduleFullRecompute();
+    revalidatePath('/settings/costs');
+    const head = `${preview ? 'Would save' : 'Saved'} ${preview ? result.lines.length : result.saved} cost(s) from ${result.pieces} pieces at ${result.rate} PLN per ${text(fd, 'currency') || 'EUR'}; delivery and extras add ${pln(result.freightPln + result.extraPln)} per piece.`;
+    const lines = result.lines.slice(0, 30).map((l) => `${l.name} (${l.qty} pcs): ${pln(l.unitCostPln)}`);
+    const missed = result.unmatched.length ? ` Not matched to a product (nothing saved): ${result.unmatched.join('; ')}.` : '';
+    return `${head} ${lines.join(' | ')}${result.lines.length > 30 ? ' | …' : ''}${missed}`;
   });
 }

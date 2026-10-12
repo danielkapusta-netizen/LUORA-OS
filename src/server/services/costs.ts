@@ -7,6 +7,7 @@ import { analyticsSettings, marketplaceAccounts, productCosts, products, type An
 import { isMockMode } from '../env';
 import { request } from '../http';
 import { ShopifyAdapter } from '../integrations/marketplaces/shopify/adapter';
+import { netPrice, parseInvoiceLines, sharedCosts, type InvoiceTerms } from '../../lib/invoice';
 import { normalizeEan } from '@/lib/sku';
 import { getMarketplaceAdapter } from './accounts';
 import { plnRateOn, today } from './fx';
@@ -280,6 +281,76 @@ export async function importCosts(lines: ImportLine[], options: { effectiveFrom?
     seen.add(productId);
     await setProductCost(productId, { unitCost: line.cost, effectiveFrom: options.effectiveFrom }, options.userId, options.source);
     result.saved++;
+  }
+  return result;
+}
+
+export interface InvoiceInput extends InvoiceTerms {
+  lines: string;
+  currency: string;
+  effectiveFrom: string;
+  /** Shown in the cost entries' note, e.g. "PI00813402". */
+  invoiceNumber?: string;
+  /** Work out and report the costs without saving them. */
+  preview?: boolean;
+}
+
+export interface InvoiceResult {
+  saved: number;
+  pieces: number;
+  rate: number;
+  freightPln: number;
+  extraPln: number;
+  lines: { name: string; key: string; qty: number; netPrice: number; unitCostPln: number }[];
+  unmatched: string[];
+}
+
+/**
+ * A purchase invoice: each product's net price (in the invoice currency, converted at the NBP rate of the
+ * invoice day) plus its share of the delivery charge and extra costs becomes its landed cost from that day on.
+ */
+export async function importInvoice(input: InvoiceInput, userId: string | null): Promise<InvoiceResult> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) throw new Error('Enter the invoice date');
+  const parsed = parseInvoiceLines(input.lines);
+  if (parsed.length === 0) throw new Error('No lines with a product, a quantity and a price were found');
+  const currency = (input.currency || 'PLN').toUpperCase();
+  const rate = await plnRateOn(currency, input.effectiveFrom);
+  if (rate === null) throw new Error(`No NBP rate for ${currency} on ${input.effectiveFrom}`);
+
+  const pieces = parsed.reduce((sum, l) => sum + l.qty, 0);
+  const shared = sharedCosts(pieces, input, rate);
+  const list = await getDb().select({ id: products.id, sku: products.sku, name: products.name, ean: products.ean }).from(products);
+  const resolve = createProductResolver(list);
+  const names = new Map(list.map((p) => [p.id, p.name]));
+
+  // The same product on two lines gets the quantity-weighted average price.
+  const byProduct = new Map<string, { key: string; qty: number; value: number }>();
+  const unmatched: string[] = [];
+  for (const line of parsed) {
+    const productId = resolve(line.key);
+    if (!productId) {
+      unmatched.push(line.key);
+      continue;
+    }
+    const net = netPrice(line.price, input);
+    const seen = byProduct.get(productId);
+    byProduct.set(productId, seen ? { key: seen.key, qty: seen.qty + line.qty, value: seen.value + net * line.qty } : { key: line.key, qty: line.qty, value: net * line.qty });
+  }
+
+  const result: InvoiceResult = { saved: 0, pieces, rate, freightPln: shared.freightPln, extraPln: shared.extraPln, lines: [], unmatched };
+  for (const [productId, v] of byProduct) {
+    const net = Math.round((v.value / v.qty) * 10_000) / 10_000;
+    const entry = {
+      purchasePrice: net,
+      purchaseCurrency: currency,
+      freight: Math.round(shared.freightPln * 10_000) / 10_000,
+      duty: shared.extraPln > 0 ? Math.round(shared.extraPln * 10_000) / 10_000 : null,
+      effectiveFrom: input.effectiveFrom,
+      note: input.invoiceNumber ? `Invoice ${input.invoiceNumber}` : 'Purchase invoice',
+    };
+    const unitCostPln = input.preview ? net * rate + (entry.freight ?? 0) + (entry.duty ?? 0) : Number((await setProductCost(productId, entry, userId, 'invoice')).unitCost);
+    if (!input.preview) result.saved++;
+    result.lines.push({ name: names.get(productId) ?? productId, key: v.key, qty: v.qty, netPrice: net, unitCostPln });
   }
   return result;
 }

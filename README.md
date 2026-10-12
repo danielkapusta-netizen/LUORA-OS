@@ -137,6 +137,10 @@ Inventory → **Publish to Allegro / Empik** (admins) lists the Shopify products
 - **Allegro:** the Allegro app needs the permissions "Offers: read and write" and "Seller settings: read" (reconnect Allegro after enabling them). In the account settings press "Load choices from Allegro", then pick the shipping rates, return policy and implied warranty, and fill in where the goods are sent from. Offers are published at once unless "create as drafts" is ticked.
 - **Empik:** offers are sent with an OF01 import for the EAN; the offer state code defaults to 11 (new).
 
+## Purchase invoices
+
+Settings -> Costs -> **Import a purchase invoice**: paste the invoice lines (barcode, quantity, unit price - or whole rows copied from the invoice table), pick the currency, say whether prices are net or gross, and add the delivery charge and any customs. Each product's cost becomes its price in PLN at the NBP rate of the invoice date plus its share of delivery and extras (spread evenly over all pieces), valid from that date; the EUR price is kept in the entry. **Check** shows the result without saving; **Save costs** writes it (saving the same invoice again just replaces the entries). Products are matched by SKU, EAN or name; lines that match nothing are listed and left out.
+
 ## Roles and access
 
 Every user has one role (Settings → Users; admins change it with the Role selector, and the last admin can't be demoted or deleted):
