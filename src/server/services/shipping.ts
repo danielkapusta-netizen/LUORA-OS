@@ -27,6 +27,7 @@ import { logEvent } from './events';
 import { loadOrder, withPickupPoint } from './orders';
 import { carrierSupportsOrder, chooseRoute, type RouteDecision } from './routing';
 import { changeStatus, shipWhenReady } from './workflow';
+import { refreshProfit } from './profit';
 
 /** Give up polling a pending shipment after this many attempts. */
 const MAX_POLLS = 40;
@@ -350,6 +351,8 @@ async function applyStatus(shipment: Shipment, carrier: CarrierAccount, status: 
   ]);
   await changeStatus(db, shipment.orderId, 'label_created', { reason: 'label created', force: true });
   await enqueue(JOBS.trackingPush, { shipmentId: shipment.id });
+  // The label's cost now counts in the order's profit.
+  await refreshProfit([shipment.orderId]);
   await downloadLabel({ ...shipment, externalId: status.externalId }, carrier);
 }
 

@@ -10,9 +10,9 @@ export function hasRealSku(sku: string): boolean {
   return !sku.startsWith(PLACEHOLDER_PREFIX);
 }
 
-/** Shopify's "Product - Default Title" for products without variants reads as just the product. */
+/** Shopify's "Product - Default Title" (or "- Default") for products without variants reads as just the product. */
 export function cleanShopifyTitle(title: string): string {
-  return title.replace(/ - Default Title$/, '');
+  return title.replace(/ - Default(?: Title)?$/, '');
 }
 
 /**

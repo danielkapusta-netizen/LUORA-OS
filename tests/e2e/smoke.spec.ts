@@ -70,6 +70,34 @@ test('orders to labels to analytics', async ({ page }) => {
   await expect(page.getByText('Revenue per day')).toBeVisible();
   await shot(page, '06-analytics');
 
+  // Tasks: the overview, a new task through the dialog, ticking it off, and the other views.
+  await page.goto('/tasks');
+  await expect(page.getByRole('heading', { name: 'Tasks for today' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+  await shot(page, '08-tasks');
+  await page.getByRole('button', { name: 'New task' }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'New task' });
+  await dialog.getByLabel('Title').fill('E2E: check the courier pick-up');
+  await dialog.getByRole('button', { name: 'Create task' }).click();
+  const card = page.getByRole('link', { name: 'E2E: check the courier pick-up' });
+  await expect(card).toBeVisible();
+  await page.getByRole('checkbox', { name: /Mark as done: E2E: check the courier pick-up/ }).click();
+  await expect(page.getByRole('checkbox', { name: /Reopen: E2E: check the courier pick-up/ })).toBeVisible();
+  await card.click();
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeVisible();
+  await expect(page.getByText('marked this as done')).toBeVisible();
+  await shot(page, '09-task');
+  await page.goto('/tasks/board');
+  await expect(page.getByRole('region', { name: 'In progress' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Done' })).toBeVisible();
+  await shot(page, '10-tasks-board');
+  await page.goto('/tasks/calendar');
+  await expect(page.getByRole('heading', { name: /^(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}$/ })).toBeVisible();
+  await shot(page, '11-tasks-calendar');
+  await page.goto('/tasks/projects');
+  await expect(page.getByText('Autumn campaign').first()).toBeVisible();
+  await shot(page, '12-tasks-projects');
+
   for (const path of ['/shipments', '/settings/integrations', '/settings/shipping', '/settings/users']) {
     await page.goto(path);
     await expect(page.locator('main')).toBeVisible();

@@ -26,15 +26,18 @@ export { schema };
 const MAX_PARAMS = 100;
 
 /** Multi-row insert split into statements that fit D1's parameter limit (for db.batch). */
-export function insertStatements<T extends SQLiteTable>(db: Db, table: T, rows: T['$inferInsert'][]) {
+export function insertStatements<T extends SQLiteTable>(db: Db, table: T, rows: T['$inferInsert'][], options: { onConflictDoNothing?: boolean } = {}) {
   const perStatement = Math.max(1, Math.floor(MAX_PARAMS / Object.keys(getTableColumns(table)).length));
   const statements = [];
-  for (let i = 0; i < rows.length; i += perStatement) statements.push(db.insert(table).values(rows.slice(i, i + perStatement) as never));
+  for (let i = 0; i < rows.length; i += perStatement) {
+    const insert = db.insert(table).values(rows.slice(i, i + perStatement) as never);
+    statements.push(options.onConflictDoNothing ? insert.onConflictDoNothing() : insert);
+  }
   return statements;
 }
 
-export async function insertMany<T extends SQLiteTable>(db: Db, table: T, rows: T['$inferInsert'][]): Promise<void> {
-  for (const statement of insertStatements(db, table, rows)) await statement;
+export async function insertMany<T extends SQLiteTable>(db: Db, table: T, rows: T['$inferInsert'][], options: { onConflictDoNothing?: boolean } = {}): Promise<void> {
+  for (const statement of insertStatements(db, table, rows, options)) await statement;
 }
 
 /** Splits ids for `inArray` so each query stays under the parameter limit. */

@@ -22,6 +22,13 @@ export function formatDate(value: Date | string | null | undefined, withTime = t
   }).format(date);
 }
 
+/** 1st, 2nd, 3rd, 11th... */
+export function ordinal(n: number): string {
+  const rest = n % 100;
+  if (rest >= 11 && rest <= 13) return `${n}th`;
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
+}
+
 export function timeAgo(value: Date | string | null | undefined): string {
   if (!value) return 'never';
   const date = typeof value === 'string' ? new Date(value) : value;

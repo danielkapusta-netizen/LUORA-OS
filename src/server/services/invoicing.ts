@@ -180,7 +180,7 @@ export async function autoInvoice(orderId: string): Promise<void> {
   const accounting = await loadAccounting();
   if (!accounting.enabled || !accounting.settings.autoOnShipped) return;
   const [order] = await getDb().select().from(orders).where(eq(orders.id, orderId));
-  if (!order?.invoiceRequest || !(INVOICED_MARKETPLACES as readonly string[]).includes(order.marketplace)) return;
+  if (!order?.invoiceRequest || order.historical || !(INVOICED_MARKETPLACES as readonly string[]).includes(order.marketplace)) return;
   const [existing] = await getDb().select({ id: invoices.id }).from(invoices).where(eq(invoices.orderId, orderId));
   if (existing) return;
   await requestInvoice(orderId, null);
@@ -393,6 +393,8 @@ export async function ordersAwaitingInvoice() {
         isNotNull(orders.invoiceRequest),
         inArray(orders.marketplace, [...INVOICED_MARKETPLACES]),
         ne(orders.status, 'cancelled'),
+        // Past orders from the history import were invoiced (or not) before Luora.
+        eq(orders.historical, false),
         sql`not exists (select 1 from ${invoices} i where i.order_id = ${orders.id})`,
       ),
     )

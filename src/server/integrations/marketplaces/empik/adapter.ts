@@ -1,6 +1,7 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import type { Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
-import { invoiceFileName, type MarketplaceAdapter, type SyncResult } from '../types';
+import { httpConfig } from '../../../http';
+import { invoiceFileName, type CatalogueMatch, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { MiraklClient, type EmpikCredentials, type MiraklCarrier } from './client';
 import { mapMiraklOrder } from './mapper';
 
@@ -94,7 +95,18 @@ export function buildStockCsv(updates: StockUpdate[]): string {
   return `${lines.join('\n')}\n`;
 }
 
-export class EmpikAdapter implements MarketplaceAdapter {
+/**
+ * OF01 offer import for one offer, attached to the catalogue product with the same EAN.
+ * `state` is the marketplace's offer state code (11 = new on Mirakl).
+ */
+export function buildOfferCsv(draft: OfferDraft, state: string, leadtimeDays: number): string {
+  const quote = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const header = ['sku', 'product-id', 'product-id-type', 'price', 'quantity', 'state', 'leadtime-to-ship', 'update-delete'];
+  const row = [draft.sku, draft.ean, 'EAN', draft.price, String(Math.max(0, draft.quantity)), state, String(Math.max(0, leadtimeDays)), 'update'];
+  return `${header.map(quote).join(';')}\n${row.map(quote).join(';')}\n`;
+}
+
+export class EmpikAdapter implements MarketplaceAdapter, OfferPublisher {
   readonly marketplace = 'empik' as const;
   private readonly client: MiraklClient;
   private readonly baseUrl: string;
@@ -146,6 +158,25 @@ export class EmpikAdapter implements MarketplaceAdapter {
       if (!hasMore || data.orders.length === 0) break;
     }
     return { orders, nextCursor: newest, hasMore };
+  }
+
+  /** OR11 by creation date, newest first. Cursor = { before, offset } of the window being read. */
+  async syncHistory(cursor: string | null): Promise<SyncResult> {
+    const state: { before: string; offset: number } = cursor ? JSON.parse(cursor) : { before: new Date().toISOString(), offset: 0 };
+    const orders: NormalizedOrder[] = [];
+    let hasMore = true;
+    for (let page = 0; page < MAX_PAGES_PER_SYNC && hasMore; page++) {
+      const data = await this.client.call<OrdersPage>('GET', '/orders', {
+        query: { end_date: state.before, sort: 'dateCreated', order: 'desc', max: PAGE, offset: state.offset, paginate: true },
+      });
+      for (const raw of data.orders) {
+        if (raw.order_state === 'STAGING') continue;
+        orders.push(mapMiraklOrder(raw, this.baseUrl));
+      }
+      state.offset += data.orders.length;
+      hasMore = data.orders.length > 0 && state.offset < data.total_count;
+    }
+    return { orders, nextCursor: hasMore ? JSON.stringify(state) : null, hasMore };
   }
 
   async getOrder(externalId: string): Promise<NormalizedOrder | null> {
@@ -254,6 +285,8 @@ export class EmpikAdapter implements MarketplaceAdapter {
           sku: offer.shop_sku || null,
           title: offer.product_title,
           quantity: offer.quantity,
+          active: offer.active,
+          status: offer.active === undefined ? null : offer.active ? 'active' : 'inactive',
           ean: offer.product_references?.find((r) => /^(EAN|GTIN|EAN13)$/i.test(r.reference_type))?.reference ?? null,
           ref: { shopSku: offer.shop_sku },
         };
@@ -271,5 +304,57 @@ export class EmpikAdapter implements MarketplaceAdapter {
     const form = new FormData();
     form.append('file', new Blob([buildStockCsv(updates)], { type: 'text/csv' }), 'stock.csv');
     await this.client.call('POST', '/offers/stock/imports', { body: form });
+  }
+
+  // ------------------------------------------------------------ creating offers
+
+  publishSetupProblems(): string[] {
+    return [];
+  }
+
+  /** P31: which EANs are products in the Empik catalogue. When Empik can't be asked, offers are still tried and its import decides. */
+  async checkCatalogue(eans: string[]): Promise<Map<string, CatalogueMatch>> {
+    const out = new Map<string, CatalogueMatch>();
+    for (let i = 0; i < eans.length; i += 50) {
+      const chunk = eans.slice(i, i + 50);
+      try {
+        const data = await this.client.call<{ products?: { product_title?: string; product_references?: { reference_type?: string; reference?: string }[] }[] }>('GET', '/products', {
+          query: { product_references: chunk.map((e) => `EAN|${e}`).join(',') },
+        });
+        const known = new Map<string, string | undefined>();
+        for (const p of data.products ?? []) for (const r of p.product_references ?? []) if (r.reference) known.set(r.reference, p.product_title);
+        for (const ean of chunk) out.set(ean, known.has(ean) ? { found: true, name: known.get(ean) } : { found: false });
+      } catch {
+        for (const ean of chunk) out.set(ean, { found: true, unverified: true });
+      }
+    }
+    return out;
+  }
+
+  /** OF01 import of one offer; waits briefly for the import's verdict and reports line errors. */
+  async createOffer(draft: OfferDraft): Promise<{ externalId?: string; note?: string }> {
+    const form = new FormData();
+    form.append('file', new Blob([buildOfferCsv(draft, this.settings.empikOfferState ?? '11', this.settings.offerHandlingDays ?? 1)], { type: 'text/csv' }), 'offer.csv');
+    form.append('import_mode', 'NORMAL');
+    const { import_id: importId } = await this.client.call<{ import_id: number | string }>('POST', '/offers/imports', { body: form });
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await httpConfig.sleep(1000);
+      const status = await this.client.call<{ status?: string; lines_in_error?: number; has_error_report?: boolean }>('GET', `/offers/imports/${importId}`);
+      if (status.status === 'COMPLETE' || status.status === 'FAILED' || status.status === 'CANCELLED') {
+        if (status.status !== 'COMPLETE' || (status.lines_in_error ?? 0) > 0 || status.has_error_report) {
+          let reason = `import ${status.status?.toLowerCase()}`;
+          try {
+            const report = await this.client.call<string>('GET', `/offers/imports/${importId}/error_report`, { responseType: 'text' });
+            const lines = report.trim().split('\n').slice(1).filter(Boolean);
+            if (lines.length) reason = lines.join(' | ').replace(/"/g, '').slice(0, 400);
+          } catch {
+            // The report is optional; the status already says it failed.
+          }
+          throw new Error(`Empik refused the offer: ${reason}`);
+        }
+        return { externalId: draft.sku };
+      }
+    }
+    return { externalId: draft.sku, note: `Empik is still processing import ${importId}` };
   }
 }

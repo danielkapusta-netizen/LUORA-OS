@@ -6,16 +6,18 @@ import { MarketplaceBadge } from '@/components/badges';
 import { ExpandableRow } from '@/components/expandable-row';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Gauge } from '@/components/gauge';
+import { productMargins } from '@/server/analytics/dataset';
 import { Badge, buttonClass, Card, EmptyState, Input, PageHeader, Select } from '@/components/ui';
 import { hasRealSku } from '@/lib/sku';
 import { cn, formatDate, timeAgo } from '@/lib/utils';
+import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import type { Product } from '@/server/db/schema';
-import { listProductsWithListings, marketplaceQuantity, matchingGroups, recentStockLog } from '@/server/services/inventory';
+import { desiredQuantity, listProductsWithListings, marketplaceQuantity, matchingGroups, pendingPushCounts, recentStockLog } from '@/server/services/inventory';
 import { SUGGESTION_THRESHOLD } from '@/server/services/matching';
 import { emptyPerformance, productStats, type PerformanceLevel, type ProductPerformance } from '@/server/services/product-stats';
 import { listMarketplaceAccounts } from '@/server/services/settings';
-import { adjustStockAction, confirmClearSuggestionsAction, importListingsAction, linkGroupAction, syncAllStockAction, unlinkListingAction } from './actions';
+import { adjustStockAction, confirmClearSuggestionsAction, importListingsAction, linkGroupAction, setListingStockAction, syncAllStockAction, unlinkListingAction } from './actions';
 
 export const metadata: Metadata = { title: 'Inventory' };
 
@@ -23,7 +25,7 @@ type ListingRow = Awaited<ReturnType<typeof listProductsWithListings>>['listings
 
 const PAGE_SIZE = 20;
 const PERIODS = [7, 30, 90] as const;
-const SORTS = { sales: 'Best selling', name: 'Name', stock: 'Lowest stock' } as const;
+const SORTS = { sales: 'Best selling', name: 'Name', stock: 'Lowest stock', new: 'Newest' } as const;
 type Sort = keyof typeof SORTS;
 const PLATFORMS = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
 const PLATFORM_LABEL: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', vonhalsky: 'Von Halsky' };
@@ -61,8 +63,18 @@ function PlatformDots({ listings, stock }: { listings: ListingRow[]; stock: numb
       {PLATFORMS.map((m) => {
         const own = listings.filter((l) => l.marketplace === m);
         const quantities = own.map(marketplaceQuantity);
-        const state = own.length === 0 ? 'none' : own.some((l) => l.lastPushError) ? 'error' : quantities.some((q) => q !== Math.max(0, stock)) ? 'drift' : 'ok';
-        const title = own.length === 0 ? `${PLATFORM_LABEL[m]}: not listed` : `${PLATFORM_LABEL[m]}: ${quantities.map((q) => q ?? '?').join(' / ')}`;
+        const live = own.filter((l) => l.active);
+        const drifting = live.some((l) => {
+          const want = desiredQuantity({ stock, ...l });
+          return want !== null && marketplaceQuantity(l) !== want;
+        });
+        const state = own.length === 0 ? 'none' : live.length === 0 ? 'inactive' : own.some((l) => l.lastPushError) ? 'error' : drifting ? 'drift' : 'ok';
+        const title =
+          own.length === 0
+            ? `${PLATFORM_LABEL[m]}: not listed`
+            : live.length === 0
+              ? `${PLATFORM_LABEL[m]}: inactive or ended`
+              : `${PLATFORM_LABEL[m]}: ${quantities.map((q) => q ?? '?').join(' / ')}`;
         return (
           <span key={m} title={title} className="inline-flex items-center gap-1 text-[11px] text-slate-500">
             <span
@@ -72,10 +84,11 @@ function PlatformDots({ listings, stock }: { listings: ListingRow[]; stock: numb
                 state === 'drift' && 'bg-amber-400',
                 state === 'error' && 'bg-red-500',
                 state === 'none' && 'bg-slate-200',
+                state === 'inactive' && 'bg-slate-300 ring-1 ring-slate-400',
               )}
             />
             {PLATFORM_LABEL[m]}
-            {own.length > 0 && <span className="tabular-nums text-slate-700">{quantities.map((q) => q ?? '?').join('/')}</span>}
+            {own.length > 0 && (state === 'inactive' ? <span className="text-slate-400">inactive</span> : <span className="tabular-nums text-slate-700">{quantities.map((q) => q ?? '?').join('/')}</span>)}
           </span>
         );
       })}
@@ -93,6 +106,7 @@ function ListingDetails({ listings, stock }: { listings: ListingRow[]; stock: nu
             <th className="px-3 py-2 font-medium">Platform</th>
             <th className="px-3 py-2 font-medium">Name on the platform</th>
             <th className="px-3 py-2 text-right font-medium">Stock there</th>
+            <th className="px-3 py-2 font-medium">Send</th>
             <th className="px-3 py-2 font-medium">Last sync</th>
             <th className="px-3 py-2" />
           </tr>
@@ -100,14 +114,39 @@ function ListingDetails({ listings, stock }: { listings: ListingRow[]; stock: nu
         <tbody className="divide-y divide-slate-100">
           {listings.map((l) => {
             const qty = marketplaceQuantity(l);
+            const want = desiredQuantity({ stock, ...l });
             return (
-              <tr key={l.id}>
+              <tr key={l.id} className={cn(!l.active && 'bg-slate-50/70 text-slate-500')}>
                 <td className="px-3 py-2 align-top">
                   <MarketplaceBadge marketplace={l.marketplace} />
                 </td>
-                <td className="px-3 py-2 align-top">{l.title}</td>
-                <td className={cn('px-3 py-2 text-right align-top font-semibold tabular-nums', qty !== null && qty !== Math.max(0, stock) && 'text-amber-700')}>
-                  {qty ?? '?'}
+                <td className="px-3 py-2 align-top">
+                  {l.title}
+                  {!l.active && (
+                    <Badge tone="gray" className="ml-2">
+                      {l.listingStatus ? `Not on sale: ${l.listingStatus.toLowerCase()}` : 'Not on sale'}
+                    </Badge>
+                  )}
+                </td>
+                <td className={cn('px-3 py-2 text-right align-top font-semibold tabular-nums', l.active && want !== null && qty !== null && qty !== want && 'text-amber-700')}>
+                  {l.active ? (qty ?? '?') : <span title="The offer is not on sale, so its stock figure does not count">0</span>}
+                </td>
+                <td className="px-3 py-2 align-top">
+                  {l.active ? (
+                    <ActionForm action={setListingStockAction.bind(null, l.id)} className="flex items-center gap-1.5" showOk={false}>
+                      <Select name="mode" defaultValue={l.stockMode} className="h-8 w-36 text-xs" aria-label="What is sent to this listing">
+                        <option value="master">Master stock ({Math.max(0, stock)})</option>
+                        <option value="fixed">Fixed quantity</option>
+                        <option value="off">Nothing (manage there)</option>
+                      </Select>
+                      <Input name="qty" inputMode="numeric" defaultValue={l.fixedQty ?? ''} placeholder="qty" aria-label="Fixed quantity" className="h-8 w-16 text-center text-xs" />
+                      <SubmitButton size="sm" variant="secondary" pendingText="…">
+                        Save
+                      </SubmitButton>
+                    </ActionForm>
+                  ) : (
+                    <span className="text-xs">Nothing is sent while it is off sale</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 align-top text-xs text-slate-500">
                   {l.lastPushError ? (
@@ -150,17 +189,21 @@ function Stat({ label, children, className }: { label: string; children: React.R
 }
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string; days?: string; page?: string }> }) {
-  await requireUser();
+  const viewer = await requireUser();
   const params = await searchParams;
   const days = PERIODS.find((d) => String(d) === params.days) ?? 30;
   const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'sales';
-  const [{ products, listings }, accounts, matching, log, stats] = await Promise.all([
+  const [{ products, listings }, accounts, matching, log, stats, pending] = await Promise.all([
     listProductsWithListings(),
     listMarketplaceAccounts(),
     matchingGroups(),
     recentStockLog(30),
     productStats(days),
+    pendingPushCounts(),
   ]);
+  // Margins only for roles that may see them; marketing gets the percentage, never the profit amount.
+  const margins = can(viewer.role, 'margin') ? await productMargins(days) : new Map<string, { units: number; gross: number; profit: number }>();
+  const showProfit = can(viewer.role, 'profit');
   const perf = (id: string): ProductPerformance => stats.byProduct.get(id) ?? emptyPerformance();
   const byProduct = new Map<string, ListingRow[]>();
   for (const l of listings) byProduct.set(l.productId!, [...(byProduct.get(l.productId!) ?? []), l]);
@@ -180,7 +223,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     ? products.filter((p) => [p.sku, p.name, p.ean ?? '', ...(byProduct.get(p.id) ?? []).map((l) => l.title)].some((v) => v.toLowerCase().includes(needle)))
     : products;
   const sorted = [...filtered].sort((a, b) =>
-    sort === 'name' ? a.name.localeCompare(b.name, 'pl') : sort === 'stock' ? a.stock - b.stock : perf(b.id).units - perf(a.id).units || a.name.localeCompare(b.name, 'pl'),
+    sort === 'name'
+      ? a.name.localeCompare(b.name, 'pl')
+      : sort === 'stock'
+        ? a.stock - b.stock
+        : sort === 'new'
+          ? b.createdAt.getTime() - a.createdAt.getTime()
+          : perf(b.id).units - perf(a.id).units || a.name.localeCompare(b.name, 'pl'),
   );
   const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number(params.page) || 1));
@@ -203,6 +252,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         description="Products and photos come from Shopify; Allegro and Empik offers are matched by EAN. One stock number for every platform."
         actions={
           <>
+            {viewer.role === 'admin' &&
+              accounts
+                .filter((a) => a.enabled && (a.type === 'allegro' || a.type === 'empik'))
+                .map((a) => (
+                  <Link key={a.id} className={buttonClass('secondary')} href={`/inventory/publish/${a.id}`}>
+                    Publish to {a.type === 'allegro' ? 'Allegro' : 'Empik'}
+                  </Link>
+                ))}
             <Link className={buttonClass('secondary')} href="/inventory/vonhalsky">
               Von Halsky offers
             </Link>
@@ -221,7 +278,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       />
       {dryRun.length > 0 && (
         <p className="-mt-2 mb-4 text-xs text-amber-700">
-          Dry run on {dryRun.map((a) => a.name).join(', ')}: stock changes are only logged, not sent. Switch it off in Settings → Integrations.
+          Dry run on {dryRun.map((a) => `${a.name} (${pending.get(a.id) ?? 0} to send)`).join(', ')}: stock changes are only logged, not sent. Switch it off in Settings → Integrations.
         </p>
       )}
 
@@ -409,6 +466,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           <span className="text-slate-300">·</span>
                           <ShoppingBag className="size-3.5 text-slate-400" /> {pln(f.revenue)}
                         </p>
+                        {margins.get(p.id) && margins.get(p.id)!.gross > 0 && (
+                          <p className="mt-0.5 text-xs text-slate-500" title="Profit after VAT, fees, product cost, shipping and refunds">
+                            Margin{' '}
+                            <span className={cn('font-medium tabular-nums', margins.get(p.id)!.profit < 0 ? 'text-red-700' : 'text-slate-800')}>
+                              {((margins.get(p.id)!.profit / margins.get(p.id)!.gross) * 100).toFixed(1)}%
+                            </span>{' '}
+                            {showProfit && <>· {pln(margins.get(p.id)!.profit)} profit</>}
+                          </p>
+                        )}
                       </td>
                       <td className="px-2 py-3">
                         <Gauge value={f.percentile} tone={f.level} className="h-10 w-16" label={`${LEVEL_LABEL[f.level]} performance`} />

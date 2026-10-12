@@ -222,4 +222,24 @@ describe('AllegroAdapter.listingEans', () => {
     const eans = await new AllegroAdapter(store()).listingEans(['9', '8']);
     expect(Object.fromEntries(eans)).toEqual({ 9: '8809640734946' }); // the failing offer is skipped, not fatal
   });
+
+  it('marks offers that are not active, whatever stock they still show', async () => {
+    server.use(
+      http.get(`${API}/sale/offers`, () =>
+        HttpResponse.json({
+          totalCount: 2,
+          offers: [
+            { id: '1', name: 'Active offer', stock: { available: 4 }, publication: { status: 'ACTIVE' } },
+            { id: '2', name: 'Ended offer', stock: { available: 27 }, publication: { status: 'ENDED' } },
+          ],
+        }),
+      ),
+    );
+    const listings = [];
+    for await (const l of new AllegroAdapter(store()).listListings()) listings.push(l);
+    expect(listings.map((l) => [l.externalId, l.quantity, l.active, l.status])).toEqual([
+      ['1', 4, true, 'ACTIVE'],
+      ['2', 27, false, 'ENDED'],
+    ]);
+  });
 });

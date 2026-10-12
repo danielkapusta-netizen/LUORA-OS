@@ -7,7 +7,7 @@ import { MarketplaceBadge, StatusBadge } from '@/components/badges';
 import { PrintLabelButton } from '@/components/print-label-button';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { buttonClass, EmptyState, Select } from '@/components/ui';
-import { cn, formatMoney } from '@/lib/utils';
+import { cn, formatMoney, ordinal } from '@/lib/utils';
 import type { OrderStatus } from '@/server/db/schema';
 import { bulkAssignAction, bulkCreateLabelsAction, bulkStatusAction } from './actions';
 
@@ -28,6 +28,8 @@ export interface OrderRow {
   marketplaceStatus: string;
   assignee: string | null;
   courier: string | null;
+  /** Set when the customer has ordered before: which order this is and when they first ordered. */
+  returning: { orderNumber: number; since: string } | null;
   shipment: { id: string; state: string; trackingNumber: string | null; carrier: string; hasLabel: boolean } | null;
 }
 
@@ -35,7 +37,11 @@ const th = 'px-3 py-3 text-left text-xs font-medium text-slate-500';
 const td = 'px-3 py-3.5 text-sm';
 
 function shortDate(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
+}
+
+function sinceLabel(iso: string): string {
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
 }
 
 export function OrdersTable({
@@ -154,7 +160,8 @@ export function OrdersTable({
                   onClick={() => open(r.id)}
                   className={cn(
                     'cursor-pointer border-b border-slate-50 transition-colors last:border-0',
-                    active ? 'bg-brand-50/70' : checked.has(r.id) ? 'bg-slate-50' : 'hover:bg-slate-50/70',
+                    active ? 'bg-brand-50/70' : checked.has(r.id) ? 'bg-slate-50' : r.returning ? 'bg-violet-50/60 hover:bg-violet-50' : 'hover:bg-slate-50/70',
+                    r.returning && 'shadow-[inset_3px_0_0_0_theme(colors.violet.500)]',
                   )}
                 >
                   <td className={cn(td, 'pl-5')} onClick={(e) => e.stopPropagation()}>
@@ -171,7 +178,17 @@ export function OrdersTable({
                     <div className="text-xs font-normal text-slate-400 2xl:hidden">{shortDate(r.placedAt)}</div>
                   </td>
                   <td className={td}>
-                    <div className="font-medium whitespace-nowrap text-slate-800">{r.buyer}</div>
+                    <div className="flex items-center gap-1.5 font-medium whitespace-nowrap text-slate-800">
+                      {r.buyer}
+                      {r.returning && (
+                        <span
+                          className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800"
+                          title={`${ordinal(r.returning.orderNumber)} order · first ordered ${sinceLabel(r.returning.since)}`}
+                        >
+                          Returning · {ordinal(r.returning.orderNumber)}
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs whitespace-nowrap text-slate-400">
                       {r.city} · {r.itemCount} item{r.itemCount === 1 ? '' : 's'}
                     </div>

@@ -5,6 +5,7 @@ import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
 import type { AccountingSettings } from '@/server/db/schema';
 import { checkAccountingConnection, markInvoicedElsewhere, requestInvoice, retryInvoice, saveAccounting, undoInvoicedElsewhere } from '@/server/services/invoicing';
+import { scheduleFullRecompute } from '@/server/services/profit';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const bool = (fd: FormData, name: string) => fd.get(name) === 'on';
@@ -84,6 +85,8 @@ export async function saveAccountingAction(_prev: ActionResult, fd: FormData): P
   };
   return attempt(async () => {
     await saveAccounting({ enabled: bool(fd, 'enabled'), login: text(fd, 'login'), invoiceKey: text(fd, 'invoiceKey') || null, settings });
+    // VAT rates change the profit of every order.
+    await scheduleFullRecompute();
     revalidatePath('/settings/accounting');
     revalidatePath('/accounting');
     return 'Saved';

@@ -51,4 +51,13 @@ describe('cron', () => {
     await handleScheduled({ cron: '*/3 * * * *' } as never, {} as never);
     expect(runJob).toHaveBeenCalledWith('orders-sync-all', {});
   });
+
+  it('runs every job sharing a schedule, even when one of them fails', async () => {
+    vi.mocked(runJob).mockImplementation(async (name) => {
+      if (name === 'stock-reconcile') throw new Error('marketplace down');
+    });
+    await handleScheduled({ cron: '30 2 * * *' } as never, {} as never);
+    expect(runJob).toHaveBeenCalledWith('stock-reconcile', {});
+    expect(runJob).toHaveBeenCalledWith('fx-sync', {});
+  });
 });

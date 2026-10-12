@@ -6,9 +6,9 @@ import { MarketplaceBadge, ShipmentBadge, StatusBadge } from '@/components/badge
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { CustomerSummary, OrderItemsList } from '@/components/order-summary';
 import { buttonClass, Card } from '@/components/ui';
-import { CARRIER_LABELS, cn, formatDate, formatMoney, SERVICE_LABELS } from '@/lib/utils';
+import { CARRIER_LABELS, cn, formatDate, formatMoney, ordinal, SERVICE_LABELS } from '@/lib/utils';
 import { invoicesForOrder } from '@/server/services/invoicing';
-import { getOrderDetail } from '@/server/services/orders';
+import { getOrderDetail, returningInfo } from '@/server/services/orders';
 import { loadRoutingData, routeOrder } from '@/server/services/shipping';
 import { PackedToggle } from '../shipments/packed-toggle';
 import { createInvoiceAction } from '../accounting/actions';
@@ -43,11 +43,21 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
   const waiting = shipments.some((s) => s.state === 'pending') || Boolean(live && live.state === 'created' && !live.trackingPushedAt && !live.trackingPushError);
   const a = order.shippingAddress;
   const [invoice] = await invoicesForOrder(order.id);
+  const returning = (await returningInfo([{ id: order.id, customerId: order.customerId, placedAt: order.placedAt }])).get(order.id);
 
   return (
     <Card className="p-5">
       <AutoRefresh active={waiting} />
       <CustomerSummary buyerName={order.buyer.name} recipientName={a.name} />
+      {returning && order.customerId && (
+        <Link
+          href={`/customers/${order.customerId}`}
+          className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900 hover:border-violet-300"
+        >
+          <span className="font-semibold">Returning customer · {ordinal(returning.orderNumber)} order</span>
+          <span className="text-xs">first ordered {formatDate(returning.firstOrderAt, false)} →</span>
+        </Link>
+      )}
 
       {/* Items */}
       <div className="mt-4 flex items-center gap-3">
@@ -158,7 +168,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         </InfoRow>
         <InfoRow icon={Hash} label="Order #">
           <span className="font-medium">{order.externalNumber}</span>
-          <span className="text-slate-500"> · {formatDate(order.placedAt, false)}</span>
+          <span className="text-slate-500"> · {formatDate(order.placedAt)}</span>
         </InfoRow>
         <InfoRow icon={MapPin} label={order.pickupPointId ? 'Pickup point' : 'Ship to'}>
           {order.pickupPointId && <span className="font-medium">{order.pickupPointId} · </span>}

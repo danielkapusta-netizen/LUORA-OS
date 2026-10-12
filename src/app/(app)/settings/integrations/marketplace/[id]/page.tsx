@@ -3,19 +3,30 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ActionForm, SubmitButton } from '@/components/forms';
-import { Card, CardBody, CardHeader, Checkbox, Field, Input, Select } from '@/components/ui';
-import { MARKETPLACE_LABELS } from '@/lib/utils';
+import { Badge, buttonClass, Card, CardBody, CardHeader, Checkbox, Field, Input, Select, Textarea } from '@/components/ui';
+import { formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireAdmin } from '@/server/auth';
 import type { MarketplaceAccount } from '@/server/db/schema';
 import { env } from '@/server/env';
+import { DEFAULT_SAFETY_TEXT } from '@/server/integrations/marketplaces/allegro/adapter';
 import { ALLEGRO_REDIRECT_PATH } from '@/server/integrations/marketplaces/allegro/client';
 import { EMPIK_CARRIER_CODES, resolveEmpikCarrier } from '@/server/integrations/marketplaces/empik/adapter';
 import { VON_HALSKY_REDIRECT_PATH } from '@/server/integrations/marketplaces/vonhalsky/client';
 import { DEFAULT_SHOPIFY_API_VERSION } from '@/server/integrations/marketplaces/shopify/client';
 import { DEFAULT_PICKUP_POINT_KEYS } from '@/server/integrations/marketplaces/shopify/mapper';
+import type { MarketplaceSettings } from '@/server/db/schema';
 import { loadMarketplaceAccount } from '@/server/services/accounts';
 import { empikCarriers, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
-import { deleteMarketplaceAction, importListingsAction, refreshEmpikCarriersAction, saveMarketplaceAction } from '../../../actions';
+import {
+  deleteMarketplaceAction,
+  importListingsAction,
+  refreshEmpikCarriersAction,
+  saveMarketplaceAction,
+  startHistoryAction,
+  stopHistoryAction,
+  syncFeesAction,
+} from '../../../actions';
+import { loadAllegroOptionsAction } from '../../../../inventory/publish/actions';
 
 export const metadata: Metadata = { title: 'Marketplace account' };
 
@@ -23,6 +34,64 @@ function Secret({ name, label, stored, hint }: { name: string; label: string; st
   return (
     <Field label={label} hint={hint}>
       <Input name={name} type="password" autoComplete="off" placeholder={stored ? '•••••••• saved – leave blank to keep' : ''} />
+    </Field>
+  );
+}
+
+const PROVINCES = [
+  'DOLNOSLASKIE',
+  'KUJAWSKO_POMORSKIE',
+  'LUBELSKIE',
+  'LUBUSKIE',
+  'LODZKIE',
+  'MALOPOLSKIE',
+  'MAZOWIECKIE',
+  'OPOLSKIE',
+  'PODKARPACKIE',
+  'PODLASKIE',
+  'POMORSKIE',
+  'SLASKIE',
+  'SWIETOKRZYSKIE',
+  'WARMINSKO_MAZURSKIE',
+  'WIELKOPOLSKIE',
+  'ZACHODNIOPOMORSKIE',
+];
+
+/** Markup, rounding and handling time of offers created from Shopify. */
+function OfferPricing({ s }: { s: MarketplaceSettings }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Field label="Markup on the Shopify price (%)" hint="Use it to cover this marketplace's commission">
+        <Input name="offerMarkupPercent" inputMode="decimal" defaultValue={String(s.offerMarkupPercent ?? 0)} />
+      </Field>
+      <Field label="Round the price to">
+        <Select name="offerRounding" defaultValue={s.offerRounding ?? 'x.99'}>
+          <option value="x.99">…99 (e.g. 89.99)</option>
+          <option value="x.00">whole zloty (e.g. 90.00)</option>
+          <option value="none">no rounding</option>
+        </Select>
+      </Field>
+      <Field label="Days to ship">
+        <Input name="offerHandlingDays" inputMode="numeric" defaultValue={String(s.offerHandlingDays ?? 1)} />
+      </Field>
+    </div>
+  );
+}
+
+/** A list read from Allegro to pick from; before it is loaded the saved id can still be seen and kept. */
+function AllegroChoice({ name, label, selected, items, optional, hint }: { name: string; label: string; selected?: string; items?: { id: string; name: string }[]; optional?: boolean; hint?: string }) {
+  const known = items?.some((i) => i.id === selected);
+  return (
+    <Field label={label} hint={items ? hint : 'Press “Load choices from Allegro” below first'}>
+      <Select name={name} defaultValue={selected ?? ''}>
+        <option value="">{optional ? 'None' : 'Choose…'}</option>
+        {selected && !known && <option value={selected}>{selected} (saved)</option>}
+        {(items ?? []).map((i) => (
+          <option key={i.id} value={i.id}>
+            {i.name}
+          </option>
+        ))}
+      </Select>
     </Field>
   );
 }
@@ -123,6 +192,54 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   <Secret name="clientSecret" label="Client secret" stored={stored.includes('clientSecret')} />
                 </div>
                 <Checkbox name="sandbox" label="Use the Allegro sandbox" defaultChecked={pub.sandbox === true} />
+                <p className="pt-2 text-sm font-semibold">Offers created from Shopify</p>
+                <p className="text-xs text-slate-500">
+                  Creating offers needs the Allegro app to have the permissions “Offers: read and write” and “Seller settings: read”; reconnect Allegro after
+                  enabling them. Press “Load choices from Allegro” below the form, then pick them here.
+                </p>
+                <OfferPricing s={s} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <AllegroChoice name="allegroShippingRateId" label="Shipping rates" selected={s.allegroShippingRateId} items={s.allegroOptions?.shippingRates} />
+                  <AllegroChoice name="allegroReturnPolicyId" label="Return policy" selected={s.allegroReturnPolicyId} items={s.allegroOptions?.returnPolicies} />
+                  <AllegroChoice name="allegroImpliedWarrantyId" label="Implied warranty (complaints)" selected={s.allegroImpliedWarrantyId} items={s.allegroOptions?.impliedWarranties} />
+                  <AllegroChoice name="allegroWarrantyId" label="Warranty (optional)" selected={s.allegroWarrantyId} items={s.allegroOptions?.warranties} optional />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Field label="Goods are sent from: province">
+                    <Select name="allegroProvince" defaultValue={s.allegroLocation?.province ?? ''}>
+                      <option value="">Choose…</option>
+                      {PROVINCES.map((p) => (
+                        <option key={p} value={p}>
+                          {p.replace(/_/g, '-').toLowerCase()}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="City">
+                    <Input name="allegroCity" defaultValue={s.allegroLocation?.city ?? ''} />
+                  </Field>
+                  <Field label="Postcode">
+                    <Input name="allegroPostCode" defaultValue={s.allegroLocation?.postCode ?? ''} placeholder="00-000" />
+                  </Field>
+                </div>
+                <AllegroChoice
+                  name="allegroResponsibleProducerId"
+                  label="Responsible producer (GPSR)"
+                  selected={s.allegroResponsibleProducerId}
+                  items={s.allegroOptions?.responsibleProducers}
+                  hint="Required by Allegro on every offer. If the list is empty, add the producer first in Allegro (My Allegro → Product safety) and load the choices again."
+                />
+                <AllegroChoice
+                  name="allegroResponsiblePersonId"
+                  label="Responsible person (GPSR)"
+                  selected={s.allegroResponsiblePersonId}
+                  items={s.allegroOptions?.responsiblePersons}
+                  hint="Required by Allegro on every offer. If the list is empty, add the person first in Allegro (My Allegro → Product safety) and load the choices again."
+                />
+                <Field label="Safety information shown on every offer" hint="Allegro refuses offers without it. Leave blank for a standard cosmetics text.">
+                  <Textarea name="allegroSafetyText" rows={3} defaultValue={s.allegroSafetyText ?? ''} placeholder={DEFAULT_SAFETY_TEXT} />
+                </Field>
+                <Checkbox name="allegroCreateAsDraft" label="Create offers as inactive drafts instead of publishing them at once" defaultChecked={s.allegroCreateAsDraft ?? false} />
               </fieldset>
             )}
 
@@ -214,6 +331,11 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   )}
                 </div>
                 <Checkbox name="autoAccept" label="Accept new orders automatically when stock covers them" defaultChecked={s.autoAccept ?? false} />
+                <p className="pt-2 text-sm font-semibold">Offers created from Shopify</p>
+                <OfferPricing s={s} />
+                <Field label="Offer state code" hint="Empik's code for “new” (11 on most Mirakl shops)">
+                  <Input name="empikOfferState" defaultValue={s.empikOfferState ?? '11'} />
+                </Field>
               </fieldset>
             )}
 
@@ -229,6 +351,8 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
         </CardBody>
       </Card>
 
+      {account && <HistoryAndFees account={account} />}
+
       {account && (
         <div className="mt-5 flex flex-wrap gap-2">
           {type === 'empik' && (
@@ -236,6 +360,16 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
               <SubmitButton variant="secondary">Refresh Empik carrier list</SubmitButton>
               {empikError && <p className="mt-1 text-sm text-red-700">Could not load Empik carriers: {empikError}</p>}
             </ActionForm>
+          )}
+          {type === 'allegro' && (
+            <ActionForm action={loadAllegroOptionsAction.bind(null, account.id)}>
+              <SubmitButton variant="secondary">Load choices from Allegro</SubmitButton>
+            </ActionForm>
+          )}
+          {(type === 'allegro' || type === 'empik') && (
+            <Link href={`/inventory/publish/${account.id}`} className={buttonClass('secondary')}>
+              Publish products to {type === 'allegro' ? 'Allegro' : 'Empik'}
+            </Link>
           )}
           <ActionForm action={importListingsAction.bind(null, account.id)}>
             <SubmitButton variant="secondary">Import listings for stock sync</SubmitButton>
@@ -248,5 +382,88 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
         </div>
       )}
     </div>
+  );
+}
+
+const HISTORY_STATE = {
+  idle: { label: 'Not imported', tone: 'gray' },
+  running: { label: 'Importing…', tone: 'blue' },
+  done: { label: 'Imported', tone: 'green' },
+  error: { label: 'Stopped', tone: 'red' },
+} as const;
+
+/** The one-off import of past orders and, for Allegro, the billing fee feed. */
+function HistoryAndFees({ account }: { account: MarketplaceAccount }) {
+  const state = HISTORY_STATE[account.historyState];
+  return (
+    <Card className="mt-5">
+      <CardHeader
+        title="Past orders and fees (for analytics)"
+        description="Imports every past order once, so analytics and margins cover your whole history. Past orders are stored as closed: they never get labels, invoices or stock changes."
+      />
+      <CardBody className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Badge tone={state.tone}>{state.label}</Badge>
+          <span>{account.historyImported} past order(s) imported</span>
+          {account.historyUpdatedAt && <span className="text-xs text-slate-500">last step {formatDate(account.historyUpdatedAt)}</span>}
+        </div>
+        {account.historyError && <p className="text-sm text-red-700">{account.historyError}</p>}
+        {account.type === 'shopify' && (
+          <p className="text-xs text-slate-500">
+            Shopify only returns orders older than 60 days when the app has the <code>read_all_orders</code> scope (ask for it in the Shopify Dev Dashboard).
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {account.historyState === 'running' ? (
+            <ActionForm action={stopHistoryAction.bind(null, account.id)}>
+              <SubmitButton variant="secondary">Stop</SubmitButton>
+            </ActionForm>
+          ) : (
+            <ActionForm action={startHistoryAction.bind(null, account.id)}>
+              {account.historyState === 'error' && account.historyCursor ? (
+                <SubmitButton>Resume import</SubmitButton>
+              ) : (
+                <SubmitButton>{account.historyState === 'done' ? 'Import again' : 'Import past orders'}</SubmitButton>
+              )}
+            </ActionForm>
+          )}
+          {account.historyState === 'error' && account.historyCursor && (
+            <ActionForm action={startHistoryAction.bind(null, account.id)}>
+              <input type="hidden" name="restart" value="1" />
+              <SubmitButton variant="secondary">Start over</SubmitButton>
+            </ActionForm>
+          )}
+        </div>
+
+        {account.type === 'allegro' && (
+          <div className="space-y-2 border-t border-slate-100 pt-4">
+            <p className="text-sm font-semibold">Allegro fees and refunds</p>
+            <p className="text-xs text-slate-500">
+              Commission, Smart delivery and promotion charges are read from Allegro billing every two hours, and payment refunds with them. The Allegro app
+              needs the “Billing (read)” and “Payments (read)” permissions; after enabling them press “Connect Allegro” again.
+            </p>
+            <p className="text-sm">
+              {account.feesSyncedAt ? (
+                <>
+                  Read up to {account.feesCursor ? formatDate(new Date(account.feesCursor)) : '–'} · last run {formatDate(account.feesSyncedAt)}
+                </>
+              ) : (
+                'Not read yet.'
+              )}
+            </p>
+            {account.feesError && <p className="text-sm text-red-700">{account.feesError}</p>}
+            <div className="flex flex-wrap gap-2">
+              <ActionForm action={syncFeesAction.bind(null, account.id)}>
+                <SubmitButton variant="secondary">Read fees now</SubmitButton>
+              </ActionForm>
+              <ActionForm action={syncFeesAction.bind(null, account.id)}>
+                <input type="hidden" name="fromStart" value="1" />
+                <SubmitButton variant="secondary">Read all fees again</SubmitButton>
+              </ActionForm>
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }

@@ -132,12 +132,16 @@ export function mapVonHalskyOrder(raw: unknown): NormalizedOrder {
   const paid = isPaid(o);
 
   // The same offer bought n times comes as n lines.
-  const lines = new Map<string, { name: string; sku: string | null; unit: number; quantity: number }>();
+  const lines = new Map<string, { name: string; sku: string | null; unit: number; quantity: number; discount: number }>();
   for (const l of o.orderLines) {
     const key = l.offer.offerId;
+    // basePrice is the offer price before InPost's promotions; finalPrice is what the buyer paid.
+    const discount = Math.max(0, (l.offer.basePrice?.amount ?? l.offer.finalPrice.amount) - l.offer.finalPrice.amount);
     const entry = lines.get(key);
-    if (entry) entry.quantity += 1;
-    else lines.set(key, { name: l.offer.product.name, sku: l.offer.product.sku ?? null, unit: l.offer.finalPrice.amount, quantity: 1 });
+    if (entry) {
+      entry.quantity += 1;
+      entry.discount += discount;
+    } else lines.set(key, { name: l.offer.product.name, sku: l.offer.product.sku ?? null, unit: l.offer.finalPrice.amount, quantity: 1, discount });
   }
 
   const shippingAddress: Address = {
@@ -178,6 +182,7 @@ export function mapVonHalskyOrder(raw: unknown): NormalizedOrder {
       quantity: l.quantity,
       unitPrice: fixed(l.unit),
       externalProductId: offerId,
+      discountAmount: l.discount > 0.004 ? fixed(l.discount) : null,
     })),
     invoiceRequest: invoiceRequest(o),
     revision: o.updatedAt ?? null,
