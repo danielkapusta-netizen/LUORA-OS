@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { isTaskPriority, isTaskStatus, type TaskPriority } from '@/lib/tasks/model';
 import { requireUser } from '@/server/auth';
+import { linkNoteToTask } from '@/server/services/order-notes';
 import {
   addChecklistItem,
   addComment,
@@ -47,7 +48,7 @@ export async function createTaskAction(_prev: ActionResult, fd: FormData): Promi
   const user = await requireUser();
   return attempt(async () => {
     const status = text(fd, 'status');
-    await createTask(
+    const taskId = await createTask(
       {
         ...taskFields(fd),
         status: isTaskStatus(status) ? status : 'todo',
@@ -57,6 +58,15 @@ export async function createTaskAction(_prev: ActionResult, fd: FormData): Promi
       },
       user,
     );
+    // A task made from an order note: the note remembers it.
+    const noteId = text(fd, 'noteId');
+    if (noteId) {
+      try {
+        await linkNoteToTask(noteId, taskId);
+      } catch {
+        // The note was deleted meanwhile. The task exists, so don't report a failure that would make someone create it twice.
+      }
+    }
     refresh();
     return 'Task created';
   });

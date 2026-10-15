@@ -11,12 +11,15 @@ import { PeoplePicker } from './people-picker';
 
 export interface TaskDefaults {
   title?: string;
+  description?: string;
   dueDate?: string;
   projectId?: string;
   assigneeIds?: string[];
   status?: TaskStatus;
   customerId?: string;
   orderId?: string;
+  /** The order note this task is made from; the note then shows the task. */
+  noteId?: string;
 }
 
 interface Props {
@@ -45,11 +48,12 @@ function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
       {defaults.status && <input type="hidden" name="status" value={defaults.status} />}
       {defaults.customerId && <input type="hidden" name="customerId" value={defaults.customerId} />}
       {defaults.orderId && <input type="hidden" name="orderId" value={defaults.orderId} />}
+      {defaults.noteId && <input type="hidden" name="noteId" value={defaults.noteId} />}
       <Field label="Title">
         <Input name="title" required maxLength={200} defaultValue={defaults.title} placeholder="e.g. Photograph the new serum" autoFocus />
       </Field>
       <Field label="Description">
-        <Textarea name="description" rows={3} maxLength={5000} placeholder="Anything the person doing it should know" />
+        <Textarea name="description" rows={3} maxLength={5000} defaultValue={defaults.description} placeholder="Anything the person doing it should know" />
       </Field>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Project">

@@ -9,8 +9,10 @@ import { MarketplaceBadge, ShipmentBadge } from '@/components/badges';
 import { Alert, buttonClass, Card, CardHeader, PageHeader, td, th } from '@/components/ui';
 import { cn, formatDate } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
+import { notesForOrders } from '@/server/services/order-notes';
 import { itemsByOrder } from '@/server/services/orders';
 import { getBatch } from '@/server/services/shipping';
+import { ImportantNotes } from '../../../orders/order-notes';
 import { ShipmentOrderDetails } from '../../order-details';
 import { PackedToggle } from '../../packed-toggle';
 
@@ -22,7 +24,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   const data = await getBatch(id);
   if (!data) notFound();
   const { batch, rows, skipped } = data;
-  const items = await itemsByOrder(rows.map((r) => r.order.id));
+  const [items, notes] = await Promise.all([itemsByOrder(rows.map((r) => r.order.id)), notesForOrders(rows.map((r) => r.order.id))]);
   const done = rows.filter((r) => r.shipment.state === 'created').length;
   const failed = rows.filter((r) => r.shipment.state === 'failed').length;
   const pending = rows.filter((r) => r.shipment.state === 'pending').length;
@@ -98,7 +100,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                 <ExpandableRow
                   key={s.id}
                   colSpan={5}
-                  details={<ShipmentOrderDetails order={order} shipment={s} carrierName={carrierName} items={items.get(order.id) ?? []} />}
+                  details={<ShipmentOrderDetails order={order} shipment={s} carrierName={carrierName} items={items.get(order.id) ?? []} notes={notes.get(order.id) ?? []} />}
                 >
                   <td className={td}>
                     <p className="font-medium">{order.buyer.name}</p>
@@ -108,6 +110,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                         {order.externalNumber}
                       </Link>
                     </div>
+                    <ImportantNotes notes={(notes.get(order.id) ?? []).filter((n) => n.pinned)} className="mt-2 max-w-sm" />
                   </td>
                   <td className={td}>
                     <ShipmentBadge state={s.state} />

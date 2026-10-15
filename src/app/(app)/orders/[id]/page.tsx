@@ -6,7 +6,7 @@ import { AutoRefresh } from '@/components/auto-refresh';
 import { PrintLabelButton } from '@/components/print-label-button';
 import { MarketplaceBadge, ShipmentBadge, StatusBadge } from '@/components/badges';
 import { ActionForm, SubmitButton } from '@/components/forms';
-import { Alert, buttonClass, Card, CardBody, CardHeader, Field, Input, Select, td, Textarea, th } from '@/components/ui';
+import { Alert, buttonClass, Card, CardBody, CardHeader, Field, Input, Select, td, th } from '@/components/ui';
 import { AvatarStack } from '@/components/tasks/avatars';
 import { DueChip } from '@/components/tasks/chips';
 import { DoneToggle } from '@/components/tasks/done-toggle';
@@ -19,12 +19,12 @@ import { getOrderDetail } from '@/server/services/orders';
 import { orderProfit } from '@/server/analytics/dataset';
 import { ProfitBreakdown } from '@/components/analytics/profit-breakdown';
 import { listUsers } from '@/server/services/settings';
+import { notesForOrders } from '@/server/services/order-notes';
 import { listProjects, listTasks, tagCounts } from '@/server/services/tasks';
 import { shippingFormData } from '@/server/services/shipping';
 import { canTransition, MANUAL_TARGETS, STATUS_LABELS } from '@/server/services/workflow';
 import {
   acceptOrderAction,
-  addNoteAction,
   assignAction,
   cancelShipmentAction,
   changeStatusAction,
@@ -36,6 +36,7 @@ import {
   updateAddressAction,
 } from '../actions';
 import { LabelForm } from './label-form';
+import { ImportantNotes, OrderNotes } from '../order-notes';
 
 export const metadata: Metadata = { title: 'Order' };
 
@@ -58,6 +59,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   if (!detail) notFound();
   const { order, account, items, events, shipments } = detail;
   const [users, allProfitLines, orderTasks, projectCards, tagList] = await Promise.all([listUsers(), orderProfit(order.id), listTasks({ orderId: id }), listProjects(), tagCounts({ limit: 20 })]);
+  const notes = (await notesForOrders([order.id])).get(order.id) ?? [];
   const todayKey = warsawToday();
   const profitLines = can(user.role, 'profit') ? allProfitLines : [];
   const orderGross = allProfitLines.reduce((sum, l) => sum + Number(l.gross ?? 0), 0);
@@ -400,16 +402,24 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </Card>
 
           <Card>
+            <CardHeader title="Notes" description="Internal, for the team. Mark one important to show it before shipping." />
+            <CardBody>
+              <ImportantNotes notes={notes.filter((n) => n.pinned)} className="mb-3" />
+              <OrderNotes
+                orderId={order.id}
+                orderNumber={order.externalNumber}
+                notes={notes}
+                viewer={user}
+                taskDialog={{ people: users.map((u) => ({ id: u.id, name: u.name })), projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((t) => t.tag) }}
+              />
+            </CardBody>
+          </Card>
+
+          <Card>
             <CardHeader title="Activity" />
             <CardBody className="space-y-4">
-              <ActionForm action={addNoteAction.bind(null, order.id)} resetOnSuccess showOk={false} className="space-y-2">
-                <Textarea name="note" rows={2} placeholder="Add an internal note…" required />
-                <SubmitButton size="sm" variant="secondary">
-                  Add note
-                </SubmitButton>
-              </ActionForm>
               <ol className="space-y-3">
-                {events.map(({ event, userName }) => (
+                {events.filter(({ event }) => event.type !== 'note').map(({ event, userName }) => (
                   <li key={event.id} className="flex gap-2.5">
                     <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', EVENT_DOT[event.type] ?? 'bg-slate-300')} />
                     <div className="min-w-0">

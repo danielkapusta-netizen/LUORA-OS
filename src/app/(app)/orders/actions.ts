@@ -10,7 +10,6 @@ import type { Address, ParcelSpec } from '@/server/integrations/types';
 import { enqueue, JOBS } from '@/server/jobs/queue';
 import {
   acceptOrder,
-  addNote,
   assignOrder,
   loadOrder,
   withPickupPoint,
@@ -18,6 +17,7 @@ import {
   setTags,
   updateShippingDetails,
 } from '@/server/services/orders';
+import { addNote, deleteNote, editNote, setNoteImportant } from '@/server/services/order-notes';
 import {
   cancelShipment,
   createBatch,
@@ -42,6 +42,8 @@ function ids(formData: FormData): string[] {
 
 function refresh(orderId?: string) {
   revalidatePath('/orders');
+  // Notes are also shown next to the packing tick.
+  revalidatePath('/shipments');
   if (orderId) revalidatePath(`/orders/${orderId}`);
 }
 
@@ -101,9 +103,36 @@ export async function changeStatusAction(orderId: string, _prev: ActionResult, f
 export async function addNoteAction(orderId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
   return attempt(async () => {
-    await addNote(orderId, user.id, String(formData.get('note') ?? ''));
+    await addNote(orderId, user.id, String(formData.get('note') ?? ''), formData.get('important') === 'on');
     refresh(orderId);
     return 'Note added';
+  });
+}
+
+export async function editNoteAction(noteId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  return attempt(async () => {
+    const { orderId } = await editNote(noteId, user, String(formData.get('note') ?? ''));
+    refresh(orderId);
+    return 'Note saved';
+  });
+}
+
+export async function deleteNoteAction(noteId: string): Promise<ActionResult> {
+  const user = await requireUser();
+  return attempt(async () => {
+    const { orderId } = await deleteNote(noteId, user);
+    refresh(orderId);
+    return 'Note deleted';
+  });
+}
+
+export async function setNoteImportantAction(noteId: string, important: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  return attempt(async () => {
+    const { orderId } = await setNoteImportant(noteId, important, user);
+    refresh(orderId);
+    return important ? 'Marked as important' : 'No longer important';
   });
 }
 

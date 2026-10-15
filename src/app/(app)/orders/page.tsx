@@ -52,6 +52,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     from: params.from,
     to: params.to,
     returning: params.returning === '1',
+    notes: params.notes === 'important' ? 'important' : params.notes === '1' ? 'any' : undefined,
     page: Number(params.page ?? 1) || 1,
   };
 
@@ -69,7 +70,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // The details panel shows the chosen order, or the first one on the page.
   const selectedId = params.order ?? rows[0]?.order.id ?? null;
 
-  const tableRows: OrderRow[] = rows.map(({ order, accountName, assigneeName, itemCount, shipment, returning }) => ({
+  const tableRows: OrderRow[] = rows.map(({ order, accountName, assigneeName, itemCount, shipment, returning, notes }) => ({
     id: order.id,
     number: order.externalNumber,
     marketplace: order.marketplace,
@@ -87,6 +88,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     assignee: assigneeName,
     courier: shipment && shipment.state !== 'failed' ? (CARRIER_LABELS[shipment.carrier] ?? shipment.carrier) : order.deliveryMethodName,
     returning: returning ? { orderNumber: returning.orderNumber, since: returning.firstOrderAt.toISOString() } : null,
+    notes,
     shipment: shipment
       ? { id: shipment.id, state: shipment.state, trackingNumber: shipment.trackingNumber, carrier: shipment.carrier, hasLabel: shipment.state === 'created' }
       : null,
@@ -154,6 +156,21 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         >
           Returning customers
         </Link>
+        {(
+          [
+            { value: '1', label: 'With notes', on: 'border-slate-700 bg-slate-700 text-white', off: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300' },
+            { value: 'important', label: 'Important notes', on: 'border-amber-500 bg-amber-500 text-white', off: 'border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300' },
+          ] as const
+        ).map((pill) => (
+          <Link
+            key={pill.value}
+            href={hrefWith(params, { notes: params.notes === pill.value ? undefined : pill.value, page: undefined, order: undefined })}
+            className={cn('rounded-full border px-4 py-1.5 text-sm font-medium transition-colors', params.notes === pill.value ? pill.on : pill.off)}
+            aria-pressed={params.notes === pill.value}
+          >
+            {pill.label}
+          </Link>
+        ))}
         <details className="relative ml-auto" open={filtersActive}>
           <summary className={cn(buttonClass('secondary', 'sm'), 'cursor-pointer list-none')}>
             <SlidersHorizontal className="size-3.5" /> Filters{filtersActive ? ' •' : ''}

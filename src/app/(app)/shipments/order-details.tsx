@@ -1,7 +1,8 @@
-import { MapPin, Truck } from 'lucide-react';
+import { MapPin, MessageSquareText, Truck } from 'lucide-react';
 import { CustomerSummary, OrderItemsList, type SummaryItem } from '@/components/order-summary';
-import { SERVICE_LABELS } from '@/lib/utils';
+import { formatDate, SERVICE_LABELS } from '@/lib/utils';
 import type { Order, Shipment } from '@/server/db/schema';
+import type { OrderNote } from '@/server/services/order-notes';
 
 /** Who the parcel is for, where it goes and what is in it, shown when a shipment row is expanded. */
 export function ShipmentOrderDetails({
@@ -9,11 +10,13 @@ export function ShipmentOrderDetails({
   shipment,
   carrierName,
   items,
+  notes,
 }: {
   order: Order;
   shipment: Shipment;
   carrierName: string;
   items: SummaryItem[];
+  notes: OrderNote[];
 }) {
   const a = order.shippingAddress;
   const point = shipment.options.pickupPointId ?? order.pickupPointId;
@@ -44,7 +47,26 @@ export function ShipmentOrderDetails({
           </div>
         </div>
       </div>
-      {items.length ? <OrderItemsList items={items} highlightQuantity /> : <p className="text-sm text-slate-500">No items on this order.</p>}
+      <div className="space-y-4">
+        {items.length ? <OrderItemsList items={items} highlightQuantity /> : <p className="text-sm text-slate-500">No items on this order.</p>}
+        {notes.length > 0 && (
+          <div>
+            <p className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <MessageSquareText className="size-4 text-slate-400" aria-hidden /> Notes
+            </p>
+            <ul className="mt-2 space-y-2">
+              {notes.map((n) => (
+                <li key={n.id} className={n.pinned ? 'rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-300' : 'rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200'}>
+                  <p className="text-sm whitespace-pre-wrap break-words text-slate-900">{n.message}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {n.userName ?? 'Unknown'} · {formatDate(n.createdAt)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

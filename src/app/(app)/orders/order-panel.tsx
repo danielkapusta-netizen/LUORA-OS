@@ -1,18 +1,23 @@
-import { BadgeCheck, ExternalLink, FileText, Hash, MapPin, MessageSquareText, Printer, Store, Truck } from 'lucide-react';
+import { BadgeCheck, ExternalLink, FileText, Hash, MapPin, Printer, Store, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { PrintLabelButton } from '@/components/print-label-button';
 import { MarketplaceBadge, ShipmentBadge, StatusBadge } from '@/components/badges';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { CustomerSummary, OrderItemsList } from '@/components/order-summary';
-import { buttonClass, Card, Textarea } from '@/components/ui';
+import { buttonClass, Card } from '@/components/ui';
 import { CARRIER_LABELS, cn, formatDate, formatMoney, ordinal, SERVICE_LABELS } from '@/lib/utils';
+import { requireUser } from '@/server/auth';
 import { invoicesForOrder } from '@/server/services/invoicing';
+import { notesForOrders } from '@/server/services/order-notes';
+import { listUsers } from '@/server/services/settings';
+import { listProjects, tagCounts } from '@/server/services/tasks';
 import { getOrderDetail, returningInfo } from '@/server/services/orders';
 import { loadRoutingData, routeOrder } from '@/server/services/shipping';
 import { PackedToggle } from '../shipments/packed-toggle';
 import { createInvoiceAction } from '../accounting/actions';
-import { addNoteAction, pollShipmentAction, quickLabelAction, retryTrackingAction } from './actions';
+import { pollShipmentAction, quickLabelAction, retryTrackingAction } from './actions';
+import { ImportantNotes, OrderNotes } from './order-notes';
 
 function InfoRow({ icon: Icon, label, children }: { icon: typeof Store; label: string; children: React.ReactNode }) {
   return (
@@ -30,9 +35,11 @@ function InfoRow({ icon: Icon, label, children }: { icon: typeof Store; label: s
 export async function OrderPanel({ orderId }: { orderId: string }) {
   const detail = await getOrderDetail(orderId);
   if (!detail) return null;
-  const { order, account, items, shipments, events } = detail;
-  // Newest first, like the activity log on the full order page.
-  const notes = events.filter((e) => e.event.type === 'note');
+  const { order, account, items, shipments } = detail;
+  const viewer = await requireUser();
+  const notes = (await notesForOrders([order.id])).get(order.id) ?? [];
+  // The task form is only needed when there is a note to turn into a task.
+  const [people, projectCards, tagList] = notes.length ? await Promise.all([listUsers(), listProjects(), tagCounts({ limit: 20 })]) : [[], [], []];
   const live = shipments.find((s) => s.state === 'pending' || s.state === 'created');
   const failed = !live ? shipments.find((s) => s.state === 'failed') : undefined;
   const canShip = !live && order.readyToShip && !['cancelled', 'shipped', 'delivered'].includes(order.status);
@@ -60,6 +67,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
           <span className="text-xs">first ordered {formatDate(returning.firstOrderAt, false)} →</span>
         </Link>
       )}
+
+      <ImportantNotes notes={notes.filter((n) => n.pinned)} className="mt-3" />
 
       {/* Items */}
       <div className="mt-4 flex items-center gap-3">
@@ -161,29 +170,14 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         </div>
 
       </div>
-      {/* Notes: internal, shared by everyone who works on orders; also listed in the full order's activity. */}
       <div className="mt-4">
-        <p className="flex items-center gap-2 text-xs font-medium text-slate-500">
-          <MessageSquareText className="size-4 text-slate-400" /> Notes{notes.length > 0 && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{notes.length}</span>}
-        </p>
-        <ActionForm action={addNoteAction.bind(null, order.id)} resetOnSuccess showOk={false} className="mt-2 space-y-2">
-          <Textarea name="note" rows={2} maxLength={2000} placeholder="Leave an internal note for the team…" required aria-label={`Note on order ${order.externalNumber}`} />
-          <SubmitButton size="sm" variant="secondary" pendingText="Saving…">
-            Add note
-          </SubmitButton>
-        </ActionForm>
-        {notes.length > 0 && (
-          <ul className="mt-3 space-y-2">
-            {notes.map(({ event, userName }) => (
-              <li key={event.id} className="rounded-xl bg-amber-50/60 px-3 py-2 ring-1 ring-amber-100">
-                <p className="text-sm whitespace-pre-wrap break-words text-slate-900">{event.message}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {userName ?? 'Unknown'} · {formatDate(event.createdAt)}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
+        <OrderNotes
+          orderId={order.id}
+          orderNumber={order.externalNumber}
+          notes={notes}
+          viewer={viewer}
+          taskDialog={{ people: people.map((u) => ({ id: u.id, name: u.name })), projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((t) => t.tag) }}
+        />
       </div>
 
       <div className="mt-3 divide-y divide-slate-100">

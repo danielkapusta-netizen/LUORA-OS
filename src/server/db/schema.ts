@@ -319,6 +319,14 @@ export const orderEvents = sqliteTable(
     message: text('message').notNull(),
     data: json<unknown>('data'),
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Notes only: marked important, so it is shown on top wherever the order appears. */
+    pinned: bool('pinned').notNull().default(false),
+    /** Notes only: when the text was last changed by its author. */
+    editedAt: ts('edited_at'),
+    /** Notes only: removed by its author. The row stays (the activity log says who deleted what), but it is hidden. */
+    deletedAt: ts('deleted_at'),
+    /** Notes only: the task made from this note. */
+    taskId: text('task_id').references(() => tasks.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
   },
   (t) => [index('order_events_order_idx').on(t.orderId, t.createdAt)],

@@ -9,8 +9,10 @@ import { buttonClass, Card, CardHeader, EmptyState, PageHeader, td, th } from '@
 import { cn, formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { invoicesByOrder, loadAccounting, uploadEnabled } from '@/server/services/invoicing';
+import { notesForOrders } from '@/server/services/order-notes';
 import { itemsByOrder } from '@/server/services/orders';
 import { recentBatches, recentShipments } from '@/server/services/shipping';
+import { ImportantNotes } from '../orders/order-notes';
 import { ShipmentOrderDetails } from './order-details';
 import { InvoiceCell } from './invoice-cell';
 import { PackedToggle } from './packed-toggle';
@@ -32,7 +34,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
   const { state = '' } = await searchParams;
   const [rows, batches] = await Promise.all([recentShipments({ state: state || undefined }), recentBatches(10)]);
   const orderIds = rows.map((r) => r.order.id);
-  const [items, invoices, accounting] = await Promise.all([itemsByOrder(orderIds), invoicesByOrder(orderIds), loadAccounting()]);
+  const [items, invoices, accounting, notes] = await Promise.all([itemsByOrder(orderIds), invoicesByOrder(orderIds), loadAccounting(), notesForOrders(orderIds)]);
   const invoiceBusy = [...invoices.values()].some((i) => i.state === 'pending' || (i.state === 'issued' && !i.r2Key));
 
   return (
@@ -84,7 +86,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                       key={s.id}
                       colSpan={6}
                       className="hover:bg-slate-50"
-                      details={<ShipmentOrderDetails order={order} shipment={s} carrierName={carrierName} items={items.get(order.id) ?? []} />}
+                      details={<ShipmentOrderDetails order={order} shipment={s} carrierName={carrierName} items={items.get(order.id) ?? []} notes={notes.get(order.id) ?? []} />}
                     >
                       <td className={td}>
                         <p className="font-medium">{order.buyer.name}</p>
@@ -95,6 +97,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                           </Link>
                           <span>· {formatDate(s.createdAt)}</span>
                         </div>
+                        <ImportantNotes notes={(notes.get(order.id) ?? []).filter((n) => n.pinned)} className="mt-2 max-w-sm" />
                       </td>
                       <td className={td}>
                         <ShipmentBadge state={s.state} />

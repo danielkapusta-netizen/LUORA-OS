@@ -18,6 +18,11 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
 - **Pricing:** one tab each for Shopify, Von Halsky, Empik and Allegro, with every product's gross price on that platform. Type a new price and press Update (or Enter) to send it to the platform right away; "Update every changed price" sends the whole page. A platform that refuses a price gives its reason on that row and the other prices still go through. Admin and Marketing only.
   - Prices are not held back by the stock dry-run switch: pressing Update is the decision.
   - Von Halsky offers Luora created follow Shopify + markup ("Update prices of Luora offers"); a price set on the Pricing page is skipped by that rule.
+- **Order notes:** internal notes on every order, in the side panel on Orders and on the full order page.
+  - A note can be marked *important*: it then shows on top of the order as "Read before shipping", on Shipments and in label batches too.
+  - Orders with notes carry a marker in the list (amber when one is important), and the list can be filtered to orders with notes or important notes.
+  - Authors can edit and delete their own notes (admins anyone's); the activity log keeps a line for every edit and deletion.
+  - A note can be turned into a task linked to the order; the note then shows the task and its status.
 - **Analytics:** revenue per day by marketplace, average order value, top products, labels by carrier, time to ship, and the open backlog.
 
 ## Runs on Cloudflare

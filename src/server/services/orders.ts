@@ -21,6 +21,7 @@ import type { MarketplaceAdapter } from '../integrations/marketplaces/types';
 import type { Address, NormalizedOrder, OrderRef } from '../integrations/types';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
+import { noteCounts } from './order-notes';
 import { applyOrderStock, scheduleStockPush, stockCoversOrder } from './inventory';
 import { resolveCustomers } from './customers';
 import { refreshProfit } from './profit';
@@ -493,6 +494,8 @@ export interface OrderFilters {
   to?: string;
   /** Only orders whose customer ordered (and did not cancel) before. */
   returning?: boolean;
+  /** Only orders with a note ("any"), or with a note marked important. */
+  notes?: 'any' | 'important';
   page?: number;
 }
 
@@ -509,6 +512,11 @@ function filterConditions(f: OrderFilters): SQL[] {
   if (f.invoiceRequested) where.push(isNotNull(orders.invoiceRequest));
   if (f.returning) {
     where.push(sql`exists (select 1 from orders o2 where o2.customer_id = ${orders.customerId} and o2.status <> 'cancelled' and o2.placed_at < ${orders.placedAt})`);
+  }
+  if (f.notes) {
+    where.push(
+      sql`exists (select 1 from order_events n where n.order_id = ${orders.id} and n.type = 'note' and n.deleted_at is null${f.notes === 'important' ? sql` and n.pinned = 1` : sql``})`,
+    );
   }
   if (f.tag) where.push(sql`exists (select 1 from json_each(${orders.tags}) t where t.value = ${f.tag})`);
   if (f.from) where.push(gte(orders.placedAt, new Date(f.from)));
@@ -599,7 +607,13 @@ export async function listOrders(f: OrderFilters) {
   for (const s of live) if (!latest.has(s.orderId)) latest.set(s.orderId, s);
 
   const returning = await returningInfo(rows.map((r) => ({ id: r.order.id, customerId: r.order.customerId, placedAt: r.order.placedAt })));
-  return { rows: rows.map((r) => ({ ...r, shipment: latest.get(r.order.id) ?? null, returning: returning.get(r.order.id) ?? null })), total: count, page, pageSize: PAGE_SIZE };
+  const notes = await noteCounts(ids);
+  return {
+    rows: rows.map((r) => ({ ...r, shipment: latest.get(r.order.id) ?? null, returning: returning.get(r.order.id) ?? null, notes: notes.get(r.order.id) ?? null })),
+    total: count,
+    page,
+    pageSize: PAGE_SIZE,
+  };
 }
 
 export async function statusCounts(): Promise<Record<string, number>> {
@@ -651,7 +665,8 @@ export async function getOrderDetail(orderId: string) {
       .select({ event: orderEvents, userName: users.name })
       .from(orderEvents)
       .leftJoin(users, eq(users.id, orderEvents.userId))
-      .where(eq(orderEvents.orderId, orderId))
+      // A deleted note is gone from view; the line saying who deleted it stays.
+      .where(and(eq(orderEvents.orderId, orderId), or(ne(orderEvents.type, 'note'), isNull(orderEvents.deletedAt))))
       .orderBy(desc(orderEvents.createdAt)),
     db.select().from(shipments).where(eq(shipments.orderId, orderId)).orderBy(desc(shipments.createdAt)),
   ]);
@@ -659,12 +674,6 @@ export async function getOrderDetail(orderId: string) {
 }
 
 // ---------------------------------------------------------------- edits
-
-export async function addNote(orderId: string, userId: string, text: string): Promise<void> {
-  const note = text.trim();
-  if (!note) return;
-  await logEvent(getDb(), orderId, 'note', note, { userId });
-}
 
 export async function assignOrder(orderIds: string[], assigneeId: string | null, userId: string): Promise<void> {
   const db = getDb();

@@ -1,6 +1,6 @@
 'use client';
 
-import { Printer, Truck } from 'lucide-react';
+import { MessageSquareText, Printer, Truck } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { MarketplaceBadge, StatusBadge } from '@/components/badges';
@@ -30,6 +30,8 @@ export interface OrderRow {
   courier: string | null;
   /** Set when the customer has ordered before: which order this is and when they first ordered. */
   returning: { orderNumber: number; since: string } | null;
+  /** Internal notes on the order, and how many of them are marked important. */
+  notes: { count: number; important: number } | null;
   shipment: { id: string; state: string; trackingNumber: string | null; carrier: string; hasLabel: boolean } | null;
 }
 
@@ -186,6 +188,19 @@ export function OrdersTable({
                           title={`${ordinal(r.returning.orderNumber)} order · first ordered ${sinceLabel(r.returning.since)}`}
                         >
                           Returning · {ordinal(r.returning.orderNumber)}
+                        </span>
+                      )}
+                      {r.notes && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
+                            r.notes.important > 0 ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300' : 'bg-slate-100 text-slate-600',
+                          )}
+                          title={`${r.notes.count} note${r.notes.count === 1 ? '' : 's'}${r.notes.important ? ` · ${r.notes.important} important` : ''}`}
+                          aria-label={`${r.notes.count} note${r.notes.count === 1 ? '' : 's'}${r.notes.important ? `, ${r.notes.important} important` : ''}`}
+                        >
+                          <MessageSquareText className="size-3" aria-hidden />
+                          {r.notes.count}
                         </span>
                       )}
                     </div>
