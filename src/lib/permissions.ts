@@ -6,17 +6,17 @@ export const ROLE_LABEL: Record<Role, string> = { admin: 'Admin', logistics: 'Lo
 
 export const ROLE_DESCRIPTION: Record<Role, string> = {
   admin: 'Sees and changes everything.',
-  logistics: 'Orders, shipments, stock, customers, tasks and invoices. No analytics, profit or settings; the Dashboard shows what has to be shipped.',
+  logistics: 'Orders, shipments, stock, customers, tasks and invoices. No analytics, pricing, profit or settings; the Dashboard shows what has to be shipped.',
   marketing: 'Every page except Settings. Margins in %, but never how much profit was made.',
 };
 
-export const CAPABILITIES = ['analytics', 'profit', 'margin', 'settings', 'fullDashboard'] as const;
+export const CAPABILITIES = ['analytics', 'profit', 'margin', 'settings', 'fullDashboard', 'pricing'] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
 const GRANTED: Record<Role, readonly Capability[]> = {
   admin: CAPABILITIES,
   logistics: [],
-  marketing: ['analytics', 'margin', 'fullDashboard'],
+  marketing: ['analytics', 'margin', 'fullDashboard', 'pricing'],
 };
 
 export function isRole(value: unknown): value is Role {
@@ -31,5 +31,6 @@ export function can(role: string | null | undefined, capability: Capability): bo
 export function canSeePath(role: string | null | undefined, href: string): boolean {
   if (href === '/analytics' || href.startsWith('/analytics/')) return can(role, 'analytics');
   if (href === '/settings' || href.startsWith('/settings/')) return can(role, 'settings');
+  if (href === '/pricing' || href.startsWith('/pricing/')) return can(role, 'pricing');
   return isRole(role);
 }

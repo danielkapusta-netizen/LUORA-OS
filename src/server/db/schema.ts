@@ -524,6 +524,14 @@ export const productListings = sqliteTable(
     /** What is sent to this listing: the product's master stock, a fixed quantity, or nothing (managed on the marketplace). */
     stockMode: text('stock_mode', { enum: ['master', 'fixed', 'off'] }).notNull().default('master'),
     fixedQty: integer('fixed_qty'),
+    /** Gross selling price on the marketplace ("49.99"): read at the last import, or what the Pricing page last sent. */
+    price: text('price'),
+    currency: text('currency'),
+    /** When the Pricing page last changed this price on the marketplace. */
+    priceUpdatedAt: ts('price_updated_at'),
+    priceError: text('price_error'),
+    /** Set on the Pricing page, so Luora's automatic price rules (Von Halsky: Shopify + markup) leave this price alone. */
+    priceManual: bool('price_manual').notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [

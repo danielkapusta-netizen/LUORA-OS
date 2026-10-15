@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Truck, Users } from 'lucide-react';
+import { BarChart3, Boxes, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Tag, Truck, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { canSeePath } from '@/lib/permissions';
@@ -11,6 +11,7 @@ const ITEMS = [
   { href: '/orders', label: 'Orders', icon: ShoppingBag },
   { href: '/shipments', label: 'Shipments', icon: Truck },
   { href: '/inventory', label: 'Inventory', icon: Boxes },
+  { href: '/pricing', label: 'Pricing', icon: Tag },
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/tasks', label: 'Tasks', icon: SquareCheckBig },
   { href: '/accounting', label: 'Accounting', icon: ReceiptText },

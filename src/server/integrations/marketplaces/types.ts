@@ -1,4 +1,4 @@
-import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, StockUpdate, TrackingInfo } from '../types';
+import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../types';
 
 /** File name marketplaces accept for an invoice: ASCII only, e.g. "faktura-12-10-2026.pdf". */
 export function invoiceFileName(number: string): string {
@@ -75,6 +75,12 @@ export interface MarketplaceAdapter {
 
   /** Sets absolute stock quantities. */
   setStock(updates: StockUpdate[]): Promise<void>;
+
+  /**
+   * Sets gross selling prices. Offers the marketplace refuses are returned (the rest still go
+   * through); a call that fails as a whole, e.g. a rejected login, throws.
+   */
+  setPrices(updates: PriceUpdate[]): Promise<PriceFailure[]>;
 }
 
 /** What an offer needs from the Shopify product, whichever marketplace it goes to. */

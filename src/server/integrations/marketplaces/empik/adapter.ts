@@ -1,5 +1,5 @@
 import type { MarketplaceSettings } from '../../../db/schema';
-import type { Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
+import type { Listing, NormalizedOrder, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
 import { httpConfig } from '../../../http';
 import { invoiceFileName, type CatalogueMatch, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { MiraklClient, type EmpikCredentials, type MiraklCarrier } from './client';
@@ -104,6 +104,21 @@ export function buildOfferCsv(draft: OfferDraft, state: string, leadtimeDays: nu
   const header = ['sku', 'product-id', 'product-id-type', 'price', 'quantity', 'state', 'leadtime-to-ship', 'update-delete'];
   const row = [draft.sku, draft.ean, 'EAN', draft.price, String(Math.max(0, draft.quantity)), state, String(Math.max(0, leadtimeDays)), 'update'];
   return `${header.map(quote).join(';')}\n${row.map(quote).join(';')}\n`;
+}
+
+/**
+ * OF01 import that changes only the price of existing offers (import mode PARTIAL leaves every
+ * column that is not in the file alone, so descriptions, stock and lead times stay as they are).
+ */
+export function buildPriceCsv(updates: PriceUpdate[]): string {
+  const quote = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const lines = [['sku', 'price', 'update-delete'].map(quote).join(';')];
+  for (const u of updates) {
+    const sku = String(u.ref.shopSku ?? u.sku ?? '');
+    if (!sku) continue;
+    lines.push([sku, u.price, 'update'].map(quote).join(';'));
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 export class EmpikAdapter implements MarketplaceAdapter, OfferPublisher {
@@ -274,6 +289,8 @@ export class EmpikAdapter implements MarketplaceAdapter, OfferPublisher {
           shop_sku: string;
           product_title: string;
           quantity: number;
+          price?: number | string | null;
+          currency_iso_code?: string | null;
           active?: boolean;
           product_references?: { reference: string; reference_type: string }[];
         }[];
@@ -289,6 +306,8 @@ export class EmpikAdapter implements MarketplaceAdapter, OfferPublisher {
           status: offer.active === undefined ? null : offer.active ? 'active' : 'inactive',
           ean: offer.product_references?.find((r) => /^(EAN|GTIN|EAN13)$/i.test(r.reference_type))?.reference ?? null,
           ref: { shopSku: offer.shop_sku },
+          price: offer.price != null && offer.price !== '' ? Number(offer.price).toFixed(2) : null,
+          currency: offer.currency_iso_code ?? null,
         };
       }
       if (page.offers.length < PAGE || offset + PAGE >= page.total_count) return;
@@ -337,6 +356,12 @@ export class EmpikAdapter implements MarketplaceAdapter, OfferPublisher {
     form.append('file', new Blob([buildOfferCsv(draft, this.settings.empikOfferState ?? '11', this.settings.offerHandlingDays ?? 1)], { type: 'text/csv' }), 'offer.csv');
     form.append('import_mode', 'NORMAL');
     const { import_id: importId } = await this.client.call<{ import_id: number | string }>('POST', '/offers/imports', { body: form });
+    const outcome = await this.awaitImport(importId, 'the offer');
+    return outcome.done ? { externalId: draft.sku } : { externalId: draft.sku, note: `Empik is still processing import ${importId}` };
+  }
+
+  /** Waits briefly for an offer import's verdict. Throws with Empik's reasons when it refuses; `done: false` when it is still running. */
+  private async awaitImport(importId: number | string, what: string): Promise<{ done: boolean }> {
     for (let attempt = 0; attempt < 4; attempt++) {
       await httpConfig.sleep(1000);
       const status = await this.client.call<{ status?: string; lines_in_error?: number; has_error_report?: boolean }>('GET', `/offers/imports/${importId}`);
@@ -350,11 +375,32 @@ export class EmpikAdapter implements MarketplaceAdapter, OfferPublisher {
           } catch {
             // The report is optional; the status already says it failed.
           }
-          throw new Error(`Empik refused the offer: ${reason}`);
+          throw new Error(`Empik refused ${what}: ${reason}`);
         }
-        return { externalId: draft.sku };
+        return { done: true };
       }
     }
-    return { externalId: draft.sku, note: `Empik is still processing import ${importId}` };
+    return { done: false };
+  }
+
+  /**
+   * Changes prices with a partial OF01 import. Empik answers per file, not per offer, so a refused
+   * import is reported on every offer in it; one that is still processing counts as sent.
+   */
+  async setPrices(updates: PriceUpdate[]): Promise<PriceFailure[]> {
+    const sendable = updates.filter((u) => u.ref.shopSku ?? u.sku);
+    const failures: PriceFailure[] = updates.filter((u) => !sendable.includes(u)).map((u) => ({ externalId: u.externalId, message: 'The Empik offer has no SKU, so it cannot be updated' }));
+    if (sendable.length === 0) return failures;
+    const form = new FormData();
+    form.append('file', new Blob([buildPriceCsv(sendable)], { type: 'text/csv' }), 'prices.csv');
+    form.append('import_mode', 'PARTIAL');
+    const { import_id: importId } = await this.client.call<{ import_id: number | string }>('POST', '/offers/imports', { body: form });
+    try {
+      await this.awaitImport(importId, 'the price update');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      for (const u of sendable) failures.push({ externalId: u.externalId, message });
+    }
+    return failures;
   }
 }

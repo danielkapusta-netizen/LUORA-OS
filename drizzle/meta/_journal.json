@@ -92,6 +92,13 @@
       "when": 1791384711097,
       "tag": "0012_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1792062983394,
+      "tag": "0013_listing_prices",
+      "breakpoints": true
     }
   ]
 }

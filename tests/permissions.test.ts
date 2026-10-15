@@ -11,6 +11,14 @@ describe('permissions', () => {
     expect(['analytics', 'profit', 'margin', 'settings', 'fullDashboard'].map((c) => can('marketing', c as never))).toEqual([true, false, true, false, true]);
   });
 
+  it('lets admin and marketing change prices on the platforms, but not logistics', () => {
+    expect(['admin', 'marketing', 'logistics'].map((r) => can(r, 'pricing'))).toEqual([true, true, false]);
+    expect(['admin', 'marketing', 'logistics'].map((r) => canSeePath(r, '/pricing'))).toEqual([true, true, false]);
+    // The analytics Pricing tab is a different page, with its own rule.
+    expect(canSeePath('logistics', '/analytics/pricing')).toBe(false);
+    expect(canSeePath('marketing', '/analytics/pricing')).toBe(true);
+  });
+
   it('gives an unknown or missing role nothing', () => {
     expect(can('staff', 'analytics')).toBe(false);
     expect(can(null, 'margin')).toBe(false);

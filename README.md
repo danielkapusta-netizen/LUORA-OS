@@ -15,6 +15,9 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - The app's stock is the master; every sale lowers it.
   - The new quantity is pushed to every listing with the same SKU.
   - A dry-run switch per account lets you watch what would be sent before going live.
+- **Pricing:** one tab each for Shopify, Von Halsky, Empik and Allegro, with every product's gross price on that platform. Type a new price and press Update (or Enter) to send it to the platform right away; "Update every changed price" sends the whole page. A platform that refuses a price gives its reason on that row and the other prices still go through. Admin and Marketing only.
+  - Prices are not held back by the stock dry-run switch: pressing Update is the decision.
+  - Von Halsky offers Luora created follow Shopify + markup ("Update prices of Luora offers"); a price set on the Pricing page is skipped by that rule.
 - **Analytics:** revenue per day by marketplace, average order value, top products, labels by carrier, time to ship, and the open backlog.
 
 ## Runs on Cloudflare
@@ -74,7 +77,7 @@ curl -X POST https://<your-app>/api/admin/seed   # first run only: creates the a
 
 | Account | What you need | Where to get it |
 |---|---|---|
-| **Shopify** | Shop domain, Client ID, Client secret | Shopify **Dev Dashboard** → create an app, install it on the store. Since January 2026 new apps use client credentials, and tokens expire every 24 h (the app refreshes them automatically). A legacy `shpat_…` token also works. Scopes: `read_orders`, `read_products`, `read_locations`, `write_inventory`, `write_merchant_managed_fulfillment_orders`. For the history import add `read_all_orders` (otherwise Shopify only returns the last 60 days). |
+| **Shopify** | Shop domain, Client ID, Client secret | Shopify **Dev Dashboard** → create an app, install it on the store. Since January 2026 new apps use client credentials, and tokens expire every 24 h (the app refreshes them automatically). A legacy `shpat_…` token also works. Scopes: `read_orders`, `read_products`, `write_products` (prices), `read_locations`, `write_inventory`, `write_merchant_managed_fulfillment_orders`. For the history import add `read_all_orders` (otherwise Shopify only returns the last 60 days). |
 | **Allegro** | Client ID, Client secret | [apps.developer.allegro.pl](https://apps.developer.allegro.pl) (or the sandbox). Set the redirect URI to `APP_URL/api/oauth/allegro/callback`, save the account, then press **Connect Allegro**. For fees and refunds in analytics the app also needs the **Billing (read)** and **Payments (read)** permissions; after enabling them press **Connect Allegro** again. |
 | **Empik** | Marketplace URL, API key | Empik seller panel → My account → API key (Empik runs on Mirakl). |
 | **InPost** | API token, Organization ID | InPost Manager Paczek → My account → API (ShipX). A sandbox is available. |

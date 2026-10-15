@@ -1,6 +1,6 @@
 // Fake marketplace used when INTEGRATIONS_MODE=mock. Orders are generated
 // deterministically from their index, so re-syncing never produces duplicates.
-import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, StockUpdate, TrackingInfo } from '../../types';
+import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
 import type { CatalogueMatch, MarketplaceAdapter, OfferDraft, OfferPublisher, SyncResult } from '../types';
 
 export const MOCK_CATALOG = [
@@ -55,6 +55,12 @@ const DELIVERY: Record<Marketplace, { id: string; name: string; locker: boolean;
   ],
   vonhalsky: [{ id: 'APM', name: 'InPost parcel locker', locker: true }],
 };
+
+/** Demo marketplaces charge a little more than the catalogue price, each its own amount. */
+function mockPrice(marketplace: Marketplace, base: number): string {
+  const extra: Record<Marketplace, number> = { shopify: 1, allegro: 1.05, empik: 1.08, vonhalsky: 1.1 };
+  return (Math.round(base * extra[marketplace] * 100) / 100).toFixed(2);
+}
 
 const INITIAL_ORDERS = 14;
 /** Past orders each demo account offers to the history import, spread over the last year. */
@@ -298,6 +304,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
         quantity: 60 + (hash(`${this.marketplace}${p.sku}`) % 60),
         ean: this.marketplace === 'allegro' ? undefined : mockEan(p.sku),
         ref: { sku: p.sku },
+        price: mockPrice(this.marketplace, p.price),
+        currency: 'PLN',
       };
     }
   }
@@ -309,5 +317,11 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
 
   async setStock(updates: StockUpdate[]): Promise<void> {
     console.log(`[mock ${this.marketplace}] stock set for ${updates.length} listing(s)`);
+  }
+
+  /** Accepts every price from 1.00 up; a lower one is refused alone, like a real marketplace's minimum. */
+  async setPrices(updates: PriceUpdate[]): Promise<PriceFailure[]> {
+    console.log(`[mock ${this.marketplace}] price set for ${updates.length} listing(s)`);
+    return updates.filter((u) => Number(u.price) < 1).map((u) => ({ externalId: u.externalId, message: 'Demo marketplace refused the price: the minimum is 1.00' }));
   }
 }

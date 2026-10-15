@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import { httpConfig } from '../../../http';
-import type { CredentialsStore, Listing, NormalizedOrder, StockUpdate } from '../../types';
+import type { CredentialsStore, Listing, NormalizedOrder, PriceFailure, PriceUpdate, StockUpdate } from '../../types';
 import type { MarketplaceAdapter, SyncResult } from '../types';
 import { VonHalskyApiError, VonHalskyClient, type VonHalskyCredentials } from './client';
 import { isImportable, mapVonHalskyOrder, vonHalskyOrderSchema } from './mapper';
@@ -24,7 +24,7 @@ interface Offer {
   externalId?: string | null;
   product: { name: string; sku?: string | null; ean?: string | null };
   stock?: { quantity: number } | null;
-  price?: { grossPrice?: { amount: number } | null } | null;
+  price?: { grossPrice?: { amount: number; currency?: string | null } | null } | null;
 }
 
 /** The list wraps each offer as { metadata, offer }; a bare offer is accepted too. */
@@ -264,11 +264,29 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
           status: offer.status ?? null,
           ean: offer.product.ean ?? null,
           ref: { offerId: offer.id, status: offer.status ?? null, externalId: offer.externalId ?? null, price: offer.price?.grossPrice?.amount ?? null },
+          price: offer.price?.grossPrice?.amount != null ? Number(offer.price.grossPrice.amount).toFixed(2) : null,
+          currency: offer.price?.grossPrice?.currency ?? null,
         };
       }
       offset += page.data.length;
       if (page.data.length === 0 || offset >= page.page.total) return;
     }
+  }
+
+  /** InPost checks a batch as commands, so a refusal can't be pinned on one offer: the whole batch is reported. */
+  async setPrices(updates: PriceUpdate[]): Promise<PriceFailure[]> {
+    const failures: PriceFailure[] = [];
+    for (let i = 0; i < updates.length; i += STOCK_BATCH) {
+      const batch = updates.slice(i, i + STOCK_BATCH);
+      try {
+        await this.updatePrices(batch.map((u) => ({ offerId: u.externalId, price: u.price, currency: u.currency })));
+      } catch (err) {
+        if (err instanceof VonHalskyApiError && (err.status === 401 || err.status === 403)) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        for (const u of batch) failures.push({ externalId: u.externalId, message });
+      }
+    }
+    return failures;
   }
 
   /** Sets absolute stock. InPost runs each update as a command, whose result is checked here. */

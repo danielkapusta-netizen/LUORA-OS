@@ -137,6 +137,8 @@ export async function importListings(accountId: string): Promise<{ listings: num
         lastSeenAt: new Date(),
         active,
         listingStatus: listing.status ?? null,
+        price: listing.price ?? null,
+        currency: listing.currency ?? null,
       })
       .onConflictDoUpdate({
         target: [productListings.accountId, productListings.externalId],
@@ -150,6 +152,9 @@ export async function importListings(accountId: string): Promise<{ listings: num
           lastSeenAt: new Date(),
           active,
           listingStatus: listing.status ?? null,
+          // A marketplace that doesn't report prices in its list keeps the one we know.
+          price: sql`coalesce(${listing.price ?? null}, ${productListings.price})`,
+          currency: sql`coalesce(${listing.currency ?? null}, ${productListings.currency})`,
           // Shopify listings always belong to their own product; other links are kept as made.
           productId: isShopify ? productId : sql`${productListings.productId}`,
         },

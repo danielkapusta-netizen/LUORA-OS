@@ -230,11 +230,12 @@ export async function syncOfferPrices(accountId: string): Promise<{ updated: num
   const db = getDb();
   const account = await loadMarketplaceAccount(accountId);
   const rows = await db
-    .select({ externalId: productListings.externalId, ref: productListings.ref, variantId: products.shopifyVariantId })
+    .select({ externalId: productListings.externalId, ref: productListings.ref, variantId: products.shopifyVariantId, priceManual: productListings.priceManual })
     .from(productListings)
     .innerJoin(products, eq(products.id, productListings.productId))
     .where(and(eq(productListings.accountId, accountId), isNotNull(products.shopifyVariantId)));
-  const ours = rows.filter((r) => String(r.ref.externalId ?? '').startsWith(LUORA_OFFER_PREFIX));
+  // A price typed on the Pricing page is a decision; the automatic rule leaves it alone.
+  const ours = rows.filter((r) => String(r.ref.externalId ?? '').startsWith(LUORA_OFFER_PREFIX) && !r.priceManual);
   if (ours.length === 0) return { updated: 0 };
   const details = await (await shopifyAdapter()).variantDetails(ours.map((r) => r.variantId!));
   const updates = ours.flatMap((r) => {

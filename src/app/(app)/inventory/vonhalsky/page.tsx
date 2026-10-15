@@ -35,7 +35,7 @@ export default async function VonHalskyOffersPage() {
     <>
       <PageHeader
         title="Von Halsky offers"
-        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${account.settings.vhMarkupPercent ?? 10}%. Nothing is created until you tick products and press Create.`}
+        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${account.settings.vhMarkupPercent ?? 10}%. Nothing is created until you tick products and press Create. Offers whose price was set on the Pricing page keep it.`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">

@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import { httpConfig } from '../../../http';
-import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, StockUpdate, TrackingInfo } from '../../types';
+import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
 import { invoiceFileName, type CatalogueMatch, type ExternalFee, type ExternalRefund, type FeeFeed, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { AllegroApiError, AllegroClient, describeAllegroErrors, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
@@ -311,7 +311,14 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
   async *listListings(): AsyncIterable<Listing> {
     for (let offset = 0; ; offset += 1000) {
       const page = await this.client.call<{
-        offers: { id: string; name: string; external?: { id?: string | null } | null; stock?: { available?: number } | null; publication?: { status?: string | null } | null }[];
+        offers: {
+          id: string;
+          name: string;
+          external?: { id?: string | null } | null;
+          stock?: { available?: number } | null;
+          publication?: { status?: string | null } | null;
+          sellingMode?: { price?: { amount?: string | null; currency?: string | null } | null } | null;
+        }[];
         totalCount: number;
       }>('GET', '/sale/offers', { query: { limit: 1000, offset } });
       for (const offer of page.offers) {
@@ -324,6 +331,8 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
           active: offer.publication?.status ? offer.publication.status === 'ACTIVE' : undefined,
           status: offer.publication?.status ?? null,
           ref: { offerId: offer.id },
+          price: offer.sellingMode?.price?.amount ? Number(offer.sellingMode.price.amount).toFixed(2) : null,
+          currency: offer.sellingMode?.price?.currency ?? null,
         };
       }
       if (page.offers.length < 1000 || offset + 1000 >= page.totalCount) return;
@@ -374,6 +383,24 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
         responseType: 'none',
       });
     }
+  }
+
+  /** One offer at a time; an offer Allegro refuses is reported with Allegro's reason and the others still go through. */
+  async setPrices(updates: PriceUpdate[]): Promise<PriceFailure[]> {
+    const failures: PriceFailure[] = [];
+    for (const u of updates) {
+      try {
+        await this.client.call('PATCH', `/sale/product-offers/${u.externalId}`, {
+          body: { sellingMode: { price: { amount: u.price, currency: u.currency } } },
+          responseType: 'none',
+        });
+      } catch (err) {
+        // A rejected login or a rate limit affects every offer, so it stops the run instead of failing each one.
+        if (!(err instanceof AllegroApiError) || err.status === 401 || err.status === 403 || err.status === 429) throw err;
+        failures.push({ externalId: u.externalId, message: err.message });
+      }
+    }
+    return failures;
   }
 
   // ------------------------------------------------------------ creating offers

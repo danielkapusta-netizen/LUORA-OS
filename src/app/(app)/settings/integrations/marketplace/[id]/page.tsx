@@ -154,7 +154,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                 <legend className="mb-1 text-sm font-semibold">Shopify connection</legend>
                 <p className="text-xs text-slate-500">
                   Create an app in the Shopify Dev Dashboard, install it on the store, and paste its Client ID and secret. Scopes needed: read_orders,
-                  read_products, read_locations, write_inventory, write_merchant_managed_fulfillment_orders. A legacy Admin API token (shpat_…) also works.
+                  read_products, write_products (to change prices on the Pricing page), read_locations, write_inventory, write_merchant_managed_fulfillment_orders. A legacy Admin API token (shpat_…) also works.
                 </p>
                 <Field label="Shop domain">
                   <Input name="shopDomain" defaultValue={str('shopDomain')} placeholder="my-shop.myshopify.com" required />

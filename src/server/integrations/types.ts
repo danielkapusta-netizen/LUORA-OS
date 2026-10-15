@@ -164,6 +164,9 @@ export interface Listing {
   /** Shopify: product vendor and type, used as brand and category in analytics. */
   brand?: string | null;
   category?: string | null;
+  /** Gross selling price as the marketplace shows it, with two decimals; undefined when the list call doesn't return it. */
+  price?: string | null;
+  currency?: string | null;
 }
 
 export interface StockUpdate {
@@ -171,6 +174,22 @@ export interface StockUpdate {
   sku: string | null;
   ref: Record<string, string | number | null>;
   quantity: number;
+}
+
+export interface PriceUpdate {
+  externalId: string;
+  sku: string | null;
+  ean: string | null;
+  ref: Record<string, string | number | null>;
+  /** Gross price with two decimals, e.g. "49.99". */
+  price: string;
+  currency: string;
+}
+
+/** An offer the marketplace refused a new price for; the others in the same call went through. */
+export interface PriceFailure {
+  externalId: string;
+  message: string;
 }
 
 export interface ParcelSpec {

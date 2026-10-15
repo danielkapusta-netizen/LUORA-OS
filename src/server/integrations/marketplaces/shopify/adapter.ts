@@ -1,5 +1,5 @@
 import type { MarketplaceSettings } from '../../../db/schema';
-import type { CredentialsStore, Listing, OrderRef, StockUpdate, TrackingInfo } from '../../types';
+import type { CredentialsStore, Listing, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
 import type { MarketplaceAdapter, SyncResult } from '../types';
 import { DEFAULT_SHOPIFY_API_VERSION, ShopifyClient, type ShopifyCredentials } from './client';
 import { DEFAULT_PICKUP_POINT_KEYS, mapShopifyOrder } from './mapper';
@@ -66,9 +66,9 @@ const VARIANTS_QUERY = `query Variants($first: Int!, $after: String) {
   productVariants(first: $first, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id sku barcode displayName inventoryQuantity inventoryItem { id }
+      id sku barcode price displayName inventoryQuantity inventoryItem { id }
       image { url(transform: { maxWidth: 240 }) }
-      product { vendor productType featuredImage { url(transform: { maxWidth: 240 }) } }
+      product { id vendor productType featuredImage { url(transform: { maxWidth: 240 }) } }
     }
   }
 }`;
@@ -118,6 +118,16 @@ const TAGS_REMOVE = `mutation TagsRemove($id: ID!, $tags: [String!]!) { tagsRemo
 const SET_QUANTITIES = `mutation SetQty($input: InventorySetQuantitiesInput!) {
   inventorySetQuantities(input: $input) {
     inventoryAdjustmentGroup { id }
+    userErrors { field message code }
+  }
+}`;
+
+const VARIANT_PRODUCTS = `query VariantProducts($ids: [ID!]!) {
+  nodes(ids: $ids) { ... on ProductVariant { id product { id } } }
+}`;
+
+const SET_PRICES = `mutation SetPrices($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+  productVariantsBulkUpdate(productId: $productId, variants: $variants) {
     userErrors { field message code }
   }
 }`;
@@ -234,11 +244,12 @@ export class ShopifyAdapter implements MarketplaceAdapter {
             id: string;
             sku: string | null;
             barcode?: string | null;
+            price?: string | null;
             displayName: string;
             inventoryQuantity: number | null;
             inventoryItem: { id: string };
             image: { url: string } | null;
-            product: { vendor?: string | null; productType?: string | null; featuredImage: { url: string } | null } | null;
+            product: { id?: string; vendor?: string | null; productType?: string | null; featuredImage: { url: string } | null } | null;
           }[];
         };
       } = await this.client.graphql(VARIANTS_QUERY, { first: 100, after });
@@ -249,7 +260,8 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           title: v.displayName,
           quantity: v.inventoryQuantity,
           ean: v.barcode?.trim() || null,
-          ref: { inventoryItemId: v.inventoryItem.id },
+          ref: { inventoryItemId: v.inventoryItem.id, productId: v.product?.id ?? null },
+          price: v.price ? Number(v.price).toFixed(2) : null,
           imageUrl: v.image?.url ?? v.product?.featuredImage?.url ?? null,
           brand: v.product?.vendor?.trim() || null,
           category: v.product?.productType?.trim() || null,
@@ -361,6 +373,33 @@ export class ShopifyAdapter implements MarketplaceAdapter {
       const errors = result.inventorySetQuantities.userErrors;
       if (errors.length) throw new Error(`Shopify stock update failed: ${errors.map((e) => e.message).join('; ')}`);
     }
+  }
+
+  /** Sets variant prices. Shopify changes variants one product at a time, so a product Shopify refuses fails alone. */
+  async setPrices(updates: PriceUpdate[]): Promise<PriceFailure[]> {
+    const failures: PriceFailure[] = [];
+    // Listings imported before the product id was kept don't have it; ask Shopify for those.
+    const productOf = new Map(updates.flatMap((u) => (typeof u.ref.productId === 'string' ? [[u.externalId, u.ref.productId] as const] : [])));
+    const unknown = updates.filter((u) => !productOf.has(u.externalId)).map((u) => u.externalId);
+    for (let i = 0; i < unknown.length; i += 50) {
+      const data = await this.client.graphql<{ nodes: ({ id: string; product: { id: string } } | null)[] }>(VARIANT_PRODUCTS, { ids: unknown.slice(i, i + 50) });
+      for (const node of data.nodes) if (node?.product) productOf.set(node.id, node.product.id);
+    }
+    const byProduct = new Map<string, PriceUpdate[]>();
+    for (const u of updates) {
+      const productId = productOf.get(u.externalId);
+      if (!productId) failures.push({ externalId: u.externalId, message: 'Shopify has no such variant any more' });
+      else byProduct.set(productId, [...(byProduct.get(productId) ?? []), u]);
+    }
+    for (const [productId, group] of byProduct) {
+      const result = await this.client.graphql<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(SET_PRICES, {
+        productId,
+        variants: group.map((u) => ({ id: u.externalId, price: u.price })),
+      });
+      const errors = result.productVariantsBulkUpdate.userErrors;
+      if (errors.length) for (const u of group) failures.push({ externalId: u.externalId, message: `Shopify: ${errors.map((e) => e.message).join('; ')}` });
+    }
+    return failures;
   }
 
   private async primaryLocationId(): Promise<string> {
