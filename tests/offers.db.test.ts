@@ -59,15 +59,23 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     const byName = new Map(rows.map((r) => [r.sku, r]));
     expect(byName.get('NEW-A')).toMatchObject({ catalogue: 'found', problems: [] });
     expect(Number(byName.get('NEW-A')!.price)).toBe(Math.ceil(Number(byName.get('NEW-A')!.shopifyPrice) * 1.1 - 0.005));
-    expect(byName.get('NEW-B')).toMatchObject({ catalogue: 'missing', problems: ['not in the catalogue'] });
+    // Empik's lookup is only advice (its own import decides); Allegro cannot list a product its catalogue lacks.
+    expect(byName.get('NEW-B')).toMatchObject({ catalogue: 'missing', problems: [] });
     expect(byName.get('NEW-C')!.problems).toEqual(['no EAN']);
+    const allegro = new Map((await m.offers.publishPreview(allegroId)).rows.map((r) => [r.sku, r]));
+    expect(allegro.get('NEW-B')).toMatchObject({ catalogue: 'missing', problems: ['not in the catalogue'] });
   });
 
   it('creates only the ready products and reports the others', async () => {
     const ids = (await m.db.getDb().select().from(m.schema.products).where(m.orm.inArray(m.schema.products.sku, ['NEW-A', 'NEW-B']))).map((p) => p.id);
-    const result = await m.offers.publishOffers(empikId, ids);
-    expect(result.created).toEqual(['New cream A']);
-    expect(result.failed).toEqual([{ name: 'New cream B', error: 'not ready: not in the catalogue' }]);
+    // Allegro skips the product its catalogue doesn't know.
+    const allegro = await m.offers.publishOffers(allegroId, ids);
+    expect(allegro.created).toEqual(['New cream A']);
+    expect(allegro.failed).toEqual([{ name: 'New cream B', error: 'not ready: not in the catalogue' }]);
+    // Empik is asked to take both; it is Empik's import that would refuse a product it doesn't know.
+    const empik = await m.offers.publishOffers(empikId, ids);
+    expect(empik.created.sort()).toEqual(['New cream A', 'New cream B']);
+    expect(empik.failed).toEqual([]);
   });
 
   it('uses the barcode as the offer SKU when Shopify has none, and does not offer the product twice', async () => {

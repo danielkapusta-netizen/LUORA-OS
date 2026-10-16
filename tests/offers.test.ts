@@ -161,17 +161,42 @@ describe('Empik offers', () => {
     );
   });
 
-  it('checks the catalogue with P31, and treats an unreachable catalogue as unverified', async () => {
+  it('checks the catalogue with P31 and reads products by their product_id, as Mirakl returns them', async () => {
+    const asked: string[] = [];
     server.use(
       http.get(`${BASE}/api/products`, ({ request }) => {
-        expect(new URL(request.url).searchParams.get('product_references')).toBe(`EAN|${draft.ean},EAN|222`);
-        return HttpResponse.json({ products: [{ product_title: 'Cream', product_references: [{ reference_type: 'EAN', reference: draft.ean }] }] });
+        const q = new URL(request.url).searchParams.get('product_references')!;
+        asked.push(q);
+        // Mirakl names the matched reference product_id (+ product_id_type); it has no list called product_references.
+        return HttpResponse.json({ products: q.includes(draft.ean) ? [{ product_id: draft.ean, product_id_type: 'EAN', product_sku: 'sku-1', product_title: 'Cream' }] : [] });
       }),
     );
     const found = await new EmpikAdapter(creds).checkCatalogue([draft.ean, '222']);
     expect(found.get(draft.ean)).toMatchObject({ found: true, name: 'Cream' });
     expect(found.get('222')).toEqual({ found: false });
+    // One question for both, then the EAN the answer did not mention is asked about alone.
+    expect(asked).toEqual([`EAN|${draft.ean},EAN|222`, 'EAN|222']);
+  });
 
+  it('still reads the older product_references shape', async () => {
+    server.use(http.get(`${BASE}/api/products`, () => HttpResponse.json({ products: [{ product_title: 'Cream', product_references: [{ reference_type: 'EAN', reference: draft.ean }] }] })));
+    expect((await new EmpikAdapter(creds).checkCatalogue([draft.ean])).get(draft.ean)).toMatchObject({ found: true, name: 'Cream' });
+  });
+
+  it('finds a product whatever shape the answer has, by asking about the EAN alone', async () => {
+    // The batch answer names no EAN at all (an unknown shape); the single question returns just the product.
+    server.use(
+      http.get(`${BASE}/api/products`, ({ request }) => {
+        const q = new URL(request.url).searchParams.get('product_references')!;
+        return HttpResponse.json({ products: q.includes(',') ? [{ sku: 'x', title: 'Other' }] : q.includes(draft.ean) ? [{ sku: 'y', title: 'Cream 50ml' }] : [] });
+      }),
+    );
+    const found = await new EmpikAdapter(creds).checkCatalogue([draft.ean, '222']);
+    expect(found.get(draft.ean)).toMatchObject({ found: true, name: 'Cream 50ml' });
+    expect(found.get('222')).toEqual({ found: false });
+  });
+
+  it('treats an unreachable catalogue as unverified, not as missing', async () => {
     server.use(http.get(`${BASE}/api/products`, () => HttpResponse.json({ message: 'nope' }, { status: 404 })));
     expect((await new EmpikAdapter(creds).checkCatalogue([draft.ean])).get(draft.ean)).toEqual({ found: true, unverified: true });
   });

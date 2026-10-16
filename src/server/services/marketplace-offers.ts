@@ -117,7 +117,8 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
     const problems: string[] = [];
     if (!d) problems.push('not found in Shopify');
     if (!p.ean) problems.push('no EAN');
-    else if (match && !match.found) problems.push('not in the catalogue');
+    // Allegro needs the catalogue product to attach to. Empik's lookup is only advice: its own import accepts or refuses the offer, with the reason.
+    else if (match && !match.found && account.type !== 'empik') problems.push('not in the catalogue');
     if (d && Number(d.price) <= 0) problems.push('no price');
     return {
       details: d,

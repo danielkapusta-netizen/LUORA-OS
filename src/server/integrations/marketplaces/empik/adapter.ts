@@ -331,20 +331,37 @@ export class EmpikAdapter implements MarketplaceAdapter, OfferPublisher {
     return [];
   }
 
-  /** P31: which EANs are products in the Empik catalogue. When Empik can't be asked, offers are still tried and its import decides. */
+  /**
+   * P31: which EANs are products in the Empik catalogue. Mirakl answers with the products it found,
+   * each carrying its own reference as `product_id` + `product_id_type` (not a list of references), and
+   * the shape has varied between versions. So a product counts as found when its answer mentions the
+   * EAN anywhere; an EAN the batch answer doesn't mention is asked about alone, where any product
+   * returned is the match. When Empik can't be asked, offers are still tried and its import decides.
+   */
   async checkCatalogue(eans: string[]): Promise<Map<string, CatalogueMatch>> {
+    type P31 = { products?: Record<string, unknown>[] };
+    const ask = async (list: string[]) => (await this.client.call<P31>('GET', '/products', { query: { product_references: list.map((e) => `EAN|${e}`).join(',') } })).products ?? [];
+    const titleOf = (p: Record<string, unknown>) => (typeof p.product_title === 'string' ? p.product_title : typeof p.title === 'string' ? p.title : undefined);
     const out = new Map<string, CatalogueMatch>();
     for (let i = 0; i < eans.length; i += 50) {
       const chunk = eans.slice(i, i + 50);
       try {
-        const data = await this.client.call<{ products?: { product_title?: string; product_references?: { reference_type?: string; reference?: string }[] }[] }>('GET', '/products', {
-          query: { product_references: chunk.map((e) => `EAN|${e}`).join(',') },
-        });
-        const known = new Map<string, string | undefined>();
-        for (const p of data.products ?? []) for (const r of p.product_references ?? []) if (r.reference) known.set(r.reference, p.product_title);
-        for (const ean of chunk) out.set(ean, known.has(ean) ? { found: true, name: known.get(ean) } : { found: false });
+        const answered = (await ask(chunk)).map((p) => ({ p, text: JSON.stringify(p) }));
+        for (const ean of chunk) {
+          const hit = answered.find((a) => a.text.includes(`"${ean}"`));
+          if (hit) out.set(ean, { found: true, name: titleOf(hit.p) });
+        }
+        const rest = chunk.filter((e) => !out.has(e));
+        for (let j = 0; j < rest.length; j += 5) {
+          await Promise.all(
+            rest.slice(j, j + 5).map(async (ean) => {
+              const one = await ask([ean]);
+              out.set(ean, one.length ? { found: true, name: titleOf(one[0]) } : { found: false });
+            }),
+          );
+        }
       } catch {
-        for (const ean of chunk) out.set(ean, { found: true, unverified: true });
+        for (const ean of chunk) if (!out.has(ean)) out.set(ean, { found: true, unverified: true });
       }
     }
     return out;

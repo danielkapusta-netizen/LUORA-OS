@@ -39,7 +39,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
     <>
       <PageHeader
         title={`Publish to ${label}`}
-        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${markup}%. Only products the ${label} catalogue knows by EAN can be listed. Nothing is created until you tick products and press Create.`}
+        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${markup}%. ${account.type === 'empik' ? 'Empik accepts a product it knows by EAN; if it refuses one, the reason is shown.' : 'Only products the Allegro catalogue knows by EAN can be listed.'} Nothing is created until you tick products and press Create.`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
@@ -98,7 +98,11 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                     </p>
                   </div>
                   <div className="flex w-48 flex-col items-end gap-1">
-                    {r.catalogue && <Badge tone={CATALOGUE[r.catalogue].tone}>{CATALOGUE[r.catalogue].label}</Badge>}
+                    {r.catalogue && (
+                      <Badge tone={account.type === 'empik' && r.catalogue === 'missing' ? 'amber' : CATALOGUE[r.catalogue].tone}>
+                        {account.type === 'empik' && r.catalogue === 'missing' ? 'Not found by Empik’s lookup · you can still try' : CATALOGUE[r.catalogue].label}
+                      </Badge>
+                    )}
                     {r.problems.filter((p) => p !== 'not in the catalogue').length > 0 && <Badge tone="amber">{r.problems.filter((p) => p !== 'not in the catalogue').join(', ')}</Badge>}
                     {r.problems.length === 0 && <Badge tone="green">Ready</Badge>}
                   </div>
