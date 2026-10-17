@@ -23,6 +23,104 @@ body {
   color: var(--color-slate-900);
 }
 
+/* ---------------------------------------------------------------- touch */
+
+/* No 300 ms tap delay and no grey flash: feedback comes from the control itself, on press. */
+@layer base {
+  a,
+  button,
+  summary,
+  label,
+  select,
+  [role='button'] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Below 16 px iOS zooms the page when a field is focused. */
+  @media (max-width: 767px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+}
+
+/* In the components layer, so utilities such as xl:bg-transparent can still override them. */
+@layer components {
+
+/* Instant press feedback on the control, not on release. */
+.press {
+  transition: transform 120ms ease-out, background-color 120ms ease-out;
+}
+.press:active {
+  transform: scale(0.96);
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- materials */
+
+/* Translucent layers that content scrolls under. Weight follows hierarchy: bars are light, sheets are thicker. */
+.material-bar {
+  background: rgb(255 255 255 / 0.78);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+.material-sheet {
+  background: rgb(255 255 255 / 0.9);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+}
+.material-brand {
+  background: rgb(31 53 48 / 0.84);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+}
+
+/* Reduced motion keeps the feedback but drops the movement: the press shows by colour only. */
+@media (prefers-reduced-motion: reduce) {
+  .press {
+    transition: background-color 120ms ease-out;
+  }
+  .press:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .material-bar,
+  .material-sheet {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .material-brand {
+    background: var(--color-sidebar);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .material-bar,
+  .material-sheet {
+    border-color: var(--color-slate-500);
+  }
+}
+
+}
+
 @media print {
   .no-print {
     display: none !important;

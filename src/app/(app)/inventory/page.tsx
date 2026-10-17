@@ -403,28 +403,28 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
       <Card className="mb-5 overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <form action="/inventory" className="mr-auto">
+          <form action="/inventory" className="mr-auto max-md:w-full">
             {sort !== 'sales' && <input type="hidden" name="sort" value={sort} />}
             {days !== 30 && <input type="hidden" name="days" value={days} />}
-            <Input name="q" defaultValue={params.q} placeholder="Search name, SKU, EAN" className="h-8 w-60" />
+            <Input name="q" defaultValue={params.q} placeholder="Search name, SKU, EAN" className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
           </form>
-          <div className="flex rounded-full border border-slate-200 p-0.5 text-xs">
+          <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
             {PERIODS.map((d) => (
               <Link
                 key={d}
                 href={hrefWith(params, { days: d === 30 ? undefined : String(d), page: undefined })}
-                className={cn('rounded-full px-3 py-1', d === days ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
+                className={cn('shrink-0 rounded-full px-3 py-1 whitespace-nowrap max-md:px-4 max-md:py-2 max-md:text-sm', d === days ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
               >
                 {d} days
               </Link>
             ))}
           </div>
-          <div className="flex rounded-full border border-slate-200 p-0.5 text-xs">
+          <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
             {(Object.keys(SORTS) as Sort[]).map((s) => (
               <Link
                 key={s}
                 href={hrefWith(params, { sort: s === 'sales' ? undefined : s, page: undefined })}
-                className={cn('rounded-full px-3 py-1', s === sort ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
+                className={cn('shrink-0 rounded-full px-3 py-1 whitespace-nowrap max-md:px-4 max-md:py-2 max-md:text-sm', s === sort ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
               >
                 {SORTS[s]}
               </Link>
@@ -438,15 +438,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           </EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <tbody className="divide-y divide-slate-100">
+            <table className="min-w-full max-md:block">
+              <tbody className="divide-y divide-slate-100 max-md:block">
                 {shown.map((p) => {
                   const own = byProduct.get(p.id) ?? [];
                   const f = perf(p.id);
                   return (
-                    <ExpandableRow key={p.id} colSpan={6} label="listings" className="align-middle" details={<ListingDetails listings={own} stock={p.stock} />}>
-                      <td className="py-3 pr-4 pl-2">
-                        <div className="flex min-w-64 items-center gap-3">
+                    <ExpandableRow key={p.id} colSpan={6} label="listings" stack className="align-middle" details={<ListingDetails listings={own} stock={p.stock} />}>
+                      <td className="py-3 pr-4 pl-2 max-md:order-1 max-md:px-0 max-md:pr-12">
+                        <div className="flex min-w-64 items-center gap-3 max-md:min-w-0">
                           <ProductPhoto product={p} />
                           <div className="min-w-0">
                             <p className="font-medium leading-snug">{p.name}</p>
@@ -457,7 +457,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           </div>
                         </div>
                       </td>
-                      <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap">
+                      <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap max-md:order-3 max-md:border-l-0 max-md:px-0 max-md:py-1">
                         <Label>
                           Performance <span className={cn('ml-1 font-medium', LEVEL_TONE[f.level])}>{LEVEL_LABEL[f.level]}</span>
                         </Label>
@@ -476,10 +476,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           </p>
                         )}
                       </td>
-                      <td className="px-2 py-3">
+                      <td className="px-2 py-3 max-md:hidden">
                         <Gauge value={f.percentile} tone={f.level} className="h-10 w-16" label={`${LEVEL_LABEL[f.level]} performance`} />
                       </td>
-                      <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap">
+                      <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap max-md:hidden">
                         <Label>Sales rank</Label>
                         {f.rank ? (
                           <>
@@ -497,7 +497,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           <p className="mt-0.5 text-lg text-slate-300">—</p>
                         )}
                       </td>
-                      <td className="border-l border-slate-100 px-4 py-3">
+                      <td className="border-l border-slate-100 px-4 py-3 max-md:order-2 max-md:border-l-0 max-md:px-0 max-md:py-2">
                         <Label>Stock {p.stock <= 0 && <span className="ml-1 font-medium text-red-600">out of stock</span>}</Label>
                         <ActionForm action={adjustStockAction.bind(null, p.id)} className="mt-1 flex items-center gap-1.5" showOk={false}>
                           <input type="hidden" name="mode" value="set" />

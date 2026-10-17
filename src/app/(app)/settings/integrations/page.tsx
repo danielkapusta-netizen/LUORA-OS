@@ -93,7 +93,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                     {a.lastError && <p className="text-xs text-red-700">Error: {a.lastError}</p>}
                     {a.type === 'shopify' && (
                       <p className="text-xs text-slate-500">
-                        Webhook URL (orders/create, orders/updated): <code className="select-all">{`${env().APP_URL}/api/webhooks/shopify/${a.id}`}</code>
+                        Webhook URL (orders/create, orders/updated): <code className="break-all select-all">{`${env().APP_URL}/api/webhooks/shopify/${a.id}`}</code>
                       </p>
                     )}
                   </div>

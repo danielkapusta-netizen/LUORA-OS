@@ -7,6 +7,9 @@ import { ExpandableRow } from '@/components/expandable-row';
 import { MarketplaceBadge, ShipmentBadge } from '@/components/badges';
 import { buttonClass, Card, CardHeader, EmptyState, PageHeader, td, th } from '@/components/ui';
 import { cn, formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
+
+/** On a phone each cell of a shipment row stacks inside its card. */
+const cell = 'max-md:block max-md:px-0 max-md:py-1';
 import { requireUser } from '@/server/auth';
 import { invoicesByOrder, loadAccounting, uploadEnabled } from '@/server/services/invoicing';
 import { notesForOrders } from '@/server/services/order-notes';
@@ -59,7 +62,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
               <Link
                 key={s.value}
                 href={s.value ? `/shipments?state=${s.value}` : '/shipments'}
-                className={cn('rounded-md px-2 py-1 text-xs font-medium', state === s.value ? 'bg-brand-50 text-brand-700' : 'text-slate-500 hover:bg-slate-100')}
+                className={cn('press rounded-md px-2 py-1 text-xs font-medium max-md:px-3 max-md:py-2 max-md:text-sm', state === s.value ? 'bg-brand-50 text-brand-700' : 'text-slate-500 hover:bg-slate-100')}
               >
                 {s.label}
               </Link>
@@ -69,8 +72,8 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
             <EmptyState title="No labels yet" />
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100">
-                <thead className="bg-slate-50">
+              <table className="min-w-full divide-y divide-slate-100 max-md:block">
+                <thead className="bg-slate-50 max-md:hidden">
                   <tr>
                     <th className="w-10" />
                     <th className={th}>Buyer</th>
@@ -80,16 +83,17 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                     <th className={cn(th, 'text-right')}>Label</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 max-md:block">
                   {rows.map(({ shipment: s, order, carrierName }) => (
                     <ExpandableRow
                       key={s.id}
                       colSpan={6}
+                      stack
                       className="hover:bg-slate-50"
                       details={<ShipmentOrderDetails order={order} shipment={s} carrierName={carrierName} items={items.get(order.id) ?? []} notes={notes.get(order.id) ?? []} />}
                     >
-                      <td className={td}>
-                        <p className="font-medium">{order.buyer.name}</p>
+                      <td className={cn(td, cell, 'max-md:pr-12')}>
+                        <p className="font-medium max-md:text-base">{order.buyer.name}</p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                           <MarketplaceBadge marketplace={order.marketplace} />
                           <Link href={`/orders/${order.id}`} className="text-brand-700 hover:underline">
@@ -99,7 +103,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                         </div>
                         <ImportantNotes notes={(notes.get(order.id) ?? []).filter((n) => n.pinned)} className="mt-2 max-w-sm" />
                       </td>
-                      <td className={td}>
+                      <td className={cn(td, cell)}>
                         <ShipmentBadge state={s.state} />
                         {s.error && <div className="mt-1 max-w-80 text-xs text-red-700">{s.error}</div>}
                         <div className="mt-1 text-xs">
@@ -112,7 +116,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                           ) : null}
                         </div>
                       </td>
-                      <td className={td}>
+                      <td className={cn(td, cell)}>
                         {order.status !== 'cancelled' && (
                           <InvoiceCell
                             orderId={order.id}
@@ -122,10 +126,10 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                           />
                         )}
                       </td>
-                      <td className={td}>
+                      <td className={cn(td, cell)}>
                         {s.state === 'created' && <PackedToggle shipmentId={s.id} packed={Boolean(s.packedAt)} />}
                       </td>
-                      <td className={cn(td, 'text-right')}>
+                      <td className={cn(td, cell, 'text-right max-md:text-left')}>
                         {s.state === 'created' && (
                           <PrintLabelButton href={`/api/labels/${s.id}`} className={buttonClass('secondary', 'sm')}>
                             <Printer className="size-3.5" /> Print label

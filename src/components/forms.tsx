@@ -82,7 +82,7 @@ export function ActionForm({
         <div
           role="status"
           className={cn(
-            'fixed bottom-5 right-5 z-50 w-[min(24rem,calc(100vw-2.5rem))] rounded-2xl border bg-white p-4 shadow-lg',
+            'fixed right-5 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 w-[min(24rem,calc(100vw-2.5rem))] md:bottom-5 rounded-2xl border bg-white p-4 shadow-lg',
             shown.error ? 'border-red-200' : 'border-emerald-200',
           )}
         >

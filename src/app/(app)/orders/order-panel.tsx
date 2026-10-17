@@ -55,7 +55,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
   const returning = (await returningInfo([{ id: order.id, customerId: order.customerId, placedAt: order.placedAt }])).get(order.id);
 
   return (
-    <Card className="p-5">
+    <Card className="p-5 max-xl:border-0 max-xl:bg-transparent max-xl:p-0 max-xl:shadow-none">
       <AutoRefresh active={waiting} />
       <CustomerSummary buyerName={order.buyer.name} recipientName={a.name} />
       {returning && order.customerId && (

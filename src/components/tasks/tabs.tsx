@@ -25,7 +25,7 @@ export function TaskTabs() {
             key={t.href}
             href={who ? `${t.href}?who=${encodeURIComponent(who)}` : t.href}
             className={cn(
-              '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
+              '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium max-md:px-4 max-md:py-3',
               active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >

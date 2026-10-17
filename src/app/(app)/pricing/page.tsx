@@ -127,7 +127,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             href={hrefWith({ q: params.q }, { platform: p })}
             aria-current={p === platform ? 'page' : undefined}
             className={cn(
-              '-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium',
+              '-mb-px shrink-0 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium max-md:py-3',
               p === platform ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
@@ -168,18 +168,18 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
 
           <Card className="mb-5 overflow-hidden">
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-              <form action="/pricing" className="mr-auto">
+              <form action="/pricing" className="mr-auto max-md:w-full">
                 {platform !== 'shopify' && <input type="hidden" name="platform" value={platform} />}
                 {sort !== 'name' && <input type="hidden" name="sort" value={sort} />}
                 {showAll && <input type="hidden" name="all" value="1" />}
-                <Input name="q" defaultValue={params.q} placeholder="Search name, SKU, EAN" className="h-8 w-60" />
+                <Input name="q" defaultValue={params.q} placeholder="Search name, SKU, EAN" className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
               </form>
-              <div className="flex rounded-full border border-slate-200 p-0.5 text-xs">
+              <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
                 {(Object.keys(SORTS) as Sort[]).map((s) => (
                   <Link
                     key={s}
                     href={hrefWith(params, { sort: s === 'name' ? undefined : s, page: undefined })}
-                    className={cn('rounded-full px-3 py-1', s === sort ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
+                    className={cn('shrink-0 rounded-full px-3 py-1 whitespace-nowrap max-md:px-4 max-md:py-2 max-md:text-sm', s === sort ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
                   >
                     {SORTS[s]}
                   </Link>
@@ -211,19 +211,19 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                   </SubmitButton>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="text-left text-xs text-slate-500">
+                  <table className="min-w-full text-sm max-md:block">
+                    <thead className="text-left text-xs text-slate-500 max-md:hidden">
                       <tr>
                         <th className="px-5 py-2 font-medium">Product</th>
                         <th className="px-4 py-2 font-medium">Price on {label} (gross)</th>
                         {platform !== 'shopify' && <th className="px-4 py-2 font-medium">Shopify price</th>}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 max-md:block">
                       {shown.map(({ product, listings, shopifyPrice }) => (
-                        <tr key={product.id} className="align-top">
-                          <td className="px-5 py-3">
-                            <div className="flex min-w-64 items-center gap-3">
+                        <tr key={product.id} className="align-top max-md:flex max-md:flex-col max-md:px-4 max-md:py-3">
+                          <td className="px-5 py-3 max-md:px-0 max-md:py-1">
+                            <div className="flex min-w-64 items-center gap-3 max-md:min-w-0">
                               <ProductPhoto product={product} />
                               <div className="min-w-0">
                                 <p className="font-medium leading-snug">{product.name}</p>
@@ -234,7 +234,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3 max-md:px-0 max-md:py-1">
                             {listings.length === 0 ? (
                               <span className="text-xs text-slate-400">Not listed on {label}</span>
                             ) : (
@@ -255,7 +255,8 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                             )}
                           </td>
                           {platform !== 'shopify' && (
-                            <td className="px-4 py-3 whitespace-nowrap">
+                            <td className="px-4 py-3 whitespace-nowrap max-md:px-0 max-md:py-1 max-md:text-sm max-md:text-slate-500">
+                              <span className="md:hidden">Shopify: </span>
                               <span className="font-medium tabular-nums">{formatPrice(shopifyPrice)}</span>
                               {listings[0]?.price && shopifyPrice && <ShopifyGap shopify={shopifyPrice} here={listings[0].price} />}
                             </td>

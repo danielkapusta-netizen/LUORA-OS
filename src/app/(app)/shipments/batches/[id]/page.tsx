@@ -8,6 +8,9 @@ import { ExpandableRow } from '@/components/expandable-row';
 import { MarketplaceBadge, ShipmentBadge } from '@/components/badges';
 import { Alert, buttonClass, Card, CardHeader, PageHeader, td, th } from '@/components/ui';
 import { cn, formatDate } from '@/lib/utils';
+
+/** On a phone each cell of a shipment row stacks inside its card. */
+const cell = 'max-md:block max-md:px-0 max-md:py-1';
 import { requireUser } from '@/server/auth';
 import { notesForOrders } from '@/server/services/order-notes';
 import { itemsByOrder } from '@/server/services/orders';
@@ -85,8 +88,8 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
       <Card>
         <CardHeader title="Labels" />
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
-            <thead className="bg-slate-50">
+          <table className="min-w-full divide-y divide-slate-100 max-md:block">
+            <thead className="bg-slate-50 max-md:hidden">
               <tr>
                 <th className="w-10" />
                 <th className={th}>Buyer</th>
@@ -95,14 +98,15 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                 <th className={cn(th, 'text-right')}>Label</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 max-md:block">
               {rows.map(({ shipment: s, order, carrierName }) => (
                 <ExpandableRow
                   key={s.id}
                   colSpan={5}
+                  stack
                   details={<ShipmentOrderDetails order={order} shipment={s} carrierName={carrierName} items={items.get(order.id) ?? []} notes={notes.get(order.id) ?? []} />}
                 >
-                  <td className={td}>
+                  <td className={cn(td, cell, 'max-md:pr-12')}>
                     <p className="font-medium">{order.buyer.name}</p>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
                       <MarketplaceBadge marketplace={order.marketplace} />
@@ -112,14 +116,14 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                     </div>
                     <ImportantNotes notes={(notes.get(order.id) ?? []).filter((n) => n.pinned)} className="mt-2 max-w-sm" />
                   </td>
-                  <td className={td}>
+                  <td className={cn(td, cell)}>
                     <ShipmentBadge state={s.state} />
                     {s.error && <div className="mt-1 max-w-80 text-xs text-red-700">{s.error}</div>}
                   </td>
-                  <td className={td}>
+                  <td className={cn(td, cell)}>
                     {s.state === 'created' && <PackedToggle shipmentId={s.id} packed={Boolean(s.packedAt)} />}
                   </td>
-                  <td className={cn(td, 'text-right')}>
+                  <td className={cn(td, cell, 'text-right max-md:text-left')}>
                     {s.state === 'created' && (
                       <PrintLabelButton href={`/api/labels/${s.id}`} className={buttonClass('secondary', 'sm')}>
                         <Printer className="size-3.5" /> Print label

@@ -23,6 +23,10 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - Orders with notes carry a marker in the list (amber when one is important), and the list can be filtered to orders with notes or important notes.
   - Authors can edit and delete their own notes (admins anyone's); the activity log keeps a line for every edit and deletion.
   - A note can be turned into a task linked to the order; the note then shows the task and its status.
+- **Phones:** the app is built for a thumb as well as a desktop.
+  - The sidebar becomes a bottom tab bar (Dashboard, Orders, Shipments, Inventory) with the rest, and Sign out, under **More**; the account button at the top right opens Sign out too.
+  - Orders are tappable cards; an order's details slide up as a sheet that follows your finger, can be flicked away or grabbed again mid-motion, and falls back to a simple fade when the phone asks for reduced motion.
+  - Inventory, Pricing and Shipments rows become cards, so stock, price and the packing tick are in reach without scrolling sideways. Buttons and fields are at least 40 to 44 px tall.
 - **Analytics:** revenue per day by marketplace, average order value, top products, labels by carrier, time to ship, and the open backlog.
 
 ## Runs on Cloudflare

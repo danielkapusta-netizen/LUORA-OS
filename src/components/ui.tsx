@@ -6,7 +6,9 @@ type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 export function buttonClass(variant: ButtonVariant = 'secondary', size: 'sm' | 'md' = 'md') {
   return cn(
     'inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap',
-    size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-5 text-sm',
+    // On a phone the targets grow to Apple's 44 pt minimum (md) and 40 pt (sm, used inside rows).
+    size === 'sm' ? 'h-8 px-3 text-xs max-md:h-10 max-md:px-4 max-md:text-sm' : 'h-10 px-5 text-sm max-md:h-11',
+    'press',
     variant === 'primary' && 'bg-brand-600 text-white hover:bg-brand-700',
     variant === 'secondary' && 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
     variant === 'danger' && 'border border-red-200 bg-white text-red-700 hover:bg-red-50',
@@ -70,11 +72,11 @@ export function Badge({ tone = 'gray', className, children }: { tone?: BadgeTone
 const FIELD = 'block w-full rounded-xl border border-slate-200 bg-white px-2.5 text-sm text-slate-900 shadow-xs focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:bg-slate-50';
 
 export function Input({ className, ...props }: ComponentProps<'input'>) {
-  return <input className={cn(FIELD, 'h-10', className)} {...props} />;
+  return <input className={cn(FIELD, 'h-10 max-md:h-11', className)} {...props} />;
 }
 
 export function Select({ className, ...props }: ComponentProps<'select'>) {
-  return <select className={cn(FIELD, 'h-10 pr-8', className)} {...props} />;
+  return <select className={cn(FIELD, 'h-10 pr-8 max-md:h-11', className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<'textarea'>) {
