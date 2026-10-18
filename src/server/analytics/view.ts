@@ -1,6 +1,6 @@
 // What every analytics page starts from: the business data, the chosen period and its snapshot.
 import { scrubDeep, zeroProfit } from '@/lib/analytics/redact';
-import type { CustomRange, PeriodKey, ResolvedPeriod } from '@/lib/analytics/period';
+import { parseCustomRange, type PeriodKey, type ResolvedPeriod } from '@/lib/analytics/period';
 import type { Snapshot } from '@/lib/analytics/snapshot';
 import type { Channel } from '@/lib/analytics/types';
 import { can } from '@/lib/permissions';
@@ -30,7 +30,6 @@ export interface AnalyticsView {
 }
 
 const CHANNELS: Channel[] = ['shopify', 'allegro', 'empik', 'vonhalsky'];
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The view for the signed-in person: guarded by the analytics permission, with profit left out when they may not see it. */
 export async function analyticsView(p: ViewParams, fallback: PeriodKey = 'month'): Promise<AnalyticsView> {
@@ -41,9 +40,10 @@ export async function analyticsView(p: ViewParams, fallback: PeriodKey = 'month'
 export async function buildAnalyticsView(p: ViewParams, showProfit: boolean, fallback: PeriodKey = 'month'): Promise<AnalyticsView> {
   const marketplace = CHANNELS.includes(p.marketplace as Channel) ? (p.marketplace as Channel) : undefined;
   const data = await loadBusinessData({ marketplace });
-  const custom: CustomRange | undefined =
-    p.from && p.to && DAY.test(p.from) && DAY.test(p.to) ? { from: new Date(`${p.from}T00:00:00Z`), to: new Date(`${p.to}T23:59:59Z`) } : undefined;
-  const periodKey = custom ? 'custom' : parsePeriodKey(p.period, fallback);
+  const custom = parseCustomRange(p.from, p.to);
+  const requested = parsePeriodKey(p.period, fallback);
+  // "custom" without usable dates means nothing; fall back rather than show a one-day window.
+  const periodKey = custom ? 'custom' : requested === 'custom' ? fallback : requested;
   const period = periodFor(data, periodKey, custom);
   const full = snapshotFor(data, period);
   const snapshot = showProfit
@@ -66,6 +66,11 @@ export async function buildAnalyticsView(p: ViewParams, showProfit: boolean, fal
     fullSnapshot: full,
     showProfit,
     marketplace,
-    params: { period: custom ? undefined : p.period, marketplace, from: custom ? p.from : undefined, to: custom ? p.to : undefined },
+    params: {
+      period: custom ? undefined : periodKey === requested ? p.period : undefined,
+      marketplace,
+      from: custom ? custom.from.toISOString().slice(0, 10) : undefined,
+      to: custom ? custom.to.toISOString().slice(0, 10) : undefined,
+    },
   };
 }

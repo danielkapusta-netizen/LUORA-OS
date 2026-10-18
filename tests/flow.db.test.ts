@@ -948,6 +948,34 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(margins.size).toBeGreaterThan(0);
   });
 
+  it('shows last week and custom dates, and ignores dates it cannot use', async () => {
+    const { buildAnalyticsView } = await import('@/server/analytics/view');
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+
+    const last = await buildAnalyticsView({ period: 'lastweek' }, true);
+    expect(last.periodKey).toBe('lastweek');
+    expect(last.period.days).toBe(7);
+    expect(last.period.from.getUTCDay()).toBe(1); // a Monday
+    expect(last.params).toMatchObject({ period: 'lastweek', from: undefined, to: undefined });
+
+    const custom = await buildAnalyticsView({ marketplace: 'empik', from: '2026-10-01', to: '2026-10-09' }, true);
+    expect(custom.periodKey).toBe('custom');
+    expect([day(custom.period.from), day(custom.period.to)]).toEqual(['2026-10-01', '2026-10-09']);
+    expect(custom.params).toMatchObject({ marketplace: 'empik', from: '2026-10-01', to: '2026-10-09', period: undefined });
+
+    // Typed the wrong way round: shown the right way round, in the address too.
+    const reversed = await buildAnalyticsView({ from: '2026-10-09', to: '2026-10-01' }, true);
+    expect([day(reversed.period.from), day(reversed.period.to)]).toEqual(['2026-10-01', '2026-10-09']);
+    expect(reversed.params).toMatchObject({ from: '2026-10-01', to: '2026-10-09' });
+
+    // "custom" with nothing usable behind it falls back to the page's usual period instead of one odd day.
+    const empty = await buildAnalyticsView({ period: 'custom', from: '2026-02-31', to: '2026-03-02' }, true, 'month');
+    expect(empty.periodKey).toBe('month');
+    expect(empty.params.from).toBeUndefined();
+    // A preset beats stray dates only when the dates are unusable; usable dates always win.
+    expect((await buildAnalyticsView({ period: 'week', from: '2026-10-01', to: '2026-10-09' }, true)).periodKey).toBe('custom');
+  });
+
   it('links every order to a customer, across marketplaces, with lifetime totals', async () => {
     const customers = await import('@/server/services/customers');
     const db = m.db.getDb();

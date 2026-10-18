@@ -30,6 +30,7 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - Orders are tappable cards; an order's details slide up as a sheet that follows your finger, can be flicked away or grabbed again mid-motion, and falls back to a simple fade when the phone asks for reduced motion.
   - Inventory, Pricing and Shipments rows become cards, so stock, price and the packing tick are in reach without scrolling sideways. Buttons and fields are at least 40 to 44 px tall.
 - **Analytics:** revenue per day by marketplace, average order value, top products, labels by carrier, time to ship, and the open backlog.
+  - The period picker on the Dashboard and the Analytics tabs offers Week, **Last week** (the previous Monday to Sunday), Month, Quarter, Year, All time and **Custom**: two dates, both days included. Every period is compared with the same number of days just before it.
 
 ## Runs on Cloudflare
 

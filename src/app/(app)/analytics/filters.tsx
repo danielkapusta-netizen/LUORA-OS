@@ -1,4 +1,5 @@
-import { hrefWith, PERIOD_OPTIONS, Pills } from '@/components/analytics/blocks';
+import { hrefWith, Pills } from '@/components/analytics/blocks';
+import { PeriodControl } from '@/components/analytics/period-control';
 import { formatDate } from '@/lib/analytics/format';
 import type { AnalyticsView } from '@/server/analytics/view';
 
@@ -17,7 +18,7 @@ export function ViewFilters({ view, path, extra = {} }: { view: AnalyticsView; p
   return (
     <div className="mb-5 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Pills label="Period" options={PERIOD_OPTIONS} active={view.periodKey} href={(v) => hrefWith(path, current, { period: v, from: undefined, to: undefined })} />
+        <PeriodControl path={path} current={current} periodKey={view.periodKey} from={view.params.from} to={view.params.to} />
         <Pills label="Marketplace" options={MARKETPLACES} active={view.marketplace ?? ''} href={(v) => hrefWith(path, current, { marketplace: v || undefined })} />
       </div>
       <p className="text-xs text-slate-500">

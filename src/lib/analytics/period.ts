@@ -19,6 +19,7 @@ export type PeriodKey =
   | 'today'
   | 'yesterday'
   | 'week'
+  | 'lastweek'
   | 'month'
   | 'quarter'
   | 'year'
@@ -59,6 +60,7 @@ export const PERIOD_OPTIONS: Array<{ value: PeriodKey; label: string }> = [
   { value: 'today', label: 'Today' },
   { value: 'yesterday', label: 'Yesterday' },
   { value: 'week', label: 'This week' },
+  { value: 'lastweek', label: 'Last week' },
   { value: 'month', label: 'This month' },
   { value: 'year', label: 'This year' },
   { value: 'all', label: 'All time' },
@@ -129,6 +131,27 @@ export interface CustomRange {
   to: Date
 }
 
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+function parseDay(value: string | undefined): Date | null {
+  if (!value || !DAY_PATTERN.test(value)) return null
+  const date = new Date(`${value}T00:00:00Z`)
+  // Rejects dates that do not exist (2026-02-31 would otherwise roll over into March).
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date
+}
+
+/**
+ * The custom range typed in the date pickers (`YYYY-MM-DD`, both days included). Both dates are needed;
+ * a reversed pair is put the right way round instead of being refused, since it is an easy slip.
+ */
+export function parseCustomRange(from: string | undefined, to: string | undefined): CustomRange | undefined {
+  const a = parseDay(from)
+  const b = parseDay(to)
+  if (!a || !b) return undefined
+  const [start, end] = a.getTime() <= b.getTime() ? [a, b] : [b, a]
+  return { from: start, to: endOfDay(end) }
+}
+
 export function resolvePeriod(
   key: PeriodKey,
   lastOrder: Date | null,
@@ -156,6 +179,12 @@ export function resolvePeriod(
     case 'week':
       from = startOfWeek(anchor)
       label = 'This week'
+      break
+    case 'lastweek':
+      // The whole of the previous Monday-to-Sunday week.
+      from = addDays(startOfWeek(anchor), -7)
+      to = endOfDay(addDays(from, 6))
+      label = 'Last week'
       break
     case 'month':
       from = startOfMonth(anchor)
@@ -200,7 +229,9 @@ export function resolvePeriod(
         ? 'vs yesterday'
         : key === 'yesterday'
           ? 'vs the day before'
-          : `vs previous ${days} day${days === 1 ? '' : 's'}`
+          : key === 'lastweek'
+            ? 'vs the week before'
+            : `vs previous ${days} day${days === 1 ? '' : 's'}`
 
   // A comparison is only like-for-like if the business was trading across the
   // whole of the window being compared against.

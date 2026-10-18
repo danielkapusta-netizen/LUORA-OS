@@ -1,7 +1,8 @@
 import { CheckCircle2, ShieldAlert, TrendingUp } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BriefCard, ChannelBars, CoverageNote, HealthCard, hrefWith, InsightCard, KpiCard, PERIOD_OPTIONS, Pills, QuestionCard, SectionTitle } from '@/components/analytics/blocks';
+import { BriefCard, ChannelBars, CoverageNote, HealthCard, hrefWith, InsightCard, KpiCard, Pills, QuestionCard, SectionTitle } from '@/components/analytics/blocks';
+import { PeriodControl } from '@/components/analytics/period-control';
 import { PulseChart } from '@/components/analytics/charts';
 import { formatValue } from '@/components/analytics/format';
 import { buttonClass, Card, CardBody, EmptyState, PageHeader, td, th } from '@/components/ui';
@@ -45,7 +46,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const rank = showProfit && params.rank === 'profit' ? 'profit' : 'revenue';
   const pulse = params.pulse === 'orders' ? 'orders' : 'money';
   const current = { ...view.params, rank: params.rank, pulse: params.pulse };
-  const link = (next: Record<string, string | undefined>) => hrefWith('/', current, next);
+  // Choosing a period always drops custom dates: with both present, the dates would win and the link would do nothing.
+  const link = (next: Record<string, string | undefined>) => hrefWith('/', current, next.period ? { from: undefined, to: undefined, ...next } : next);
   const risks = snapshot.insights.filter((i) => i.kind === 'risk').slice(0, 3);
   const opportunities = snapshot.insights.filter((i) => i.kind === 'opportunity').slice(0, 3);
   const atStake = snapshot.insights.reduce((sum, i) => sum + (i.impactPLN ?? 0), 0);
@@ -57,7 +59,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <PageHeader
         title="Dashboard"
         description={`${period.key === 'all' ? 'Every order on record' : `${formatDate(period.from)} – ${formatDate(period.to)}`}, compared ${period.comparisonLabel}. Cancelled orders left out.`}
-        actions={<Pills label="Period" options={PERIOD_OPTIONS} active={view.periodKey} href={(v) => link({ period: v })} />}
+        actions={<PeriodControl path="/" current={current} periodKey={view.periodKey} from={view.params.from} to={view.params.to} />}
       />
 
       <section aria-label="Open orders" className="grid grid-cols-2 gap-3 sm:grid-cols-4">

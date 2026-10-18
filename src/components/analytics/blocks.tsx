@@ -40,14 +40,6 @@ export function Pills({ options, active, href, label }: { options: { value: stri
   );
 }
 
-export const PERIOD_OPTIONS = [
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: 'quarter', label: 'Quarter' },
-  { value: 'year', label: 'Year' },
-  { value: 'all', label: 'All time' },
-];
-
 export function SectionTitle({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="mb-3 flex flex-wrap items-end justify-between gap-3">

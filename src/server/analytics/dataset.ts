@@ -195,7 +195,7 @@ function lineCostCoverage(lines: LineItem[]): Pick<DataCoverage, 'linesMissingCo
   return { linesMissingCost: missing.length, revenueMissingCostPLN: missingRevenue, costCoverage: total > 0 ? 1 - missingRevenue / total : 1 };
 }
 
-export const PERIOD_KEYS: PeriodKey[] = ['today', 'yesterday', 'week', 'month', 'quarter', 'year', 'all', 'custom'];
+export const PERIOD_KEYS: PeriodKey[] = ['today', 'yesterday', 'week', 'lastweek', 'month', 'quarter', 'year', 'all', 'custom'];
 
 export function parsePeriodKey(value: string | undefined, fallback: PeriodKey = 'month'): PeriodKey {
   return PERIOD_KEYS.includes(value as PeriodKey) ? (value as PeriodKey) : fallback;
