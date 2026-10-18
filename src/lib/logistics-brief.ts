@@ -18,14 +18,16 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** The Dashboard sentence for people who pack and send: what is waiting, with whom it goes, and the tasks. No money. */
 export function buildLogisticsBrief(f: LogisticsFigures, name: string | undefined, hour: number): ExecutiveBrief {
   const fresh = f.counts.new ?? 0;
-  const packing = f.counts.processing ?? 0;
-  const labelled = f.counts.label_created ?? 0;
+  // A label does not move an order, so "Label created" is only what an older version left behind: those are in packing too.
+  const packing = (f.counts.processing ?? 0) + (f.counts.label_created ?? 0);
+  const labelled = f.couriers.reduce((sum, c) => sum + c.labelled, 0);
   const hold = f.counts.on_hold ?? 0;
-  const toSend = fresh + packing + labelled;
+  const toSend = fresh + packing;
   const body: string[] = [];
 
   if (toSend > 0) {
-    body.push(`${plural(fresh, 'order')} ${fresh === 1 ? 'is' : 'are'} new, ${packing} in packing and ${labelled} already ${labelled === 1 ? 'has' : 'have'} a label.`);
+    body.push(`${plural(fresh, 'order')} ${fresh === 1 ? 'is' : 'are'} new and ${packing} in packing.`);
+    if (labelled > 0) body.push(`${plural(labelled, 'order')} already ${labelled === 1 ? 'has' : 'have'} a label and ${labelled === 1 ? 'waits' : 'wait'} to be packed.`);
     const top = f.couriers.slice(0, 3);
     if (top.length > 0) body.push(`Most parcels go with ${top.map((c) => `${c.courier} (${c.count})`).join(', ')}.`);
   }

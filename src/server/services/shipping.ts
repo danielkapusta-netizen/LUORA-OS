@@ -349,7 +349,7 @@ async function applyStatus(shipment: Shipment, carrier: CarrierAccount, status: 
       .where(eq(shipments.id, shipment.id)),
     db.insert(orderEvents).values({ orderId: shipment.orderId, type: 'label', message: `Label created: ${carrier.name}, tracking ${status.trackingNumber ?? '—'}` }),
   ]);
-  await changeStatus(db, shipment.orderId, 'label_created', { reason: 'label created', force: true });
+  // The order keeps its status: it stays where the team works (e.g. New) until the parcel is packed.
   await enqueue(JOBS.trackingPush, { shipmentId: shipment.id });
   // The label's cost now counts in the order's profit.
   await refreshProfit([shipment.orderId]);
@@ -430,9 +430,9 @@ export async function setPacked(shipmentId: string, packed: boolean, userId: str
   if (packed) {
     await shipWhenReady(db, row.orderId, 'parcel packed and tracking sent', userId);
   } else {
-    // Unticked by mistake: put the order back on the To do list.
+    // Unticked by mistake: put the order back on the To do list, on New (not Processing, which would tell Allegro it is being prepared again).
     const [order] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, row.orderId));
-    if (order?.status === 'shipped') await changeStatus(db, row.orderId, 'label_created', { reason: 'parcel not packed yet', userId, force: true });
+    if (order?.status === 'shipped') await changeStatus(db, row.orderId, 'new', { reason: 'parcel not packed yet', userId, force: true });
   }
 }
 

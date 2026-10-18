@@ -6,7 +6,7 @@ import { Alert, buttonClass, Card, Input, Select } from '@/components/ui';
 import { CARRIER_LABELS, cn, MARKETPLACE_LABELS, timeAgo } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import type { OrderStatus } from '@/server/db/schema';
-import { listOrders, listTags, statusCounts, type OrderFilters } from '@/server/services/orders';
+import { labelReadyCount, listOrders, listTags, statusCounts, type OrderFilters } from '@/server/services/orders';
 import { listMarketplaceAccounts, listUsers } from '@/server/services/settings';
 import { STATUS_LABELS } from '@/server/services/workflow';
 import { syncNowAction } from './actions';
@@ -16,11 +16,11 @@ import { OrdersTable, type OrderRow } from './orders-table';
 
 export const metadata: Metadata = { title: 'Orders' };
 
-const TABS: { value: OrderStatus | 'open' | 'all'; label: string }[] = [
+const TABS: { value: OrderStatus | 'open' | 'all'; label: string; hint?: string }[] = [
   { value: 'open', label: 'To do' },
   { value: 'new', label: 'New' },
   { value: 'processing', label: 'Processing' },
-  { value: 'label_created', label: 'Label created' },
+  { value: 'label_created', label: 'Label created', hint: 'Labels made, parcel not packed yet. They also stay on their own tab until you press Packed.' },
   { value: 'on_hold', label: 'On hold' },
   { value: 'shipped', label: 'Shipped' },
   { value: 'delivered', label: 'Delivered' },
@@ -57,9 +57,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     page: Number(params.page ?? 1) || 1,
   };
 
-  const [{ rows, total, page, pageSize }, counts, accounts, users, tags] = await Promise.all([
+  const [{ rows, total, page, pageSize }, counts, labelReady, accounts, users, tags] = await Promise.all([
     listOrders(filters),
     statusCounts(),
+    labelReadyCount(),
     listMarketplaceAccounts(),
     listUsers(),
     listTags(),
@@ -91,7 +92,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     returning: returning ? { orderNumber: returning.orderNumber, since: returning.firstOrderAt.toISOString() } : null,
     notes,
     shipment: shipment
-      ? { id: shipment.id, state: shipment.state, trackingNumber: shipment.trackingNumber, carrier: shipment.carrier, hasLabel: shipment.state === 'created' }
+      ? { id: shipment.id, state: shipment.state, trackingNumber: shipment.trackingNumber, carrier: shipment.carrier, hasLabel: shipment.state === 'created', packed: Boolean(shipment.packedAt) }
       : null,
   }));
 
@@ -202,13 +203,14 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {/* One scrolling row on a phone (it fades out at the edge to show there is more); wrapped on a desktop. */}
       <div className="-mx-4 mb-4 flex scroll-px-4 snap-x items-center gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] max-md:scrollbar-none md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]">
         {TABS.map((tab) => {
-          const count = tab.value === 'open' ? openCount : tab.value !== 'all' ? counts[tab.value] : undefined;
+          const count = tab.value === 'open' ? openCount : tab.value === 'label_created' ? labelReady : tab.value !== 'all' ? counts[tab.value] : undefined;
           const active = status === tab.value;
           return (
             <Link
               key={tab.label}
               href={hrefWith(params, { status: tab.value === 'open' ? undefined : tab.value, page: undefined, order: undefined })}
               aria-current={active ? 'true' : undefined}
+              title={tab.hint}
               className={cn(pill, 'press', active ? 'border-brand-600 bg-brand-600 text-white' : 'border-black/10 bg-white text-slate-600 hover:border-black/20 hover:text-slate-900')}
             >
               {tab.label}

@@ -145,7 +145,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
           )}
           {live?.state === 'created' && (
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500">{live.packedAt ? 'Packed – moves to Shipped' : 'Tick when packed; stays in To do until then'}</span>
+              <span className="text-xs text-slate-500">{live.packedAt ? 'Packed – moves to Shipped' : 'Tick when packed; the order stays where it is until then'}</span>
               <PackedToggle shipmentId={live.id} packed={Boolean(live.packedAt)} />
             </div>
           )}

@@ -64,6 +64,11 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
   });
 
   const allOrders = () => m.db.getDb().select().from(m.schema.orders);
+  /** Orders without a label. A label no longer moves an order out of "new", so "new" alone doesn't mean it is free. */
+  const unlabelledOrders = async () => {
+    const busy = new Set((await m.db.getDb().select().from(m.schema.shipments)).filter((x) => x.state !== 'cancelled').map((x) => x.orderId));
+    return (await allOrders()).filter((o) => !busy.has(o.id));
+  };
   const productStock = async () =>
     Object.fromEntries((await m.db.getDb().select().from(m.schema.products)).map((p) => [p.sku, p.stock]));
   const adminId = async () => (await m.db.getDb().select().from(m.schema.users))[0].id;
@@ -104,6 +109,10 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const form = await m.shipping.shippingFormData(order.id);
     expect(form.route?.service).toBe('inpost_locker_standard');
 
+    const readOrder = async () => (await m.db.getDb().select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.id, order.id)))[0];
+    const tab = async (status: 'new' | 'processing' | 'label_created' | 'shipped') => (await m.orders.listOrders({ status })).rows.map((r) => r.order.id);
+    const statusBefore = (await readOrder()).status;
+    expect(await tab(statusBefore as 'new')).toContain(order.id);
     const id = await m.shipping.requestShipment(
       { orderId: order.id, carrierAccountId: form.route!.carrierAccountId, service: form.route!.service, parcel: m.shipping.presetToParcel(form.defaultPreset!), options: {} },
       await adminId(),
@@ -118,20 +127,29 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(shipment.trackingNumber).toMatch(/^6\d{23}$/);
     expect(shipment.trackingPushedAt).not.toBeNull();
     expect(await m.shipping.getLabel(id)).toMatchObject({ format: 'pdf' });
-    const readOrder = async () => (await m.db.getDb().select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.id, order.id)))[0];
-    // Tracking is on the marketplace, but the order stays on To do until the parcel is packed.
-    expect((await readOrder()).status).toBe('label_created');
+    // Creating the label does not move the order: it stays on the tab it was on (New) until the parcel is packed,
+    // and it is listed under "Label created" as well, as a label that waits to be packed.
+    expect((await readOrder()).status).toBe(statusBefore);
+    expect(await tab(statusBefore as 'new')).toContain(order.id);
+    expect(await tab('label_created')).toContain(order.id);
+    expect(await m.orders.labelReadyCount()).toBeGreaterThanOrEqual(1);
+    const row = (await m.orders.listOrders({})).rows.find((r) => r.order.id === order.id)!;
+    expect(row.shipment).toMatchObject({ state: 'created', packedAt: null });
     // A marketplace sync reporting it shipped (our own tracking push) doesn't skip packing either.
     const accounts = await import('@/server/services/accounts');
     const account = await accounts.loadMarketplaceAccount(order.accountId);
     const fresh = (await accounts.getMarketplaceAdapter(account).getOrder(order.externalId))!;
     await m.orders.upsertOrders(account, [{ ...fresh, fulfilled: true }]);
-    expect((await readOrder()).status).toBe('label_created');
+    expect((await readOrder()).status).toBe(statusBefore);
 
     await m.shipping.setPacked(id, true, await adminId());
     const updated = await readOrder();
     expect(updated.status).toBe('shipped');
     expect(updated.shippedAt).not.toBeNull();
+    // Packed: it has left both the New tab and the "Label created" list.
+    expect(await tab(statusBefore as 'new')).not.toContain(order.id);
+    expect(await tab('label_created')).not.toContain(order.id);
+    expect(await tab('shipped')).toContain(order.id);
   });
 
   it('marks a parcel as packed and back, logging it on the order', async () => {
@@ -140,10 +158,11 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const orderStatus = async () => (await m.db.getDb().select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.id, shipment.orderId)))[0].status;
     const userId = await adminId();
     expect(shipment.packedAt).toBeInstanceOf(Date);
-    // Unticking puts a shipped order back on the To do list.
+    // Unticking puts a shipped order back on the To do list, on New, and with its label waiting to be packed.
     await m.shipping.setPacked(shipment.id, false, userId);
     expect(await read()).toMatchObject({ packedAt: null, packedBy: null });
-    expect(await orderStatus()).toBe('label_created');
+    expect(await orderStatus()).toBe('new');
+    expect((await m.orders.listOrders({ status: 'label_created' })).rows.map((r) => r.order.id)).toContain(shipment.orderId);
     await m.shipping.setPacked(shipment.id, true, userId);
     expect(await read()).toMatchObject({ packedBy: userId });
     expect((await read()).packedAt).toBeInstanceOf(Date);
@@ -153,8 +172,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     await expect(m.shipping.setPacked('missing', true, userId)).rejects.toThrow('Shipment not found');
   });
 
-  it('cancels a label before tracking is sent and reopens the order', async () => {
-    const order = (await allOrders()).find((o) => o.marketplace === 'shopify' && !o.pickupPointId && o.status === 'new')!;
+  it('cancels a label before tracking is sent and leaves the order where it was', async () => {
+    const order = (await unlabelledOrders()).find((o) => o.marketplace === 'shopify' && !o.pickupPointId && o.status === 'new')!;
     const data = await m.shipping.loadRoutingData();
     const route = m.shipping.routeOrder(order, data)!;
     expect(route.service).toBe('inpost_courier_standard');
@@ -166,7 +185,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     queue.length = 0;
     await m.shipping.cancelShipment(id, await adminId());
     const [reopened] = await m.db.getDb().select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.id, order.id));
-    expect(reopened.status).toBe('processing');
+    expect(reopened.status).toBe('new');
+    expect((await m.orders.listOrders({ status: 'label_created' })).rows.map((r) => r.order.id)).not.toContain(order.id);
     // With the old label cancelled a new one may be bought.
     await m.shipping.requestShipment(
       { orderId: order.id, carrierAccountId: route.carrierAccountId, service: route.service, parcel: m.shipping.presetToParcel(data.presets[0]), options: {} },
@@ -176,7 +196,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
   });
 
   it('returns stock when an order is cancelled and takes it again when reopened', async () => {
-    const order = (await allOrders()).find((o) => o.marketplace === 'allegro' && o.status === 'new')!;
+    const order = (await unlabelledOrders()).find((o) => o.marketplace === 'allegro' && o.status === 'new')!;
     const items = await m.db.getDb().select().from(m.schema.orderItems).where(m.orm.eq(m.schema.orderItems.orderId, order.id));
     const before = await productStock();
     await m.workflow.changeStatus(m.db.getDb(), order.id, 'cancelled', {});
@@ -614,7 +634,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
 
   it('keeps the tracking number when the label download fails, and fetches the file on "Check now"', async () => {
     const { MockCarrierAdapter } = await import('@/server/integrations/carriers/mock/adapter');
-    const order = (await allOrders()).find((o) => o.marketplace === 'shopify' && o.status === 'new' && o.pickupPointId)!;
+    const order = (await unlabelledOrders()).find((o) => o.marketplace === 'shopify' && o.status === 'new' && o.pickupPointId)!;
     const form = await m.shipping.shippingFormData(order.id);
     const original = MockCarrierAdapter.prototype.getLabels;
     MockCarrierAdapter.prototype.getLabels = async () => {
@@ -656,7 +676,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       settings: { autoOnShipped: true, uploadAllegro: true, uploadEmpik: true, sendB2bToKsef: true, defaultVatRate: 0.23 },
     });
     const altered = await alteredOrders();
-    const candidates = (await allOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id));
+    const candidates = (await unlabelledOrders()).filter((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id));
     const order = candidates[0];
     const other = candidates[1];
     await db
@@ -693,7 +713,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     await invoicing.saveAccounting({ enabled: true, login: '', invoiceKey: null, settings: { ...invoicing.DEFAULT_ACCOUNTING_SETTINGS } });
     expect((await invoicing.loadAccounting()).settings.autoOnShipped).toBe(false);
     const altered = await alteredOrders();
-    const order = (await allOrders()).find((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id))!;
+    const order = (await unlabelledOrders()).find((o) => o.marketplace === 'allegro' && o.readyToShip && o.status === 'new' && !o.codAmount && !altered.has(o.id))!;
     await db
       .update(m.schema.orders)
       .set({ invoiceRequest: { name: 'Hygge Twist', taxId: '9512513434', euPrefix: null, street: 'Prosta 2', postalCode: '00-001', city: 'Warszawa', countryCode: 'PL' } })
@@ -884,7 +904,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     }
 
     // A new label on an order brings its configured cost in.
-    const order = (await allOrders()).find((o) => o.status === 'new' && o.marketplace === 'shopify' && o.pickupPointId)!;
+    const order = (await unlabelledOrders()).find((o) => o.status === 'new' && o.marketplace === 'shopify' && o.pickupPointId)!;
     const deliveryOf = async () =>
       (await db.select().from(s.salesLines).where(orm.eq(s.salesLines.orderId, order.id))).reduce((sum, l) => sum + l.delivery, 0);
     const form = await m.shipping.shippingFormData(order.id);

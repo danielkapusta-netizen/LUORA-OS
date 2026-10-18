@@ -69,6 +69,9 @@ describe('logistics brief', () => {
   ];
   it('says what is waiting and with whom it goes, without money', () => {
     const brief = buildLogisticsBrief({ counts: { new: 6, processing: 3, label_created: 1, on_hold: 2 }, couriers, tasksDue: 2, tasksOpen: 5 }, 'Ola', 14);
+    // A label does not move an order, so those with one are part of new/packing, and are said once more as waiting to be packed.
+    expect(brief.body.join(' ')).toContain('6 orders are new and 4 in packing.');
+    expect(brief.body.join(' ')).toContain('2 orders already have a label and wait to be packed.');
     expect(brief.greeting).toBe('Good afternoon Ola');
     expect(brief.verdict).toBe('10 orders need to be sent.');
     expect(brief.body.join(' ')).toContain('InPost (7), DPD (3)');

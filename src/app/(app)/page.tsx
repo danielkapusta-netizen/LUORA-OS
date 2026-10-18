@@ -13,7 +13,7 @@ import { can } from '@/lib/permissions';
 import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
-import { statusCounts } from '@/server/services/orders';
+import { labelReadyCount, statusCounts } from '@/server/services/orders';
 import { allCustomers, orderDatesByCustomer } from '@/server/services/customers';
 import { listTasks } from '@/server/services/tasks';
 import { dayLabel, today as warsawToday } from '@/lib/tasks/dates';
@@ -34,7 +34,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const user = await requireUser();
   if (!can(user.role, 'fullDashboard')) return <LogisticsDashboard user={user} />;
   const params = await searchParams;
-  const [view, counts, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), listTasks({ assignee: user.id, status: 'open', limit: 40 }), allCustomers(), orderDatesByCustomer()]);
+  const [view, counts, labelReady, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), labelReadyCount(), listTasks({ assignee: user.id, status: 'open', limit: 40 }), allCustomers(), orderDatesByCustomer()]);
   const todayKey = warsawToday();
   const repeat = repeatStats(customerList, dates);
   const byCustomer = new Map(customerList.map((c) => [c.id, c]));
@@ -64,7 +64,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         {OPEN.map((o) => (
           <Link key={o.status} href={`/orders?status=${o.status}`} className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
             <p className="text-xs font-medium text-slate-500">{o.label}</p>
-            <p className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{counts[o.status] ?? 0}</p>
+            <p className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{o.status === 'label_created' ? labelReady : (counts[o.status] ?? 0)}</p>
           </Link>
         ))}
       </section>

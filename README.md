@@ -10,7 +10,9 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - Labels come as PDF or ZPL, in A6 or A4.
 - **Bulk labels:** select many orders, create all their labels at once, then print them as one PDF.
 - **Tracking writeback:** the tracking number goes back to the marketplace and the order is marked shipped. Shopify creates a fulfilment, Allegro gets the waybill and `SENT`, and Empik gets tracking plus a shipment confirmation.
-- **Workflow:** `new → processing → label created → shipped → delivered`, plus on hold and cancelled, with a full activity log on every order.
+- **Workflow:** `new → processing → shipped → delivered`, plus on hold and cancelled, with a full activity log on every order.
+  - Creating a label does **not** move the order: it stays on the tab it is on (usually New) with a "Label ready" chip, until someone presses **Packed**. Then it moves to Shipped (once the tracking has reached the marketplace).
+  - The **Label created** tab lists the orders that have a label but are not packed yet. Unticking Packed puts a shipped order back on New.
 - **Stock sync:**
   - The app's stock is the master; every sale lowers it.
   - The new quantity is pushed to every listing with the same SKU.

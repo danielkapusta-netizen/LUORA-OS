@@ -33,7 +33,7 @@ export interface OrderRow {
   returning: { orderNumber: number; since: string } | null;
   /** Internal notes on the order, and how many of them are marked important. */
   notes: { count: number; important: number } | null;
-  shipment: { id: string; state: string; trackingNumber: string | null; carrier: string; hasLabel: boolean } | null;
+  shipment: { id: string; state: string; trackingNumber: string | null; carrier: string; hasLabel: boolean; packed: boolean } | null;
 }
 
 const th = 'px-3 py-3 text-left text-xs font-medium text-slate-500';
@@ -45,6 +45,20 @@ function shortDate(iso: string): string {
 
 function sinceLabel(iso: string): string {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
+}
+
+/** A label does not move an order, so the row says it has one: "Label ready" until the parcel is packed. */
+function LabelChip({ row }: { row: OrderRow }) {
+  if (!row.shipment?.hasLabel || ['shipped', 'delivered', 'cancelled'].includes(row.status)) return null;
+  return row.shipment.packed ? (
+    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20" title="Packed; it moves to Shipped once the tracking has reached the marketplace">
+      Packed
+    </span>
+  ) : (
+    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-600/20" title="The label is made. The order stays here until you press Packed">
+      Label ready
+    </span>
+  );
 }
 
 export function OrdersTable({
@@ -160,6 +174,7 @@ export function OrdersTable({
                 </span>
                 <span className="mt-2 flex flex-wrap items-center gap-1.5">
                   <StatusBadge status={r.status} />
+                  <LabelChip row={r} />
                   {r.cod && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">COD</span>}
                   {r.returning && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">Returning · {ordinal(r.returning.orderNumber)}</span>}
                   {r.notes && (
@@ -240,6 +255,7 @@ export function OrdersTable({
                           Returning · {ordinal(r.returning.orderNumber)}
                         </span>
                       )}
+                      <LabelChip row={r} />
                       {r.notes && (
                         <span
                           className={cn(

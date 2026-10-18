@@ -6,7 +6,7 @@ import { dayLabel, today as warsawToday } from '@/lib/tasks/dates';
 import { dueState } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/server/auth';
-import { ordersToShipByCourier, statusCounts } from '@/server/services/orders';
+import { labelReadyCount, ordersToShipByCourier, statusCounts } from '@/server/services/orders';
 import { listTasks } from '@/server/services/tasks';
 
 const TILES = [
@@ -18,7 +18,7 @@ const TILES = [
 
 /** The Dashboard for roles without analytics: orders to do, tasks, and who is carrying the parcels. No money anywhere. */
 export async function LogisticsDashboard({ user }: { user: SessionUser }) {
-  const [counts, couriers, tasks] = await Promise.all([statusCounts(), ordersToShipByCourier(), listTasks({ assignee: user.id, status: 'open', limit: 40 })]);
+  const [counts, labelReady, couriers, tasks] = await Promise.all([statusCounts(), labelReadyCount(), ordersToShipByCourier(), listTasks({ assignee: user.id, status: 'open', limit: 40 })]);
   const todayKey = warsawToday();
   const due = tasks.filter((t) => ['overdue', 'today'].includes(dueState(t, todayKey)));
   const brief = buildLogisticsBrief({ counts, couriers, tasksDue: due.length, tasksOpen: tasks.length }, user.name.split(' ')[0], warsawHour());
@@ -31,7 +31,7 @@ export async function LogisticsDashboard({ user }: { user: SessionUser }) {
         {TILES.map((o) => (
           <Link key={o.status} href={`/orders?status=${o.status}`} className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
             <p className="text-xs font-medium text-slate-500">{o.label}</p>
-            <p className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{counts[o.status] ?? 0}</p>
+            <p className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{o.status === 'label_created' ? labelReady : (counts[o.status] ?? 0)}</p>
           </Link>
         ))}
       </section>

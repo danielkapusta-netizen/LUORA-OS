@@ -502,9 +502,16 @@ export interface OrderFilters {
 export const PAGE_SIZE = 50;
 const OPEN: OrderStatus[] = ['new', 'processing', 'label_created', 'on_hold'];
 
+/** The order has a label that was bought and is not ticked as packed. */
+function labelNotPacked(): SQL {
+  return sql`exists (select 1 from shipments s where s.order_id = ${orders.id} and s.state = 'created' and s.packed_at is null)`;
+}
+
 function filterConditions(f: OrderFilters): SQL[] {
   const where: SQL[] = [];
   if (f.status === 'open') where.push(inArray(orders.status, OPEN));
+  // "Label created" lists the orders that have a label but are not packed yet, wherever they are (a label does not move an order).
+  else if (f.status === 'label_created') where.push(inArray(orders.status, OPEN), labelNotPacked());
   else if (f.status) where.push(eq(orders.status, f.status));
   if (f.marketplace) where.push(sql`${orders.marketplace} = ${f.marketplace}`);
   if (f.accountId) where.push(eq(orders.accountId, f.accountId));
@@ -616,6 +623,15 @@ export async function listOrders(f: OrderFilters) {
   };
 }
 
+/** Orders still to send that have a label which is not packed yet: the "Label created" tab. */
+export async function labelReadyCount(): Promise<number> {
+  const [row] = await getDb()
+    .select({ count: sql<number>`count(*)` })
+    .from(orders)
+    .where(and(inArray(orders.status, OPEN), labelNotPacked()));
+  return row?.count ?? 0;
+}
+
 export async function statusCounts(): Promise<Record<string, number>> {
   const rows = await getDb()
     .select({ status: orders.status, count: sql<number>`count(*)` })
@@ -624,10 +640,14 @@ export async function statusCounts(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map((r) => [r.status, r.count]));
 }
 
-/** Orders still to be packed and sent (not on hold), grouped by the courier the buyer chose. Busiest first. */
+/** Orders still to be packed and sent (not on hold), grouped by the courier the buyer chose. Busiest first. `labelled`: those that already have a label. */
 export async function ordersToShipByCourier(): Promise<{ courier: Courier; count: number; labelled: number }[]> {
   const rows = await getDb()
-    .select({ method: orders.deliveryMethodName, status: orders.status, carrier: sql<string | null>`(select s.carrier from shipments s where s.order_id = ${orders.id} and s.state != 'cancelled' order by s.created_at desc limit 1)` })
+    .select({
+      method: orders.deliveryMethodName,
+      carrier: sql<string | null>`(select s.carrier from shipments s where s.order_id = ${orders.id} and s.state != 'cancelled' order by s.created_at desc limit 1)`,
+      labelled: sql<number>`case when ${labelNotPacked()} then 1 else 0 end`,
+    })
     .from(orders)
     .where(and(inArray(orders.status, ['new', 'processing', 'label_created']), eq(orders.historical, false)));
   const byCourier = new Map<Courier, { count: number; labelled: number }>();
@@ -635,7 +655,7 @@ export async function ordersToShipByCourier(): Promise<{ courier: Courier; count
     const courier = courierOf(r.method, r.carrier);
     const entry = byCourier.get(courier) ?? { count: 0, labelled: 0 };
     entry.count += 1;
-    if (r.status === 'label_created') entry.labelled += 1;
+    if (r.labelled) entry.labelled += 1;
     byCourier.set(courier, entry);
   }
   return [...byCourier].map(([courier, v]) => ({ courier, ...v })).sort((a, b) => b.count - a.count || a.courier.localeCompare(b.courier));
