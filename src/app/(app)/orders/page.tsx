@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/forms';
 import { Alert, buttonClass, Card, Input, Select } from '@/components/ui';
+import { quickRanges } from '@/lib/analytics/window';
 import { CARRIER_LABELS, cn, MARKETPLACE_LABELS, timeAgo } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import type { OrderStatus } from '@/server/db/schema';
@@ -136,6 +137,21 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <option value="">Invoice requested or not</option>
         <option value="requested">Invoice requested</option>
       </Select>
+      <div className="col-span-2 flex flex-wrap gap-1.5" role="group" aria-label="Placed">
+        {quickRanges().map((r) => {
+          const on = params.from === r.from && params.to === r.to;
+          return (
+            <Link
+              key={r.label}
+              href={hrefWith(params, { from: r.from, to: r.to, page: undefined })}
+              aria-current={on ? 'true' : undefined}
+              className={cn('rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap max-md:py-2 max-md:text-sm', on ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')}
+            >
+              {r.label}
+            </Link>
+          );
+        })}
+      </div>
       <Input type="date" name="from" defaultValue={params.from} aria-label="Placed from" />
       <Input type="date" name="to" defaultValue={params.to} aria-label="Placed until" />
       <div className="col-span-2 flex items-center justify-end gap-3">

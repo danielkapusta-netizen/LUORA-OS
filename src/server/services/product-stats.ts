@@ -1,6 +1,6 @@
 // Sales performance per product for the Inventory page: units sold, revenue in PLN, a
 // performance level compared with the other products, and the product's sales rank.
-import { and, eq, gte, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { orderItems, orders } from '../db/schema';
 import { plnRateOn } from './fx';
@@ -61,9 +61,9 @@ export function rate(totals: Map<string, Omit<ProductPerformance, 'percentile' |
   return out;
 }
 
-/** Sales of every product over the last `days` days (cancelled orders left out). */
-export async function productStats(days = 30, now = new Date()) {
-  const since = new Date(now.getTime() - days * 86_400_000);
+/** Sales of every product over the last `days` days, or between two dates (cancelled orders left out). */
+export async function productStats(window: number | { from: Date; to: Date } = 30, now = new Date()) {
+  const { from, to } = typeof window === 'number' ? { from: new Date(now.getTime() - window * 86_400_000), to: undefined } : window;
   const rows = await getDb()
     .select({
       productId: orderItems.productId,
@@ -75,7 +75,7 @@ export async function productStats(days = 30, now = new Date()) {
     })
     .from(orderItems)
     .innerJoin(orders, eq(orders.id, orderItems.orderId))
-    .where(and(isNotNull(orderItems.productId), gte(orders.placedAt, since), ne(orders.status, 'cancelled')))
+    .where(and(isNotNull(orderItems.productId), gte(orders.placedAt, from), ...(to ? [lte(orders.placedAt, to)] : []), ne(orders.status, 'cancelled')))
     .groupBy(orderItems.productId, orders.marketplace, orders.currency);
 
   const rates = new Map<string, number | null>();

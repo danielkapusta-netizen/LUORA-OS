@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { hrefWith, Pills, SectionTitle } from '@/components/analytics/blocks';
 import { PriceCharts, Waterfall } from '@/components/analytics/charts';
 import { formatValue } from '@/components/analytics/format';
+import { RangeControl } from '@/components/analytics/period-control';
 import { PriceSimulator } from '@/components/analytics/price-simulator';
 import { Badge, Card, CardBody, EmptyState, Input, td, th } from '@/components/ui';
 import { brandOf } from '@/lib/analytics/orders';
+import { parseCustomRange } from '@/lib/analytics/period';
 import { buildMarginHistory, buildPriceHistory, buildPricingWorkspace, buildWaterfall, PRICING_PERIODS, type PricingPeriodKey, type PricingRow } from '@/lib/analytics/pricing';
 import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
@@ -23,11 +25,13 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   await requireUser();
   const params = await searchParams;
   const view = await analyticsView({ marketplace: params.marketplace }, 'all');
-  const window = (PRICING_PERIODS.some((p) => p.value === params.window) ? params.window : 'month') as PricingPeriodKey;
+  const customRange = parseCustomRange(params.from, params.to);
+  const custom = customRange && { from: customRange.from.toISOString().slice(0, 10), to: customRange.to.toISOString().slice(0, 10) };
+  const window = (customRange ? 'custom' : PRICING_PERIODS.some((p) => p.value === params.window) ? params.window : 'month') as PricingPeriodKey;
   const dimension = params.dimension === 'brand' ? 'brand' : 'product';
-  const current = { marketplace: view.marketplace, window: params.window, dimension: params.dimension, q: params.q };
+  const current = { marketplace: view.marketplace, window: customRange ? undefined : params.window, from: custom?.from, to: custom?.to, dimension: params.dimension, q: params.q };
   const link = (next: Record<string, string | undefined>) => hrefWith('/analytics/pricing', { ...current, open: params.open }, next);
-  const workspace = buildPricingWorkspace({ orders: view.data.orders, costs: view.data.costs, dimension, period: window, anchor: new Date(), brandOf });
+  const workspace = buildPricingWorkspace({ orders: view.data.orders, costs: view.data.costs, dimension, period: window, custom: customRange, anchor: new Date(), brandOf });
   const rows = workspace.rows.filter((r) => !params.q || r.label.toLowerCase().includes(params.q.toLowerCase()));
   const risky = workspace.rows.filter((r) => r.risk);
   const s = workspace.summary;
@@ -35,7 +39,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <Pills label="Window" options={PRICING_PERIODS} active={window} href={(v) => link({ window: v })} />
+        <RangeControl path="/analytics/pricing" current={{ ...current, open: params.open }} presets={PRICING_PERIODS} active={window} param="window" custom={custom} label="Window" help="Both days are included. Sales in these days set each product's average price and margin." />
         <Pills
           label="Group by"
           options={[
@@ -46,7 +50,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           href={(v) => link({ dimension: v, open: undefined })}
         />
         <form action="/analytics/pricing" className="flex items-center gap-2">
-          {Object.entries({ marketplace: view.marketplace, window: params.window, dimension: params.dimension }).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
+          {Object.entries({ marketplace: view.marketplace, window: customRange ? undefined : params.window, from: custom?.from, to: custom?.to, dimension: params.dimension }).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
           <Input name="q" defaultValue={params.q ?? ''} placeholder="Search" className="h-8 w-56" aria-label="Search" />
         </form>
       </div>

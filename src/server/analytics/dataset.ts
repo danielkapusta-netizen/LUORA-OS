@@ -210,9 +210,10 @@ export function snapshotFor(data: BusinessData, period: ResolvedPeriod): Snapsho
   return buildSnapshot({ allOrders: data.orders, costs: data.costs, period, coverage: data.coverage, comparison: data.comparison });
 }
 
-/** Units sold and profit per product over the last `days` days, for the Inventory page. */
-export async function productMargins(days = 30): Promise<Map<string, { units: number; gross: number; profit: number }>> {
-  const since = Date.now() - days * 86_400_000;
+/** Units sold and profit per product over the last `days` days, or between two dates, for the Inventory page. */
+export async function productMargins(window: number | { from: Date; to: Date } = 30): Promise<Map<string, { units: number; gross: number; profit: number }>> {
+  const since = typeof window === 'number' ? Date.now() - window * 86_400_000 : window.from.getTime();
+  const until = typeof window === 'number' ? Number.MAX_SAFE_INTEGER : window.to.getTime();
   const rows = await getDb()
     .select({
       productId: salesLines.productId,
@@ -221,7 +222,7 @@ export async function productMargins(days = 30): Promise<Map<string, { units: nu
       profit: sql<number>`sum(${salesLines.profit})`,
     })
     .from(salesLines)
-    .where(sql`${salesLines.placedAt} >= ${since} and ${salesLines.productId} is not null`)
+    .where(sql`${salesLines.placedAt} >= ${since} and ${salesLines.placedAt} <= ${until} and ${salesLines.productId} is not null`)
     .groupBy(salesLines.productId);
   return new Map(rows.map((r) => [r.productId!, { units: r.units, gross: r.gross, profit: r.profit }]));
 }

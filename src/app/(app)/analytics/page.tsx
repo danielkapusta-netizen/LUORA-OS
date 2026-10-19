@@ -6,15 +6,19 @@ import { requireUser } from '@/server/auth';
 import { analytics } from '@/server/services/analytics';
 import { STATUS_LABELS } from '@/server/services/workflow';
 import { MARKETPLACE_COLORS } from '@/components/analytics/format';
+import { RangeControl } from '@/components/analytics/period-control';
+import { resolveDayWindow } from '@/lib/analytics/window';
 import { HorizontalBars, RevenueByDay } from './charts';
 
 export const metadata: Metadata = { title: 'Analytics · Operations' };
 
+const DAY_OPTIONS = [7, 30, 90, 365] as const;
 const RANGES = [
-  { value: '7', label: 'Last 7 days' },
-  { value: '30', label: 'Last 30 days' },
-  { value: '90', label: 'Last 90 days' },
-  { value: '365', label: 'Last 12 months' },
+  { value: '7', label: '7 days' },
+  { value: '30', label: '30 days' },
+  { value: '90', label: '90 days' },
+  { value: '365', label: '12 months' },
+  { value: 'lastweek', label: 'Last week' },
 ];
 
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -32,13 +36,12 @@ function hours(value: number | null): string {
   return value < 48 ? `${value.toFixed(1)} h` : `${(value / 24).toFixed(1)} days`;
 }
 
-export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ days?: string; marketplace?: string }> }) {
+export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<{ days?: string; from?: string; to?: string; marketplace?: string }> }) {
   await requireUser();
   const params = await searchParams;
-  const days = RANGES.some((r) => r.value === params.days) ? Number(params.days) : 30;
+  const win = resolveDayWindow(params, DAY_OPTIONS, 30);
   const marketplace = params.marketplace && MARKETPLACE_LABELS[params.marketplace] ? params.marketplace : undefined;
-  const to = new Date();
-  const from = new Date(to.getTime() - days * 86_400_000);
+  const { from, to } = win;
   const data = await analytics({ from, to, marketplace });
   // Every amount is converted to PLN by the service.
   const currency = 'PLN';
@@ -58,9 +61,11 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   }
   const daily = [...byDay.values()].sort((a, b) => String(a.day).localeCompare(String(b.day)));
 
+  // The range in force (a preset, or two dates) rides along when the marketplace changes.
+  const range = win.custom ? { from: win.custom.from, to: win.custom.to } : { days: win.key };
   const link = (patch: Record<string, string | undefined>) => {
     const next = new URLSearchParams();
-    for (const [k, v] of Object.entries({ days: String(days), marketplace, ...patch })) if (v) next.set(k, v);
+    for (const [k, v] of Object.entries({ ...range, marketplace, ...patch })) if (v) next.set(k, v);
     return `/analytics?${next}`;
   };
 
@@ -71,15 +76,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       </p>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        {RANGES.map((r) => (
-          <Link
-            key={r.value}
-            href={link({ days: r.value })}
-            className={cn('rounded-md border px-3 py-1.5 text-sm', String(days) === r.value ? 'border-brand-600 bg-brand-50 font-medium text-brand-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50')}
-          >
-            {r.label}
-          </Link>
-        ))}
+        <RangeControl path="/analytics" current={{ marketplace }} presets={RANGES} active={win.key} param="days" custom={win.custom} label="Period" />
         <span className="mx-2 h-5 w-px bg-slate-200" />
         {[undefined, ...Object.keys(MARKETPLACE_LABELS)].map((m) => (
           <Link

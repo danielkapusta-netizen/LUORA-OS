@@ -24,7 +24,7 @@
  */
 
 import { buildCostIndex } from './metrics'
-import { bucketKey } from './period'
+import { bucketKey, lastWeekRange, type CustomRange } from './period'
 import { ratio, sum } from './parse'
 import { resolveCostKey } from './sku'
 import type { Granularity, LineItem, Order, ProductCost } from './types'
@@ -33,11 +33,12 @@ export const VAT_RATE = 0.23
 /** Net share of a gross price after VAT. */
 export const NET = 1 / (1 + VAT_RATE)
 
-export type PricingPeriodKey = 'last5' | 'week' | 'month' | 'lastMonth' | 'quarter' | 'year' | 'all'
+export type PricingPeriodKey = 'last5' | 'week' | 'lastWeek' | 'month' | 'lastMonth' | 'quarter' | 'year' | 'all' | 'custom'
 
 export const PRICING_PERIODS: Array<{ value: PricingPeriodKey; label: string }> = [
   { value: 'last5', label: 'Last 5 sales' },
   { value: 'week', label: 'This week' },
+  { value: 'lastWeek', label: 'Last week' },
   { value: 'month', label: 'This month' },
   { value: 'lastMonth', label: 'Last month' },
   { value: 'quarter', label: 'Quarter' },
@@ -225,10 +226,15 @@ function windowStart(key: PricingPeriodKey, anchor: Date): Date | null {
 }
 
 /** Lines feeding a row's statistics for the chosen period, newest first. */
-function selectWindow(lines: readonly LineItem[], key: PricingPeriodKey, anchor: Date): LineItem[] {
+function selectWindow(lines: readonly LineItem[], key: PricingPeriodKey, anchor: Date, custom?: CustomRange): LineItem[] {
   const sorted = [...lines].sort((a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0))
   if (key === 'last5') return sorted.slice(0, 5)
   if (key === 'all') return sorted
+  if (key === 'custom' && custom) return sorted.filter((line) => line.date && line.date >= custom.from && line.date <= custom.to)
+  if (key === 'lastWeek') {
+    const week = lastWeekRange(anchor)
+    return sorted.filter((line) => line.date && line.date >= week.from && line.date <= week.to)
+  }
   const from = windowStart(key, anchor)
   if (!from) return sorted
   const to =
@@ -458,6 +464,8 @@ export interface PricingInput {
   costs: readonly ProductCost[]
   dimension: 'product' | 'brand'
   period: PricingPeriodKey
+  /** The days to use when `period` is `custom`. */
+  custom?: CustomRange
   /** Newest order date — the clock the windows anchor to. */
   anchor: Date
   /** Brand resolver, injected to keep this module free of taxonomy imports. */
@@ -465,7 +473,7 @@ export interface PricingInput {
 }
 
 export function buildPricingWorkspace(input: PricingInput): PricingWorkspace {
-  const { orders, costs, dimension, period, anchor, brandOf } = input
+  const { orders, costs, dimension, period, custom, anchor, brandOf } = input
   const costIndex = buildCostIndex(costs)
 
   // Group every line by product (or brand), keeping the full history per key —
@@ -492,7 +500,7 @@ export function buildPricingWorkspace(input: PricingInput): PricingWorkspace {
   const rows: PricingRow[] = []
 
   for (const [key, group] of groups) {
-    const recentLines = selectWindow(group.lines, period, anchor).filter((line) => line.isComplete)
+    const recentLines = selectWindow(group.lines, period, anchor, custom).filter((line) => line.isComplete)
     if (recentLines.length === 0) continue
 
     const units = sum(recentLines, (line) => line.qty)
@@ -545,7 +553,7 @@ export function buildPricingWorkspace(input: PricingInput): PricingWorkspace {
     const monthlyUnits = sum(monthLines, (line) => line.qty)
 
     const stability = buildStability(
-      selectWindow(group.lines, period === 'last5' ? 'last5' : period, anchor).filter(
+      selectWindow(group.lines, period, anchor, custom).filter(
         (line) => line.isComplete,
       ),
     )

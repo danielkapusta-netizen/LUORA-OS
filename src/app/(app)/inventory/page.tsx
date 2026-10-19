@@ -8,6 +8,8 @@ import { ActionForm, SubmitButton } from '@/components/forms';
 import { Gauge } from '@/components/gauge';
 import { productMargins } from '@/server/analytics/dataset';
 import { Badge, buttonClass, Card, EmptyState, Input, PageHeader, Select } from '@/components/ui';
+import { RangeControl } from '@/components/analytics/period-control';
+import { resolveDayWindow } from '@/lib/analytics/window';
 import { hasRealSku } from '@/lib/sku';
 import { cn, formatDate, timeAgo } from '@/lib/utils';
 import { can } from '@/lib/permissions';
@@ -25,6 +27,7 @@ type ListingRow = Awaited<ReturnType<typeof listProductsWithListings>>['listings
 
 const PAGE_SIZE = 20;
 const PERIODS = [7, 30, 90] as const;
+const PERIOD_PRESETS = [...PERIODS.map((d) => ({ value: String(d), label: `${d} days` })), { value: 'lastweek', label: 'Last week' }];
 const SORTS = { sales: 'Best selling', name: 'Name', stock: 'Lowest stock', new: 'Newest' } as const;
 type Sort = keyof typeof SORTS;
 const PLATFORMS = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
@@ -188,21 +191,21 @@ function Stat({ label, children, className }: { label: string; children: React.R
   );
 }
 
-export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string; days?: string; page?: string }> }) {
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string; days?: string; from?: string; to?: string; page?: string }> }) {
   const viewer = await requireUser();
   const params = await searchParams;
-  const days = PERIODS.find((d) => String(d) === params.days) ?? 30;
+  const win = resolveDayWindow(params, PERIODS, 30);
   const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'sales';
   const [{ products, listings }, accounts, matching, log, stats, pending] = await Promise.all([
     listProductsWithListings(),
     listMarketplaceAccounts(),
     matchingGroups(),
     recentStockLog(30),
-    productStats(days),
+    productStats(win),
     pendingPushCounts(),
   ]);
   // Margins only for roles that may see them; marketing gets the percentage, never the profit amount.
-  const margins = can(viewer.role, 'margin') ? await productMargins(days) : new Map<string, { units: number; gross: number; profit: number }>();
+  const margins = can(viewer.role, 'margin') ? await productMargins(win) : new Map<string, { units: number; gross: number; profit: number }>();
   const showProfit = can(viewer.role, 'profit');
   const perf = (id: string): ProductPerformance => stats.byProduct.get(id) ?? emptyPerformance();
   const byProduct = new Map<string, ListingRow[]>();
@@ -286,7 +289,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <Stat label="Products">
           <span className="text-2xl font-semibold tabular-nums">{products.length}</span>
         </Stat>
-        <Stat label={`Best seller · ${days} days`} className="col-span-2 md:col-span-1">
+        <Stat label={`Best seller · ${win.label}`} className="col-span-2 md:col-span-1">
           {best ? (
             <>
               <ProductPhoto product={best} size="size-8" />
@@ -304,10 +307,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             {sold.length} <span className="text-sm font-normal text-slate-500">of {products.length}</span>
           </span>
         </Stat>
-        <Stat label={`Units sold · ${days} days`}>
+        <Stat label={`Units sold · ${win.label}`}>
           <span className="text-2xl font-semibold tabular-nums">{units.toLocaleString('pl-PL')}</span>
         </Stat>
-        <Stat label={`Revenue · ${days} days`}>
+        <Stat label={`Revenue · ${win.label}`}>
           <span className="text-2xl font-semibold tabular-nums">{pln(revenue)}</span>
           {stats.missingRates.length > 0 && <span className="text-xs text-amber-700">without {stats.missingRates.join(', ')}</span>}
         </Stat>
@@ -405,20 +408,17 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
           <form action="/inventory" className="mr-auto max-md:w-full">
             {sort !== 'sales' && <input type="hidden" name="sort" value={sort} />}
-            {days !== 30 && <input type="hidden" name="days" value={days} />}
+            {win.custom ? (
+              <>
+                <input type="hidden" name="from" value={win.custom.from} />
+                <input type="hidden" name="to" value={win.custom.to} />
+              </>
+            ) : (
+              win.key !== '30' && <input type="hidden" name="days" value={win.key} />
+            )}
             <Input name="q" defaultValue={params.q} placeholder="Search name, SKU, EAN" className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
           </form>
-          <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
-            {PERIODS.map((d) => (
-              <Link
-                key={d}
-                href={hrefWith(params, { days: d === 30 ? undefined : String(d), page: undefined })}
-                className={cn('shrink-0 rounded-full px-3 py-1 whitespace-nowrap max-md:px-4 max-md:py-2 max-md:text-sm', d === days ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
-              >
-                {d} days
-              </Link>
-            ))}
-          </div>
+          <RangeControl path="/inventory" current={params} presets={PERIOD_PRESETS} active={win.key} param="days" custom={win.custom} reset={['page']} label="Sales period" />
           <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
             {(Object.keys(SORTS) as Sort[]).map((s) => (
               <Link

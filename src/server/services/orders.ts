@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { dayEnd, dayStart } from '../../lib/analytics/window';
 import { courierOf, type Courier } from '../../lib/couriers';
 import { chunk, getDb, insertStatements, type Tx } from '../db/client';
 import {
@@ -26,6 +27,9 @@ import { applyOrderStock, scheduleStockPush, stockCoversOrder } from './inventor
 import { resolveCustomers } from './customers';
 import { refreshProfit } from './profit';
 import { awaitingPacking, changeStatus } from './workflow';
+
+/** A day typed or linked as `YYYY-MM-DD`; anything else is ignored rather than failing the page. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 const MAX_ROUNDS_PER_SYNC = 20;
 
@@ -526,8 +530,8 @@ function filterConditions(f: OrderFilters): SQL[] {
     );
   }
   if (f.tag) where.push(sql`exists (select 1 from json_each(${orders.tags}) t where t.value = ${f.tag})`);
-  if (f.from) where.push(gte(orders.placedAt, new Date(f.from)));
-  if (f.to) where.push(lte(orders.placedAt, new Date(`${f.to}T23:59:59`)));
+  if (f.from && DAY.test(f.from)) where.push(gte(orders.placedAt, dayStart(f.from)));
+  if (f.to && DAY.test(f.to)) where.push(lte(orders.placedAt, dayEnd(f.to)));
   if (f.carrier) {
     where.push(
       sql`exists (select 1 from ${shipments} s where s.order_id = ${orders.id} and s.carrier = ${f.carrier} and s.state <> 'cancelled')`,

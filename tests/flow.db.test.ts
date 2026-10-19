@@ -590,6 +590,61 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(Math.max(...[...byProduct.values()].map((p) => p.units))).toBe(ranked[0].units);
   });
 
+  it('filters orders by shop days: both ends included, midnight in Warsaw, junk ignored', async () => {
+    const { dayEnd, dayStart } = await import('@/lib/analytics/window');
+    const all = await m.orders.listOrders({ page: 1 });
+    expect(all.total).toBeGreaterThan(3);
+    const sample = all.rows[0].order.placedAt;
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw' }).format(sample);
+    const only = await m.orders.listOrders({ from: day, to: day, page: 1 });
+    expect(only.rows.length).toBeGreaterThan(0);
+    for (const r of only.rows) expect(r.order.placedAt.getTime()).toBeGreaterThanOrEqual(dayStart(day).getTime());
+    for (const r of only.rows) expect(r.order.placedAt.getTime()).toBeLessThanOrEqual(dayEnd(day).getTime());
+    expect(only.rows.map((r) => r.order.id)).toContain(all.rows[0].order.id);
+    expect((await m.orders.listOrders({ from: '2001-01-01', to: '2001-01-02', page: 1 })).total).toBe(0);
+    expect((await m.orders.listOrders({ from: 'garbage', to: 'nonsense', page: 1 })).total).toBe(all.total);
+  });
+
+  it('rates products over any two dates, not only the last days', async () => {
+    const { productStats } = await import('@/server/services/product-stats');
+    const now = new Date();
+    const at = (daysAgo: number) => new Date(now.getTime() - daysAgo * 86_400_000);
+    const whole = await productStats({ from: at(90), to: now }, now);
+    const early = await productStats({ from: at(90), to: at(45) }, now);
+    const late = await productStats({ from: new Date(at(45).getTime() + 1), to: now }, now);
+    expect(whole.byProduct.size).toBeGreaterThan(0);
+    for (const [id, p] of whole.byProduct) expect((early.byProduct.get(id)?.units ?? 0) + (late.byProduct.get(id)?.units ?? 0)).toBe(p.units);
+    // The same as the rolling form, and nothing before the first order or after now.
+    const rolling = await productStats(90, now);
+    for (const [id, p] of rolling.byProduct) expect(whole.byProduct.get(id)?.units).toBe(p.units);
+    expect((await productStats({ from: at(-30), to: at(-20) }, now)).byProduct.size).toBe(0);
+    const margins = await (await import('@/server/analytics/dataset')).productMargins({ from: at(-30), to: at(-20) });
+    expect(margins.size).toBe(0);
+  });
+
+  it('prices over last week and over typed dates', async () => {
+    const { buildPricingWorkspace } = await import('@/lib/analytics/pricing');
+    const { lastWeekRange } = await import('@/lib/analytics/period');
+    const { brandOf } = await import('@/lib/analytics/orders');
+    const { buildAnalyticsView } = await import('@/server/analytics/view');
+    const view = await buildAnalyticsView({ period: 'all' }, true);
+    const base = { orders: view.data.orders, costs: view.data.costs, dimension: 'product' as const, anchor: new Date(), brandOf };
+    const units = (rows: { unitsInWindow: number }[]) => rows.reduce((sum, r) => sum + r.unitsInWindow, 0);
+
+    const all = buildPricingWorkspace({ ...base, period: 'all' });
+    const everything = buildPricingWorkspace({ ...base, period: 'custom', custom: { from: new Date(0), to: new Date(Date.now() + 86_400_000) } });
+    expect(everything.rows.map((r) => r.key)).toEqual(all.rows.map((r) => r.key));
+    expect(units(everything.rows)).toBe(units(all.rows));
+    expect(units(all.rows)).toBeGreaterThan(0);
+
+    const nothing = buildPricingWorkspace({ ...base, period: 'custom', custom: { from: new Date('2001-01-01'), to: new Date('2001-01-31') } });
+    expect(nothing.rows).toHaveLength(0);
+
+    const week = lastWeekRange(base.anchor);
+    const expected = view.data.orders.flatMap((o) => o.items).filter((l) => l.isComplete && l.date && l.date >= week.from && l.date <= week.to).reduce((sum, l) => sum + l.qty, 0);
+    expect(units(buildPricingWorkspace({ ...base, period: 'lastWeek' }).rows)).toBe(expected);
+  });
+
   it('reports analytics over the stored orders', async () => {
     const data = await m.analytics.analytics({ from: new Date(Date.now() - 30 * 86_400_000), to: new Date(Date.now() + 60_000) });
     expect(data.kpis.orders).toBeGreaterThan(30);

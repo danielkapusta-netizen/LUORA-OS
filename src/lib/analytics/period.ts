@@ -152,6 +152,12 @@ export function parseCustomRange(from: string | undefined, to: string | undefine
   return { from: start, to: endOfDay(end) }
 }
 
+/** The whole of the previous Monday-to-Sunday week, relative to `anchor`. */
+export function lastWeekRange(anchor: Date): CustomRange {
+  const from = addDays(startOfWeek(anchor), -7)
+  return { from, to: endOfDay(addDays(from, 6)) }
+}
+
 export function resolvePeriod(
   key: PeriodKey,
   lastOrder: Date | null,
@@ -181,9 +187,8 @@ export function resolvePeriod(
       label = 'This week'
       break
     case 'lastweek':
-      // The whole of the previous Monday-to-Sunday week.
-      from = addDays(startOfWeek(anchor), -7)
-      to = endOfDay(addDays(from, 6))
+      from = lastWeekRange(anchor).from
+      to = lastWeekRange(anchor).to
       label = 'Last week'
       break
     case 'month':

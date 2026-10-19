@@ -31,6 +31,7 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - Inventory, Pricing and Shipments rows become cards, so stock, price and the packing tick are in reach without scrolling sideways. Buttons and fields are at least 40 to 44 px tall.
 - **Analytics:** revenue per day by marketplace, average order value, top products, labels by carrier, time to ship, and the open backlog.
   - The period picker on the Dashboard and the Analytics tabs offers Week, **Last week** (the previous Monday to Sunday), Month, Quarter, Year, All time and **Custom**: two dates, both days included. Every period is compared with the same number of days just before it.
+  - **Last week** and **Custom** are everywhere time is chosen: Analytics → Operations, Analytics → Pricing (its window), Inventory (sales tiles and rankings) and the Orders filter, which also has one-tap Today, Yesterday, This week, Last week and This month. Operations, Inventory and Orders count days as Warsaw days (midnight to midnight), like the day columns of the Operations chart.
 
 ## Runs on Cloudflare
 

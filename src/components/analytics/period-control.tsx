@@ -1,4 +1,4 @@
-// The period picker of the Dashboard and the Analytics tabs: preset pills, and a "Custom" button that opens two dates.
+// The time picker of the Dashboard, the Analytics tabs and Inventory: preset pills, and a "Custom" button that opens two dates.
 import Link from 'next/link';
 import { Input } from '@/components/ui';
 import type { PeriodKey } from '@/lib/analytics/period';
@@ -21,9 +21,81 @@ function shortDay(day: string): string {
 }
 
 /**
- * `current` is every query parameter of the page (marketplace, sorting, ...); choosing a preset keeps them and drops any
- * custom dates, and applying custom dates keeps them and drops the preset.
+ * `current` is every query parameter of the page (marketplace, sorting, ...). Choosing a preset sets `param` and drops any
+ * custom dates; applying custom dates sets `from`/`to` and drops the preset. Parameters in `reset` (a page number)
+ * are dropped on either, since they no longer mean the same thing.
  */
+export function RangeControl({
+  path,
+  current,
+  presets,
+  active,
+  param = 'period',
+  custom,
+  reset = [],
+  help = 'Both days are included.',
+  label = 'Period',
+}: {
+  path: string;
+  current: Record<string, string | undefined>;
+  presets: { value: string; label: string }[];
+  /** The preset in force; ignored while `custom` is set. */
+  active: string;
+  /** The query parameter that carries the preset. */
+  param?: string;
+  /** The custom range in force, `YYYY-MM-DD`. */
+  custom?: { from: string; to: string };
+  reset?: string[];
+  help?: string;
+  label?: string;
+}) {
+  const drop = [param, 'from', 'to', ...reset];
+  const kept = Object.entries(current).filter(([k, v]) => v && !drop.includes(k)) as [string, string][];
+  const cleared = Object.fromEntries(reset.map((k) => [k, undefined]));
+  return (
+    <div className="relative inline-block">
+      <nav aria-label={label} className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
+        {presets.map((o) => (
+          <Link
+            key={o.value}
+            href={hrefWith(path, current, { ...cleared, [param]: o.value, from: undefined, to: undefined })}
+            aria-current={!custom && o.value === active ? 'true' : undefined}
+            className={cn(pill, !custom && o.value === active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100')}
+          >
+            {o.label}
+          </Link>
+        ))}
+        <details>
+          <summary
+            className={cn(pill, 'cursor-pointer list-none', custom ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100')}
+            aria-label={custom ? `Custom range: ${shortDay(custom.from)} to ${shortDay(custom.to)}` : 'Custom range'}
+          >
+            {custom ? `${shortDay(custom.from)} – ${shortDay(custom.to)}` : 'Custom'}
+          </summary>
+          <form action={path} className="absolute left-0 z-20 mt-2 w-[min(92vw,22rem)] space-y-3 rounded-2xl border border-black/5 bg-white p-4 text-slate-900 shadow-lg">
+            {kept.map(([k, v]) => (
+              <input key={k} type="hidden" name={k} value={v} />
+            ))}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-slate-600">From</span>
+                <Input type="date" name="from" defaultValue={custom?.from} required />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-slate-600">To</span>
+                <Input type="date" name="to" defaultValue={custom?.to} required />
+              </label>
+            </div>
+            <p className="text-xs text-slate-500">{help}</p>
+            <button className="inline-flex h-9 w-full items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white hover:bg-brand-700 max-md:h-11">Show these dates</button>
+          </form>
+        </details>
+      </nav>
+    </div>
+  );
+}
+
+/** The period picker of the Dashboard and the Analytics tabs, driven by the `period` parameter. */
 export function PeriodControl({
   path,
   current,
@@ -38,47 +110,6 @@ export function PeriodControl({
   from?: string;
   to?: string;
 }) {
-  const custom = periodKey === 'custom' && Boolean(from && to);
-  const kept = Object.entries(current).filter(([k, v]) => v && !['period', 'from', 'to'].includes(k)) as [string, string][];
-  return (
-    <div className="relative inline-block">
-      <nav aria-label="Period" className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
-        {PERIOD_PRESETS.map((o) => (
-          <Link
-            key={o.value}
-            href={hrefWith(path, current, { period: o.value, from: undefined, to: undefined })}
-            aria-current={o.value === periodKey ? 'true' : undefined}
-            className={cn(pill, o.value === periodKey ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100')}
-          >
-            {o.label}
-          </Link>
-        ))}
-        <details>
-          <summary
-            className={cn(pill, 'cursor-pointer list-none', custom ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100')}
-            aria-label={custom ? `Custom range: ${shortDay(from!)} to ${shortDay(to!)}` : 'Custom range'}
-          >
-            {custom ? `${shortDay(from!)} – ${shortDay(to!)}` : 'Custom'}
-          </summary>
-          <form action={path} className="absolute left-0 z-20 mt-2 w-[min(92vw,22rem)] space-y-3 rounded-2xl border border-black/5 bg-white p-4 text-slate-900 shadow-lg">
-            {kept.map(([k, v]) => (
-              <input key={k} type="hidden" name={k} value={v} />
-            ))}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600">From</span>
-                <Input type="date" name="from" defaultValue={from} required />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600">To</span>
-                <Input type="date" name="to" defaultValue={to} required />
-              </label>
-            </div>
-            <p className="text-xs text-slate-500">Both days are included, and compared with the same number of days just before.</p>
-            <button className="inline-flex h-9 w-full items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white hover:bg-brand-700 max-md:h-11">Show these dates</button>
-          </form>
-        </details>
-      </nav>
-    </div>
-  );
+  const custom = periodKey === 'custom' && from && to ? { from, to } : undefined;
+  return <RangeControl path={path} current={current} presets={PERIOD_PRESETS} active={periodKey} custom={custom} help="Both days are included, and compared with the same number of days just before." />;
 }
