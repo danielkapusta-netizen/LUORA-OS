@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/server/auth';
 import { labelReadyCount, ordersToShipByCourier, statusCounts } from '@/server/services/orders';
 import { listTasks } from '@/server/services/tasks';
+import { MyTasksHeading, TASK_LIMIT, tasksCardTone } from '@/components/tasks/my-tasks-heading';
 
 const TILES = [
   { status: 'new', label: 'New' },
@@ -18,7 +19,7 @@ const TILES = [
 
 /** The Dashboard for roles without analytics: orders to do, tasks, and who is carrying the parcels. No money anywhere. */
 export async function LogisticsDashboard({ user }: { user: SessionUser }) {
-  const [counts, labelReady, couriers, tasks] = await Promise.all([statusCounts(), labelReadyCount(), ordersToShipByCourier(), listTasks({ assignee: user.id, status: 'open', limit: 40 })]);
+  const [counts, labelReady, couriers, tasks] = await Promise.all([statusCounts(), labelReadyCount(), ordersToShipByCourier(), listTasks({ assignee: user.id, status: 'open', limit: TASK_LIMIT })]);
   const todayKey = warsawToday();
   const due = tasks.filter((t) => ['overdue', 'today'].includes(dueState(t, todayKey)));
   const brief = buildLogisticsBrief({ counts, couriers, tasksDue: due.length, tasksOpen: tasks.length }, user.name.split(' ')[0], warsawHour());
@@ -67,14 +68,9 @@ export async function LogisticsDashboard({ user }: { user: SessionUser }) {
           )}
         </Card>
 
-        <Card>
+        <Card className={tasksCardTone(tasks.length)}>
           <CardBody className="space-y-2">
-            <p className="flex items-center justify-between text-sm font-semibold">
-              My tasks
-              <Link href="/tasks?who=me" className="text-xs font-normal text-brand-700 hover:underline">
-                All tasks →
-              </Link>
-            </p>
+            <MyTasksHeading count={tasks.length} limit={TASK_LIMIT} />
             {tasks.length ? (
               <ul className="space-y-1 text-sm">
                 {tasks.slice(0, 6).map((task) => {

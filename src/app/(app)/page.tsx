@@ -17,6 +17,7 @@ import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { labelReadyCount, statusCounts } from '@/server/services/orders';
 import { allCustomers, orderDatesByCustomer } from '@/server/services/customers';
 import { listTasks } from '@/server/services/tasks';
+import { MyTasksHeading, TASK_LIMIT, tasksCardTone } from '@/components/tasks/my-tasks-heading';
 import { dayLabel, today as warsawToday } from '@/lib/tasks/dates';
 import { dueState } from '@/lib/tasks/model';
 import { overdueCustomers, repeatStats } from '@/lib/crm/segments';
@@ -35,7 +36,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const user = await requireUser();
   if (!can(user.role, 'fullDashboard')) return <LogisticsDashboard user={user} />;
   const params = await searchParams;
-  const [view, counts, labelReady, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), labelReadyCount(), listTasks({ assignee: user.id, status: 'open', limit: 40 }), allCustomers(), orderDatesByCustomer()]);
+  const [view, counts, labelReady, tasks, customerList, dates] = await Promise.all([analyticsView(params), statusCounts(), labelReadyCount(), listTasks({ assignee: user.id, status: 'open', limit: TASK_LIMIT }), allCustomers(), orderDatesByCustomer()]);
   const todayKey = warsawToday();
   const repeat = repeatStats(customerList, dates);
   const byCustomer = new Map(customerList.map((c) => [c.id, c]));
@@ -73,14 +74,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       {(tasks.length > 0 || repeat.customers > 0) && (
         <section aria-label="Customers" className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr_1fr]">
-          <Card>
+          <Card className={tasksCardTone(tasks.length)}>
             <CardBody className="space-y-2">
-              <p className="flex items-center justify-between text-sm font-semibold">
-                My tasks
-                <Link href="/tasks?who=me" className="text-xs font-normal text-brand-700 hover:underline">
-                  All tasks →
-                </Link>
-              </p>
+              <MyTasksHeading count={tasks.length} limit={TASK_LIMIT} />
               {tasks.length ? (
                 <ul className="space-y-1 text-sm">
                   {tasks.slice(0, 5).map((task) => {
