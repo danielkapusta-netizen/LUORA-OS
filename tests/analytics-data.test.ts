@@ -10,7 +10,7 @@ import { AllegroAdapter, allegroFeeKind } from '@/server/integrations/marketplac
 import type { AllegroCredentials } from '@/server/integrations/marketplaces/allegro/client';
 import { mapAllegroCheckoutForm } from '@/server/integrations/marketplaces/allegro/mapper';
 import { EmpikAdapter } from '@/server/integrations/marketplaces/empik/adapter';
-import { mapMiraklOrder } from '@/server/integrations/marketplaces/empik/mapper';
+import { mapMiraklOrder } from '@/server/integrations/marketplaces/mirakl/mapper';
 import { ShopifyAdapter } from '@/server/integrations/marketplaces/shopify/adapter';
 import { mapShopifyOrder } from '@/server/integrations/marketplaces/shopify/mapper';
 import { createProductResolver, parseAmount, parseCostLines } from '@/server/services/costs';

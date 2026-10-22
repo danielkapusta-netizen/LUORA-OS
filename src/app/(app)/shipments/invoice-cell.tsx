@@ -43,7 +43,7 @@ export function InvoiceCell({ orderId, marketplace, invoice, uploads }: { orderI
 
   // Issued.
   const place = MARKETPLACE_LABELS[marketplace] ?? marketplace;
-  const toUpload = uploads && (marketplace === 'allegro' || marketplace === 'empik');
+  const toUpload = uploads && (marketplace === 'allegro' || marketplace === 'empik' || marketplace === 'hebe');
   return (
     <div className="space-y-1">
       {invoice.r2Key ? (

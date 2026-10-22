@@ -99,9 +99,9 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     await expect(m.offers.publishOffers(empikId, Array.from({ length: 26 }, (_, i) => String(i)))).rejects.toThrow('at most 25');
   });
 
-  it('only works for Allegro and Empik accounts', async () => {
+  it('only works for Allegro, Empik and HEBE accounts', async () => {
     const shopify = (await m.db.getDb().select().from(m.schema.marketplaceAccounts)).find((a) => a.type === 'shopify')!;
-    await expect(m.offers.publishPreview(shopify.id)).rejects.toThrow('Allegro and Empik accounts');
+    await expect(m.offers.publishPreview(shopify.id)).rejects.toThrow('Allegro, Empik and HEBE accounts');
     expect(allegroId).toBeTruthy();
   });
 });

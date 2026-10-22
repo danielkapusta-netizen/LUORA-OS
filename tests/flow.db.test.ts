@@ -393,7 +393,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(shopifyOrder && allegroOrder).toBeTruthy();
 
     // The Accounting page's rule is unchanged: a buyer who didn't ask gets no invoice from there.
-    await expect(invoicing.requestInvoice(shopifyOrder.id, userId)).rejects.toThrow('only issued for Allegro and Empik');
+    await expect(invoicing.requestInvoice(shopifyOrder.id, userId)).rejects.toThrow('only issued for Allegro, Empik and HEBE');
     await expect(invoicing.requestInvoice(allegroOrder.id, userId)).rejects.toThrow('did not ask for an invoice');
 
     // Made out to the delivery address as a private buyer.
@@ -558,6 +558,43 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       const listings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, id));
       expect(listings.length).toBeGreaterThan(0);
       // Same EAN as the Shopify product, so every offer is linked.
+      expect(listings.every((l) => l.productId && l.ean)).toBe(true);
+
+      const push = await m.inventory.runStockPush(id);
+      expect(push).toMatchObject({ dryRun: true });
+    } finally {
+      await settings.deleteMarketplaceAccount(id);
+      queue.length = 0; // jobs for the removed account
+    }
+  });
+
+  it('connects HEBE: orders arrive and are accepted, offers match Shopify products by EAN, stock goes out', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const settings = await import('@/server/services/settings');
+    const id = await settings.saveMarketplaceAccount({
+      type: 'hebe',
+      name: 'HEBE (test)',
+      credentials: { baseUrl: 'https://hebe.mirakl.test', apiKey: 'k' },
+      settings: {},
+      enabled: true,
+      stockSyncEnabled: true,
+      stockDryRun: true,
+    });
+    try {
+      const summary = await m.orders.syncAccount(id);
+      expect(summary.created).toBeGreaterThan(0);
+      const hebe = await db.select().from(s.orders).where(orm.eq(s.orders.accountId, id));
+      expect(hebe.every((o) => o.marketplace === 'hebe')).toBe(true);
+
+      const waiting = hebe.find((o) => o.marketplaceStatus === 'WAITING_ACCEPTANCE')!;
+      await m.orders.acceptOrder(waiting.id, await adminId());
+      const [after] = await db.select().from(s.orders).where(orm.eq(s.orders.id, waiting.id));
+      expect(after).toMatchObject({ readyToShip: true, marketplaceStatus: 'SHIPPING' });
+
+      await m.inventory.importListings(id);
+      const listings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, id));
+      expect(listings.length).toBeGreaterThan(0);
       expect(listings.every((l) => l.productId && l.ean)).toBe(true);
 
       const push = await m.inventory.runStockPush(id);

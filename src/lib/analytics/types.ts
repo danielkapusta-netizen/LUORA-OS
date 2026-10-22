@@ -12,7 +12,7 @@
  */
 
 export type Currency = string
-export type Channel = 'shopify' | 'allegro' | 'empik' | 'vonhalsky'
+export type Channel = 'shopify' | 'allegro' | 'empik' | 'vonhalsky' | 'hebe'
 
 /** One product line within an order — one row of the source sheet. */
 export interface LineItem {

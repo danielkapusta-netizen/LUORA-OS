@@ -13,6 +13,7 @@ const CHANNELS: { value: Channel; label: string }[] = [
   { value: 'empik', label: 'Empik' },
   { value: 'shopify', label: 'Shopify' },
   { value: 'vonhalsky', label: 'Von Halsky' },
+  { value: 'hebe', label: 'HEBE' },
 ];
 
 const VERDICT = {

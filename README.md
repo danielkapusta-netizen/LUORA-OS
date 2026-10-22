@@ -1,6 +1,6 @@
 # Luora OS
 
-One place for every order from **Shopify, Allegro and Empik**, with shipping labels bought
+One place for every order from **Shopify, Allegro, Empik and HEBE**, with shipping labels bought
 through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
 
 - **Orders:** every marketplace in one list, synced every few minutes. You can filter, search, assign orders, tag them and add notes.
@@ -9,7 +9,7 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - Staff can override the carrier, service and parcel on any order.
   - Labels come as PDF or ZPL, in A6 or A4.
 - **Bulk labels:** select many orders, create all their labels at once, then print them as one PDF.
-- **Tracking writeback:** the tracking number goes back to the marketplace and the order is marked shipped. Shopify creates a fulfilment, Allegro gets the waybill and `SENT`, and Empik gets tracking plus a shipment confirmation.
+- **Tracking writeback:** the tracking number goes back to the marketplace and the order is marked shipped. Shopify creates a fulfilment, Allegro gets the waybill and `SENT`, and Empik and HEBE get tracking plus a shipment confirmation.
 - **Workflow:** `new → processing → shipped → delivered`, plus on hold and cancelled, with a full activity log on every order.
   - Creating a label does **not** move the order: it stays on the tab it is on (usually New) with a "Label ready" chip, until someone presses **Packed**. Then it moves to Shipped (once the tracking has reached the marketplace).
   - The **Label created** tab lists the orders that have a label but are not packed yet. Unticking Packed puts a shipped order back on New.
@@ -93,6 +93,7 @@ curl -X POST https://<your-app>/api/admin/seed   # first run only: creates the a
 | **Shopify** | Shop domain, Client ID, Client secret | Shopify **Dev Dashboard** → create an app, install it on the store. Since January 2026 new apps use client credentials, and tokens expire every 24 h (the app refreshes them automatically). A legacy `shpat_…` token also works. Scopes: `read_orders`, `read_products`, `write_products` (prices), `read_locations`, `write_inventory`, `write_merchant_managed_fulfillment_orders`. For the history import add `read_all_orders` (otherwise Shopify only returns the last 60 days). |
 | **Allegro** | Client ID, Client secret | [apps.developer.allegro.pl](https://apps.developer.allegro.pl) (or the sandbox). Set the redirect URI to `APP_URL/api/oauth/allegro/callback`, save the account, then press **Connect Allegro**. For fees and refunds in analytics the app also needs the **Billing (read)** and **Payments (read)** permissions; after enabling them press **Connect Allegro** again. |
 | **Empik** | Marketplace URL, API key | Empik seller panel → My account → API key (Empik runs on Mirakl). |
+| **HEBE** | Marketplace URL, API key | HEBE seller panel (Mirakl) → your user menu → API key. The Marketplace URL is the seller panel's address, without `/api`; HEBE gives it with the seller account. |
 | **InPost** | API token, Organization ID | InPost Manager Paczek → My account → API (ShipX). A sandbox is available. |
 | **Allegro Delivery** | A connected Allegro account, an IBAN for cash on delivery | No extra keys: it uses the Allegro account's connection. |
 
@@ -107,8 +108,8 @@ Profit per order needs more than the order itself. This is where each part comes
 | Data | Source |
 |---|---|
 | Past orders | **Settings → Integrations → (account) → Import past orders.** A one-off, resumable import of every past order. Past orders are stored with `historical = true` and status Shipped or Cancelled: they never get labels, invoices or stock movements. Open orders from the last few days are left to the regular sync. |
-| Marketplace fees | Empik commission and Shopify Payments fees come inside the order. Allegro commission, Smart delivery and promotion charges come from `/billing/billing-entries`, read every two hours (`fees-sync`). Stored in `order_fees`, one row per charge, keyed by the provider's id. |
-| Refunds | Shopify and Empik refunds come inside the order; Allegro refunds from `/payments/refunds`. Stored in `order_refunds`. |
+| Marketplace fees | Empik and HEBE commission and Shopify Payments fees come inside the order. Allegro commission, Smart delivery and promotion charges come from `/billing/billing-entries`, read every two hours (`fees-sync`). Stored in `order_fees`, one row per charge, keyed by the provider's id. |
+| Refunds | Shopify, Empik and HEBE refunds come inside the order; Allegro refunds from `/payments/refunds`. Stored in `order_refunds`. |
 | Discounts | Per line (`order_items.discount_amount`) and per order. Prices stay as paid. |
 | Exchange rates | NBP table A, stored per day in `fx_rates` (`fx-sync`, nightly). Each order converts at the rate of its day. |
 | Product costs | **Settings → Costs & margins.** Landed cost per unit in PLN, dated so that a new cost never rewrites past margins. Enter it by hand (or from a purchase price in USD/EUR/KRW at the NBP rate), paste two columns from a spreadsheet, import the Luora Analytics Google Sheet once, or take Shopify's "Cost per item". |
@@ -146,12 +147,12 @@ What the team has to do, who is on it and when (`/tasks`, in the sidebar with a 
 
 Dates are plain Warsaw days (`YYYY-MM-DD`) and times (`HH:MM`), so the calendar needs no time-zone arithmetic. The code is in `services/tasks.ts` (database), `src/lib/tasks/` (dates, colours, grouping and figures, with no database) and `src/components/tasks/`.
 
-## Publishing products to Allegro and Empik
+## Publishing products to Allegro, Empik and HEBE
 
-Inventory → **Publish to Allegro / Empik** (admins) lists the Shopify products that have no offer in that account yet, and creates offers for the ones you tick (25 at a time). Only products the marketplace's catalogue already knows by EAN can be listed; others show "Not in the catalogue". Price = Shopify price + the account's markup % (Settings → Integrations → the account → "Offers created from Shopify"), stock = the master stock; once the offer exists the normal stock sync takes over.
+Inventory → **Publish to Allegro / Empik / HEBE** (admins) lists the Shopify products that have no offer in that account yet, and creates offers for the ones you tick (25 at a time). Only products the marketplace's catalogue already knows by EAN can be listed; others show "Not in the catalogue". Price = Shopify price + the account's markup % (Settings → Integrations → the account → "Offers created from Shopify"), stock = the master stock; once the offer exists the normal stock sync takes over.
 
 - **Allegro:** the Allegro app needs the permissions "Offers: read and write" and "Seller settings: read" (reconnect Allegro after enabling them). In the account settings press "Load choices from Allegro", then pick the shipping rates, return policy and implied warranty, and fill in where the goods are sent from. Offers are published at once unless "create as drafts" is ticked.
-- **Empik:** offers are sent with an OF01 import for the EAN; the offer state code defaults to 11 (new).
+- **Empik and HEBE:** offers are sent with an OF01 import for the EAN; the offer state code defaults to 11 (new).
 
 ## Purchase invoices
 
@@ -206,7 +207,7 @@ Why each API endpoint was chosen:
 | Marketplace / carrier | Endpoints |
 |---|---|
 | **Allegro** | `/order/events` journal plus `/order/checkout-forms`; `/shipment-management/*` for labels |
-| **Empik (Mirakl)** | OR11 (orders), OR21 (accept), OR23 + OR24 (tracking and shipment). Stock uses the **STO01** CSV import, not OF24, because OF24 resets every offer field you don't send. |
+| **Empik and HEBE (Mirakl)** | One adapter for both (`marketplaces/mirakl/`), with each marketplace's names in `empik/` and `hebe/`. OR11 (orders), OR21 (accept), OR23 + OR24 (tracking and shipment), OR74 (invoices), SH21 (carriers). Stock uses the **STO01** CSV import, not OF24, because OF24 resets every offer field you don't send. Empik publishes its carrier codes; HEBE doesn't, so its carriers are always looked up in its SH21 list. |
 | **InPost ShipX** | `POST /v1/organizations/{id}/shipments`, polled until `confirmed`. InPost is moving merchants to its new Global API; that would be one more adapter behind the same interface. |
 
 ## Testing
@@ -224,7 +225,7 @@ The adapter tests check requests and responses against payloads written from eac
 
 - InPost parcel and address options,
 - Allegro shipment-management package fields,
-- Mirakl carrier codes.
+- Mirakl carrier codes, and the HEBE order fields that carry the buyer's NIP and Paczkomat (`hebe/adapter.ts`).
 
 ## Project layout
 

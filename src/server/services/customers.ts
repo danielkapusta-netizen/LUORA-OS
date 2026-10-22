@@ -45,9 +45,9 @@ export function identityKeys(o: Pick<Order, 'marketplace' | 'buyer' | 'shippingA
   if (o.marketplace === 'allegro') {
     const id = raw.buyer?.id ?? raw.buyer?.login ?? o.buyer.login;
     if (id) keys.push({ kind: 'allegro', value: String(id) });
-  } else if (o.marketplace === 'empik') {
+  } else if (o.marketplace === 'empik' || o.marketplace === 'hebe') {
     const id = raw.customer?.customer_id;
-    if (id !== undefined && id !== null && String(id)) keys.push({ kind: 'empik', value: String(id) });
+    if (id !== undefined && id !== null && String(id)) keys.push({ kind: o.marketplace, value: String(id) });
   }
   const email = realEmail(o.buyer.email) ?? realEmail(o.shippingAddress.email);
   if (email) keys.push({ kind: 'email', value: email });

@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin, requireUser } from '@/server/auth';
-import type { CarrierSettings, MarketplaceSettings, RuleConditions } from '@/server/db/schema';
+import type { CarrierSettings, MarketplaceAccount, MarketplaceSettings, RuleConditions } from '@/server/db/schema';
 import { enqueue, JOBS } from '@/server/jobs/queue';
 import { resetFeeCursor } from '@/server/services/fees';
 import { startHistoryImport, stopHistoryImport } from '@/server/services/history';
@@ -18,7 +18,7 @@ import {
   deletePreset,
   deleteRule,
   deleteUser,
-  empikCarriers,
+  miraklCarriers,
   removeDemoData,
   resetPassword,
   saveCarrierAccount,
@@ -44,7 +44,7 @@ function secrets(fd: FormData, names: string[]): Record<string, string> {
 
 // ---------------------------------------------------------------- marketplaces
 
-/** Markup, rounding and handling time of offers created from Shopify (Allegro and Empik). */
+/** Markup, rounding and handling time of offers created from Shopify (Allegro, Empik and HEBE). */
 function readOfferSettings(fd: FormData, settings: MarketplaceSettings) {
   settings.offerMarkupPercent = Number(text(fd, 'offerMarkupPercent').replace(',', '.')) || 0;
   const rounding = text(fd, 'offerRounding');
@@ -54,7 +54,7 @@ function readOfferSettings(fd: FormData, settings: MarketplaceSettings) {
 
 export async function saveMarketplaceAction(id: string | null, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
-  const type = text(fd, 'type') as 'shopify' | 'allegro' | 'empik' | 'vonhalsky';
+  const type = text(fd, 'type') as MarketplaceAccount['type'];
   const settings: MarketplaceSettings = { initialSyncDays: Number(text(fd, 'initialSyncDays')) || 14 };
   let credentials: Record<string, unknown> = {};
 
@@ -92,7 +92,7 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
     const dim = (name: string, fallback: number) => Number(text(fd, name).replace(',', '.')) || fallback;
     settings.vhBox = { width: dim('vhBoxWidth', 10), height: dim('vhBoxHeight', 10), length: dim('vhBoxLength', 5) };
     settings.vhDaysToShip = Math.max(0, Math.floor(Number(text(fd, 'vhDaysToShip')) || 1));
-  } else if (type === 'empik') {
+  } else if (type === 'empik' || type === 'hebe') {
     credentials = { baseUrl: text(fd, 'baseUrl'), ...secrets(fd, ['apiKey']), ...(text(fd, 'shopId') ? { shopId: text(fd, 'shopId') } : {}) };
     settings.autoAccept = bool(fd, 'autoAccept');
     readOfferSettings(fd, settings);
@@ -139,12 +139,12 @@ export async function deleteMarketplaceAction(id: string): Promise<void> {
   backWith('Account deleted');
 }
 
-export async function refreshEmpikCarriersAction(id: string): Promise<ActionResult> {
+export async function refreshMiraklCarriersAction(id: string): Promise<ActionResult> {
   await requireAdmin();
   return attempt(async () => {
-    const carriers = await empikCarriers(id, true);
+    const carriers = await miraklCarriers(id, true);
     revalidatePath(`/settings/integrations/marketplace/${id}`);
-    return `Loaded ${carriers.length} carrier(s) from Empik`;
+    return `Loaded ${carriers.length} carrier(s) from the marketplace`;
   });
 }
 

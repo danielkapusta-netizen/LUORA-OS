@@ -44,7 +44,7 @@ export interface InvoiceLine {
   unitPrice: string;
 }
 
-const MARKETPLACE_NAMES: Record<string, string> = { allegro: 'Allegro', empik: 'Empik', shopify: 'Shopify' };
+const MARKETPLACE_NAMES: Record<string, string> = { allegro: 'Allegro', empik: 'Empik', hebe: 'HEBE', shopify: 'Shopify' };
 
 const cents = (v: string | number | null | undefined) => Math.round(Number(v ?? 0) * 100);
 

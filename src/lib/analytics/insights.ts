@@ -49,6 +49,7 @@ const CHANNEL_NAMES: Record<string, string> = {
   allegro: 'Allegro',
   empik: 'Empik',
   vonhalsky: 'Von Halsky',
+  hebe: 'HEBE',
 }
 
 export function channelName(source: string): string {

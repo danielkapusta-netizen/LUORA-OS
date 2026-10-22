@@ -10,8 +10,10 @@ import { MockCarrierAdapter } from '../integrations/carriers/mock/adapter';
 import type { CarrierAdapter } from '../integrations/carriers/types';
 import { AllegroAdapter } from '../integrations/marketplaces/allegro/adapter';
 import { AllegroClient, type AllegroCredentials } from '../integrations/marketplaces/allegro/client';
-import { EmpikAdapter } from '../integrations/marketplaces/empik/adapter';
-import type { EmpikCredentials } from '../integrations/marketplaces/empik/client';
+import { EMPIK } from '../integrations/marketplaces/empik/adapter';
+import { HEBE } from '../integrations/marketplaces/hebe/adapter';
+import { MiraklAdapter } from '../integrations/marketplaces/mirakl/adapter';
+import type { MiraklCredentials } from '../integrations/marketplaces/mirakl/client';
 import { MockMarketplaceAdapter } from '../integrations/marketplaces/mock/adapter';
 import { VonHalskyAdapter } from '../integrations/marketplaces/vonhalsky/adapter';
 import type { VonHalskyCredentials } from '../integrations/marketplaces/vonhalsky/client';
@@ -49,10 +51,11 @@ export function getMarketplaceAdapter(account: MarketplaceAccount): MarketplaceA
       return new AllegroAdapter(marketplaceCredentialStore<AllegroCredentials>(account), account.settings);
     case 'vonhalsky':
       return new VonHalskyAdapter(marketplaceCredentialStore<VonHalskyCredentials>(account), account.settings);
-    case 'empik': {
-      const creds = readCredentials<EmpikCredentials>(account.credentials);
+    case 'empik':
+    case 'hebe': {
+      const creds = readCredentials<MiraklCredentials>(account.credentials);
       if (!creds) throw new Error(`${account.name} has no API key yet. Add it in Settings → Integrations.`);
-      return new EmpikAdapter(creds, account.settings, async (next) => {
+      return new MiraklAdapter(account.type === 'hebe' ? HEBE : EMPIK, creds, account.settings, async (next) => {
         // Only the carrier cache changes here; merge into fresh settings so a concurrent edit isn't lost.
         const fresh = await loadMarketplaceAccount(account.id);
         await getDb()

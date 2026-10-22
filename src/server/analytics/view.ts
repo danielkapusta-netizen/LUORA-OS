@@ -29,7 +29,7 @@ export interface AnalyticsView {
   params: Record<string, string | undefined>;
 }
 
-const CHANNELS: Channel[] = ['shopify', 'allegro', 'empik', 'vonhalsky'];
+const CHANNELS: Channel[] = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe'];
 
 /** The view for the signed-in person: guarded by the analytics permission, with profit left out when they may not see it. */
 export async function analyticsView(p: ViewParams, fallback: PeriodKey = 'month'): Promise<AnalyticsView> {

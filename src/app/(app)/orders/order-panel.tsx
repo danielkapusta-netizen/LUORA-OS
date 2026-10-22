@@ -247,7 +247,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
                   Accounting
                 </Link>
               </p>
-            ) : order.status !== 'cancelled' && (order.marketplace === 'allegro' || order.marketplace === 'empik') ? (
+            ) : order.status !== 'cancelled' && (order.marketplace === 'allegro' || order.marketplace === 'empik' || order.marketplace === 'hebe') ? (
               <ActionForm action={createInvoiceAction.bind(null, order.id)} showOk={false}>
                 <SubmitButton size="sm" variant="secondary" className="mt-1.5 bg-white" pendingText="Requesting…">
                   <FileText className="size-3.5" /> Create invoice

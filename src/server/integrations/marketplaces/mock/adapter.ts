@@ -54,11 +54,15 @@ const DELIVERY: Record<Marketplace, { id: string; name: string; locker: boolean;
     { id: 'KURIER', name: 'Kurier InPost', locker: false },
   ],
   vonhalsky: [{ id: 'APM', name: 'InPost parcel locker', locker: true }],
+  hebe: [
+    { id: 'PACZKOMAT', name: 'Paczkomaty InPost', locker: true },
+    { id: 'KURIER', name: 'Kurier InPost', locker: false },
+  ],
 };
 
 /** Demo marketplaces charge a little more than the catalogue price, each its own amount. */
 function mockPrice(marketplace: Marketplace, base: number): string {
-  const extra: Record<Marketplace, number> = { shopify: 1, allegro: 1.05, empik: 1.08, vonhalsky: 1.1 };
+  const extra: Record<Marketplace, number> = { shopify: 1, allegro: 1.05, empik: 1.08, vonhalsky: 1.1, hebe: 1.07 };
   return (Math.round(base * extra[marketplace] * 100) / 100).toFixed(2);
 }
 
@@ -130,6 +134,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
       }
       case 'empik':
         return `${210_000 + index}-A`;
+      case 'hebe':
+        return `${310_000 + index}-A`;
       case 'vonhalsky':
         return `${hash(`${this.accountKey}-vh-${index}`).toString(16).padStart(8, '0')}-5e0b-4c1d-8f3a-${String(index).padStart(12, '0')}`;
     }
@@ -160,6 +166,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
         return [fee('commission', 'commission', 'Prowizja od sprzedaży', goods * 0.11), fee('delivery', 'delivery', 'Opłata za dostawę Allegro Smart', 5.49)];
       case 'empik':
         return items.map((i) => fee(`commission-${i.externalLineId}`, 'commission', 'Prowizja Empik', Number(i.unitPrice) * i.quantity * 0.15, i.externalLineId));
+      case 'hebe':
+        return items.map((i) => fee(`commission-${i.externalLineId}`, 'commission', 'Prowizja HEBE', Number(i.unitPrice) * i.quantity * 0.15, i.externalLineId));
       case 'vonhalsky':
         return [];
     }
@@ -188,7 +196,7 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
     const total = items.reduce((sum, i) => sum + Number(i.unitPrice) * i.quantity, 0) + shipping;
     const externalId = this.externalIdFor(index);
 
-    const waitingAcceptance = !past && this.marketplace === 'empik' && index % 5 === 0 && !accepted.has(externalId);
+    const waitingAcceptance = !past && (this.marketplace === 'empik' || this.marketplace === 'hebe') && index % 5 === 0 && !accepted.has(externalId);
     const cancelled = past && index % 19 === 3;
     const refunds: NormalizedRefund[] =
       past && !cancelled && index % 13 === 5

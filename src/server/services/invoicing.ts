@@ -30,12 +30,13 @@ import { isUniqueViolation } from './shipping';
 export class InvoicingError extends Error {}
 
 /** Marketplaces whose invoice requests are handled here. */
-export const INVOICED_MARKETPLACES = ['allegro', 'empik'] as const;
+export const INVOICED_MARKETPLACES = ['allegro', 'empik', 'hebe'] as const;
 
-export const DEFAULT_ACCOUNTING_SETTINGS: Required<Pick<AccountingSettings, 'autoOnShipped' | 'uploadAllegro' | 'uploadEmpik' | 'sendB2bToKsef' | 'defaultVatRate'>> = {
+export const DEFAULT_ACCOUNTING_SETTINGS: Required<Pick<AccountingSettings, 'autoOnShipped' | 'uploadAllegro' | 'uploadEmpik' | 'uploadHebe' | 'sendB2bToKsef' | 'defaultVatRate'>> = {
   autoOnShipped: false,
   uploadAllegro: true,
   uploadEmpik: true,
+  uploadHebe: true,
   sendB2bToKsef: true,
   defaultVatRate: 0.23,
 };
@@ -97,14 +98,17 @@ async function orderLines(orderId: string) {
     .orderBy(orderItems.externalLineId);
 }
 
-/** Only Allegro and Empik can receive an invoice; Shopify's invoice stays a PDF to download. */
+/** Only Allegro, Empik and HEBE can receive an invoice; Shopify's invoice stays a PDF to download. */
 export function isUploadable(marketplace: string): boolean {
   return (INVOICED_MARKETPLACES as readonly string[]).includes(marketplace);
 }
 
 /** Is a new invoice for this marketplace attached to the order automatically? (Shopify never is.) */
-export function uploadEnabled(marketplace: string, settings: Pick<AccountingSettings, 'uploadAllegro' | 'uploadEmpik'>): boolean {
-  return marketplace === 'allegro' ? Boolean(settings.uploadAllegro) : marketplace === 'empik' ? Boolean(settings.uploadEmpik) : false;
+export function uploadEnabled(marketplace: string, settings: Pick<AccountingSettings, 'uploadAllegro' | 'uploadEmpik' | 'uploadHebe'>): boolean {
+  if (marketplace === 'allegro') return Boolean(settings.uploadAllegro);
+  if (marketplace === 'empik') return Boolean(settings.uploadEmpik);
+  if (marketplace === 'hebe') return Boolean(settings.uploadHebe);
+  return false;
 }
 
 /**
@@ -130,7 +134,7 @@ export function invoiceRequestFor(order: Pick<Order, 'invoiceRequest' | 'shippin
  * Queues the invoice for one order. Orders that need a person (foreign company, discount, …) get a
  * "manual" entry with the reason instead. Returns the invoice id.
  *
- * Normally only for Allegro / Empik orders whose buyer asked for an invoice (the Accounting page);
+ * Normally only for Allegro / Empik / HEBE orders whose buyer asked for an invoice (the Accounting page);
  * with `anyOrder` for every order, as the button on the Shipments page does.
  */
 export async function requestInvoice(orderId: string, userId: string | null, opts: { anyOrder?: boolean } = {}): Promise<string> {
@@ -140,7 +144,7 @@ export async function requestInvoice(orderId: string, userId: string | null, opt
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
   if (!order) throw new InvoicingError('Order not found');
   if (!opts.anyOrder) {
-    if (!isUploadable(order.marketplace)) throw new InvoicingError('Invoices are only issued for Allegro and Empik orders');
+    if (!isUploadable(order.marketplace)) throw new InvoicingError('Invoices are only issued for Allegro, Empik and HEBE orders');
     if (!order.invoiceRequest) throw new InvoicingError(`The buyer of order ${order.externalNumber} did not ask for an invoice`);
   }
   if (order.status === 'cancelled') throw new InvoicingError(`Order ${order.externalNumber} is cancelled`);
@@ -260,7 +264,7 @@ async function readPdf(invoice: Invoice): Promise<Buffer | null> {
   return object ? Buffer.from(await object.arrayBuffer()) : null;
 }
 
-/** Job: attaches the PDF to the Allegro / Empik order. Throws so the queue retries. */
+/** Job: attaches the PDF to the Allegro / Empik / HEBE order. Throws so the queue retries. */
 export async function runUploadInvoice(invoiceId: string): Promise<void> {
   const db = getDb();
   let [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));

@@ -17,7 +17,7 @@ import { addNoteAction, addTaskAction, saveTagsAction, toggleTaskAction } from '
 
 export const metadata: Metadata = { title: 'Customer' };
 
-const IDENTITY_LABELS: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro buyer', empik: 'Empik customer', vonhalsky: 'Von Halsky', email: 'E-mail' };
+const IDENTITY_LABELS: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro buyer', empik: 'Empik customer', vonhalsky: 'Von Halsky', hebe: 'HEBE customer', email: 'E-mail' };
 const DAY = 86_400_000;
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -170,7 +170,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
               </div>
               <p className="text-xs text-slate-500">
                 Customer since {c.firstOrderAt ? formatDate(c.firstOrderAt, false) : '—'}
-                {c.marketplaces.some((m) => m === 'allegro' || m === 'empik') && ' · Allegro and Empik buyer data may only be used to fulfil their orders, not for your own marketing.'}
+                {c.marketplaces.some((m) => m === 'allegro' || m === 'empik' || m === 'hebe') && ' · Allegro, Empik and HEBE buyer data may only be used to fulfil their orders, not for your own marketing.'}
               </p>
             </CardBody>
           </Card>

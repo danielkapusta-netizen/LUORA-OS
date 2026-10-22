@@ -27,7 +27,7 @@ const percent = (fd: FormData, name: string) => {
   return n === null ? undefined : n / 100;
 };
 
-const MARKETPLACES = ['allegro', 'empik', 'shopify', 'vonhalsky'] as const;
+const MARKETPLACES = ['allegro', 'empik', 'hebe', 'shopify', 'vonhalsky'] as const;
 
 export async function saveProfitSettingsAction(_prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();

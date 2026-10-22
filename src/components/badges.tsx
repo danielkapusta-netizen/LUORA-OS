@@ -23,6 +23,7 @@ const MARKETPLACE_TONES: Record<string, string> = {
   allegro: 'bg-orange-100 text-orange-800',
   empik: 'bg-emerald-100 text-emerald-800',
   vonhalsky: 'bg-amber-100 text-amber-900',
+  hebe: 'bg-pink-100 text-pink-800',
 };
 
 export function MarketplaceBadge({ marketplace }: { marketplace: string }) {

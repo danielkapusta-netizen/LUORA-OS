@@ -16,7 +16,7 @@ import { createMatcher, isClearSuggestion } from './matching';
 // ---------------------------------------------------------------- settings
 
 export const DEFAULT_ANALYTICS_SETTINGS: Required<AnalyticsSettings> = {
-  fallbackCommission: { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1 },
+  fallbackCommission: { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1, hebe: 0.15 },
   labelCosts: { inpost_locker_standard: 12.5, inpost_courier_standard: 15.5, allegro_shipping: 11 },
   defaultLabelCost: 12.5,
   packagingCost: 1.5,

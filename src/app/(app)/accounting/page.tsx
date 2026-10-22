@@ -60,7 +60,7 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       <AutoRefresh active={busy} />
       <PageHeader
         title="Accounting"
-        description="Invoices from ifirma for Allegro and Empik orders whose buyer asked for one. They're attached to the marketplace order, and companies' invoices go to KSeF."
+        description="Invoices from ifirma for Allegro, Empik and HEBE orders whose buyer asked for one. They're attached to the marketplace order, and companies' invoices go to KSeF."
       />
       {(!accounting.enabled || !accounting.configured) && (
         <div className="mb-4">

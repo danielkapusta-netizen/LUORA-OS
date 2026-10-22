@@ -2,8 +2,9 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import order from './fixtures/empik/order.json';
-import { buildStockCsv, EmpikAdapter, empikCarrierCode, resolveEmpikCarrier } from '@/server/integrations/marketplaces/empik/adapter';
-import { mapMiraklOrder, toAlpha2 } from '@/server/integrations/marketplaces/empik/mapper';
+import { EmpikAdapter, empikCarrierCode, resolveEmpikCarrier } from '@/server/integrations/marketplaces/empik/adapter';
+import { buildStockCsv } from '@/server/integrations/marketplaces/mirakl/adapter';
+import { mapMiraklOrder, toAlpha2 } from '@/server/integrations/marketplaces/mirakl/mapper';
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

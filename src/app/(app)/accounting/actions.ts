@@ -76,6 +76,7 @@ export async function saveAccountingAction(_prev: ActionResult, fd: FormData): P
     autoOnShipped: fd.get('mode') === 'auto',
     uploadAllegro: bool(fd, 'uploadAllegro'),
     uploadEmpik: bool(fd, 'uploadEmpik'),
+    uploadHebe: bool(fd, 'uploadHebe'),
     sendB2bToKsef: bool(fd, 'sendB2bToKsef'),
     numberingSeries: text(fd, 'numberingSeries') || undefined,
     placeOfIssue: text(fd, 'placeOfIssue') || undefined,

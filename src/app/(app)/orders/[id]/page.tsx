@@ -12,7 +12,7 @@ import { DueChip } from '@/components/tasks/chips';
 import { DoneToggle } from '@/components/tasks/done-toggle';
 import { NewTaskDialog } from '@/components/tasks/task-dialog';
 import { today as warsawToday } from '@/lib/tasks/dates';
-import { CARRIER_LABELS, cn, formatDate, formatMoney, SERVICE_LABELS } from '@/lib/utils';
+import { CARRIER_LABELS, cn, formatDate, formatMoney, MARKETPLACE_LABELS, SERVICE_LABELS } from '@/lib/utils';
 import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import { getOrderDetail } from '@/server/services/orders';
@@ -90,7 +90,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {order.marketplace === 'empik' && order.marketplaceStatus === 'WAITING_ACCEPTANCE' && (
+          {(order.marketplace === 'empik' || order.marketplace === 'hebe') && order.marketplaceStatus === 'WAITING_ACCEPTANCE' && (
             <ActionForm action={acceptOrderAction.bind(null, order.id)}>
               <SubmitButton pendingText="Accepting…">Accept order</SubmitButton>
             </ActionForm>
@@ -107,7 +107,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <div className="mb-4">
           <Alert>
             This order can&apos;t be shipped yet: the marketplace reports <strong>{order.marketplaceStatus}</strong>.
-            {order.marketplace === 'empik' && ' Accept it first, then wait until Empik confirms the payment.'}
+            {(order.marketplace === 'empik' || order.marketplace === 'hebe') && ` Accept it first, then wait until ${MARKETPLACE_LABELS[order.marketplace]} confirms the payment.`}
           </Alert>
         </div>
       )}

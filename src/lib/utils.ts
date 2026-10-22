@@ -46,6 +46,7 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   allegro: 'Allegro',
   empik: 'Empik',
   vonhalsky: 'Von Halsky',
+  hebe: 'HEBE',
 };
 
 export const CARRIER_LABELS: Record<string, string> = {

@@ -8,6 +8,7 @@ import { publishPreview, type CatalogueState, type PublishPreview } from '@/serv
 import { listMarketplaceAccounts } from '@/server/services/settings';
 import { createOffersAction, refreshFromShopifyAction } from '../actions';
 import { hasRealSku } from '@/lib/sku';
+import { MARKETPLACE_LABELS } from '@/lib/utils';
 
 export const metadata: Metadata = { title: 'Publish offers' };
 
@@ -20,9 +21,11 @@ const CATALOGUE: Record<CatalogueState, { tone: 'green' | 'amber' | 'red'; label
 export default async function PublishPage({ params }: { params: Promise<{ accountId: string }> }) {
   await requireAdmin();
   const { accountId } = await params;
-  const account = (await listMarketplaceAccounts()).find((a) => a.id === accountId && (a.type === 'allegro' || a.type === 'empik'));
+  const account = (await listMarketplaceAccounts()).find((a) => a.id === accountId && (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe'));
   if (!account) notFound();
-  const label = account.type === 'allegro' ? 'Allegro' : 'Empik';
+  const label = MARKETPLACE_LABELS[account.type];
+  // Mirakl (Empik, HEBE) takes any product it knows by EAN; its catalogue lookup is only advice.
+  const mirakl = account.type !== 'allegro';
 
   let preview: PublishPreview = { rows: [], setupProblems: [] };
   let error: string | null = null;
@@ -39,7 +42,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
     <>
       <PageHeader
         title={`Publish to ${label}`}
-        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${markup}%. ${account.type === 'empik' ? 'Empik accepts a product it knows by EAN; if it refuses one, the reason is shown.' : 'Only products the Allegro catalogue knows by EAN can be listed.'} Nothing is created until you tick products and press Create.`}
+        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${markup}%. ${mirakl ? `${label} accepts a product it knows by EAN; if it refuses one, the reason is shown.` : 'Only products the Allegro catalogue knows by EAN can be listed.'} Nothing is created until you tick products and press Create.`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
@@ -99,8 +102,8 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                   </div>
                   <div className="flex w-48 flex-col items-end gap-1">
                     {r.catalogue && (
-                      <Badge tone={account.type === 'empik' && r.catalogue === 'missing' ? 'amber' : CATALOGUE[r.catalogue].tone}>
-                        {account.type === 'empik' && r.catalogue === 'missing' ? 'Not found by Empik’s lookup · you can still try' : CATALOGUE[r.catalogue].label}
+                      <Badge tone={mirakl && r.catalogue === 'missing' ? 'amber' : CATALOGUE[r.catalogue].tone}>
+                        {mirakl && r.catalogue === 'missing' ? `Not found by ${label}’s lookup · you can still try` : CATALOGUE[r.catalogue].label}
                       </Badge>
                     )}
                     {r.problems.filter((p) => p !== 'not in the catalogue').length > 0 && <Badge tone="amber">{r.problems.filter((p) => p !== 'not in the catalogue').join(', ')}</Badge>}

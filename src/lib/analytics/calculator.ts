@@ -210,7 +210,7 @@ export function channelCommissionRates(orders: readonly Order[]): Record<Channel
     }
   }
 
-  return { shopify: build('shopify'), allegro: build('allegro'), empik: build('empik'), vonhalsky: build('vonhalsky') }
+  return { shopify: build('shopify'), allegro: build('allegro'), empik: build('empik'), vonhalsky: build('vonhalsky'), hebe: build('hebe') }
 }
 
 /* ── benchmarking ───────────────────────────────────────────────────────── */

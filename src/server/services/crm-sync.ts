@@ -1,6 +1,6 @@
 // Writes Luora's customer segments (and, optionally, staff tags) to Shopify customers as tags, so
 // Shopify Email, Klaviyo and similar tools can target them. Only customers who bought on Shopify:
-// Allegro and Empik forbid using their buyers' data for your own marketing.
+// Allegro, Empik and HEBE forbid using their buyers' data for your own marketing.
 import { and, eq } from 'drizzle-orm';
 import { segmentCustomers, segmentTag, type SegmentKey } from '@/lib/crm/segments';
 import { getDb } from '../db/client';

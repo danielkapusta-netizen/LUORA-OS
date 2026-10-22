@@ -8,10 +8,10 @@ import { getMarketplaceAdapter } from './accounts';
 import { needsMatching } from './inventory';
 
 /** Tab order on the page. */
-export const PRICE_PLATFORMS = ['shopify', 'vonhalsky', 'empik', 'allegro'] as const;
+export const PRICE_PLATFORMS = ['shopify', 'vonhalsky', 'empik', 'hebe', 'allegro'] as const;
 export type PricePlatform = (typeof PRICE_PLATFORMS)[number];
 
-export const PRICE_PLATFORM_LABEL: Record<PricePlatform, string> = { shopify: 'Shopify', vonhalsky: 'Von Halsky', empik: 'Empik', allegro: 'Allegro' };
+export const PRICE_PLATFORM_LABEL: Record<PricePlatform, string> = { shopify: 'Shopify', vonhalsky: 'Von Halsky', empik: 'Empik', hebe: 'HEBE', allegro: 'Allegro' };
 
 export function isPricePlatform(value: unknown): value is PricePlatform {
   return typeof value === 'string' && (PRICE_PLATFORMS as readonly string[]).includes(value);

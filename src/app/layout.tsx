@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: { default: 'Luora OS', template: '%s · Luora OS' },
-  description: 'Orders and shipping for Shopify, Allegro and Empik',
+  description: 'Orders and shipping for Shopify, Allegro, Empik and HEBE',
 };
 
 // viewport-fit=cover lets the bars reach under the notch and home indicator; the layout pads for the safe areas.

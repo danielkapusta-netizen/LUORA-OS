@@ -99,15 +99,34 @@ export function toAlpha2(code: string | null | undefined): string {
   return upper.length === 3 ? (ALPHA3_TO_ALPHA2[upper] ?? upper.slice(0, 2)) : upper;
 }
 
+/**
+ * What differs between marketplaces running on Mirakl: each operator names its own order fields
+ * (`order_additional_fields`) and labels its fees.
+ */
+export interface MiraklProfile {
+  /** Marketplace name shown on fees and as the fallback buyer name, e.g. "Empik". */
+  label: string;
+  /** Order field code that holds the buyer's tax number (an invoice request). */
+  taxIdField: RegExp;
+  /** Order field code that holds the buyer's Paczkomat when `shipping_pudo_id` is empty. */
+  pickupPointField: RegExp;
+}
+
+export const EMPIK_PROFILE: MiraklProfile = {
+  label: 'Empik',
+  taxIdField: /^nip$/,
+  pickupPointField: /^delivery-point-name$/,
+};
+
 /** Empik leaves `shipping_pudo_id` empty and sends the buyer's Paczkomat as the "delivery-point-name" order field. */
-function pickupPoint(o: MiraklOrder): string | null {
-  const field = o.order_additional_fields?.find((f) => f.code === 'delivery-point-name')?.value;
+function pickupPoint(o: MiraklOrder, profile: MiraklProfile): string | null {
+  const field = o.order_additional_fields?.find((f) => profile.pickupPointField.test(f.code) && f.value?.trim())?.value;
   return o.shipping_pudo_id || field?.trim().toUpperCase() || null;
 }
 
 /** Empik signals an invoice request with the "nip" order field; the company is on the billing address. */
-function invoiceRequest(o: MiraklOrder, fallbackName: string): InvoiceRequest | null {
-  const nip = o.order_additional_fields?.find((f) => f.code === 'nip')?.value?.trim();
+function invoiceRequest(o: MiraklOrder, profile: MiraklProfile, fallbackName: string): InvoiceRequest | null {
+  const nip = o.order_additional_fields?.find((f) => profile.taxIdField.test(f.code) && f.value?.trim())?.value?.trim();
   if (!nip) return null;
   const b = o.customer.billing_address ?? o.customer.shipping_address;
   const countryCode = toAlpha2(b?.country_iso_code);
@@ -147,8 +166,8 @@ function lineDiscount(l: MiraklLine): string | null {
 /** Empik's refunds take back the money but are not settled until REFUNDED. */
 const SETTLED_REFUND = (state: string | null | undefined) => !state || state === 'REFUNDED';
 
-/** Empik's commission per line, and the commission it gives back on refunds. */
-function miraklFees(o: MiraklOrder): NormalizedFee[] {
+/** The marketplace's commission per line, and the commission it gives back on refunds. */
+function miraklFees(o: MiraklOrder, label: string): NormalizedFee[] {
   const occurredAt = new Date(o.customer_debited_date ?? o.created_date);
   const out: NormalizedFee[] = [];
   for (const l of o.order_lines) {
@@ -157,7 +176,7 @@ function miraklFees(o: MiraklOrder): NormalizedFee[] {
       out.push({
         externalId: `${o.order_id}:${l.order_line_id}:commission`,
         kind: 'commission',
-        label: 'Prowizja Empik',
+        label: `Prowizja ${label}`,
         externalLineId: l.order_line_id,
         amount: money(total),
         taxAmount: l.commission_vat != null ? money(l.commission_vat) : null,
@@ -172,7 +191,7 @@ function miraklFees(o: MiraklOrder): NormalizedFee[] {
       out.push({
         externalId: `${o.order_id}:${l.order_line_id}:refund:${r.id}`,
         kind: 'commission',
-        label: 'Zwrot prowizji Empik',
+        label: `Zwrot prowizji ${label}`,
         externalLineId: l.order_line_id,
         amount: money(-back),
         taxAmount: r.commission_vat != null ? money(-r.commission_vat) : null,
@@ -199,12 +218,16 @@ function miraklRefunds(o: MiraklOrder): NormalizedRefund[] {
   );
 }
 
-/** @param mediaBase the Empik marketplace URL, used to make relative photo paths loadable. */
-export function mapMiraklOrder(raw: unknown, mediaBase?: string): NormalizedOrder {
+/**
+ * @param mediaBase the marketplace URL, used to make relative photo paths loadable.
+ * @param profile the marketplace's own field names; Empik when not given.
+ */
+export function mapMiraklOrder(raw: unknown, mediaBase?: string, profile: MiraklProfile = EMPIK_PROFILE): NormalizedOrder {
   const o = miraklOrderSchema.parse(raw);
   const a = o.customer.shipping_address;
   const countryCode = toAlpha2(a?.country_iso_code);
-  const point = pickupPoint(o);
+  const point = pickupPoint(o, profile);
+  const fallbackBuyer = `${profile.label} buyer`;
   const buyerName = [o.customer.firstname, o.customer.lastname].filter(Boolean).join(' ');
   const addressName = [a?.firstname, a?.lastname].filter(Boolean).join(' ');
   // For Paczkomat orders Empik puts the locker code in the recipient's surname; the parcel is for the buyer.
@@ -215,7 +238,7 @@ export function mapMiraklOrder(raw: unknown, mediaBase?: string): NormalizedOrde
     externalId: o.order_id,
     externalNumber: o.commercial_id ?? o.order_id,
     marketplaceStatus: o.order_state,
-    // Empik only lets the seller ship once the order is accepted and paid ("SHIPPING").
+    // Mirakl only lets the seller ship once the order is accepted and paid ("SHIPPING").
     readyToShip: o.order_state === 'SHIPPING',
     cancelled: CANCELLED_STATES.has(o.order_state),
     fulfilled: SHIPPED_STATES.has(o.order_state),
@@ -225,7 +248,7 @@ export function mapMiraklOrder(raw: unknown, mediaBase?: string): NormalizedOrde
       phone: a?.phone ?? null,
     },
     shippingAddress: {
-      name: recipient || 'Empik buyer',
+      name: recipient || fallbackBuyer,
       company: a?.company ?? null,
       street: [a?.street_1, a?.street_2].filter(Boolean).join(' '),
       city: a?.city ?? '',
@@ -253,9 +276,9 @@ export function mapMiraklOrder(raw: unknown, mediaBase?: string): NormalizedOrde
       imageUrl: absoluteUrl((l.product_medias?.find((m) => m.type?.toLowerCase() === 'small') ?? l.product_medias?.[0])?.media_url, mediaBase),
       discountAmount: lineDiscount(l),
     })),
-    fees: miraklFees(o),
+    fees: miraklFees(o, profile.label),
     refunds: miraklRefunds(o),
-    invoiceRequest: invoiceRequest(o, buyerName || recipient || 'Empik buyer'),
+    invoiceRequest: invoiceRequest(o, profile, buyerName || recipient || fallbackBuyer),
     revision: o.last_updated_date,
     raw,
   };

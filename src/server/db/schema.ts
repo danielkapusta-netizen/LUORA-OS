@@ -16,7 +16,7 @@ const updatedAt = () =>
     .$onUpdate(() => new Date());
 
 export const userRoleValues = ['admin', 'logistics', 'marketing'] as const;
-export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky'] as const;
+export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe'] as const;
 export const carrierTypeValues = ['inpost', 'allegro_shipping'] as const;
 export const orderStatusValues = [
   'new',
@@ -74,11 +74,11 @@ export interface MarketplaceSettings {
   apiVersion?: string;
   /** Shopify: email the buyer when tracking is added. */
   notifyCustomer?: boolean;
-  /** Empik: accept orders automatically when stock covers every line. */
+  /** Empik and HEBE (Mirakl): accept orders automatically when stock covers every line. */
   autoAccept?: boolean;
-  /** Empik: carrier codes registered on the marketplace, keyed by our carrier. */
+  /** Empik and HEBE (Mirakl): carrier codes registered on the marketplace, keyed by our carrier. */
   carrierCodes?: Record<string, string>;
-  /** Empik: carriers from SH21, refreshed at most daily. */
+  /** Empik and HEBE (Mirakl): carriers from SH21, refreshed at most daily. */
   carrierCache?: { fetchedAt: string; carriers: { code: string; label: string; tracking_url?: string | null }[] };
   /** Von Halsky: price = Shopify price × (1 + markup/100), then rounded. */
   vhMarkupPercent?: number;
@@ -90,10 +90,10 @@ export interface MarketplaceSettings {
   vhCategoryMap?: Record<string, string>;
   /** Von Halsky: categories to choose from (leaves), read from InPost and cached. */
   vhCategories?: { fetchedAt: string; items: { id: string; path: string }[] };
-  /** Allegro and Empik: offers created from Shopify (price = Shopify price × (1 + markup/100), then rounded). */
+  /** Allegro, Empik and HEBE: offers created from Shopify (price = Shopify price × (1 + markup/100), then rounded). */
   offerMarkupPercent?: number;
   offerRounding?: 'x.99' | 'x.00' | 'none';
-  /** Allegro and Empik: days from the order to dispatch, shown on new offers. */
+  /** Allegro, Empik and HEBE: days from the order to dispatch, shown on new offers. */
   offerHandlingDays?: number;
   /** Allegro: what every new offer needs besides the product (ids come from Allegro's own lists). */
   allegroShippingRateId?: string;
@@ -117,7 +117,7 @@ export interface MarketplaceSettings {
     responsibleProducers?: { id: string; name: string }[];
     responsiblePersons?: { id: string; name: string }[];
   };
-  /** Empik: offer state code of new offers (Mirakl "new"). */
+  /** Empik and HEBE (Mirakl): offer state code of new offers (Mirakl "new"). The name predates HEBE. */
   empikOfferState?: string;
 }
 
@@ -347,7 +347,7 @@ export const packagePresets = sqliteTable('package_presets', {
 });
 
 export interface RuleConditions {
-  marketplaces?: ('shopify' | 'allegro' | 'empik' | 'vonhalsky')[];
+  marketplaces?: ('shopify' | 'allegro' | 'empik' | 'vonhalsky' | 'hebe')[];
   /** Case-insensitive substring of the buyer's delivery method name. */
   deliveryMethodContains?: string;
   hasPickupPoint?: boolean;
@@ -590,6 +590,7 @@ export interface AccountingSettings {
   autoOnShipped?: boolean;
   uploadAllegro?: boolean;
   uploadEmpik?: boolean;
+  uploadHebe?: boolean;
   /** Send invoices for companies (with a NIP) to KSeF through ifirma. */
   sendB2bToKsef?: boolean;
   /** ifirma numbering series name; empty = the account's default. */
@@ -769,7 +770,7 @@ export const customers = sqliteTable(
   (t) => [index('customers_last_order_idx').on(t.lastOrderAt), index('customers_email_idx').on(t.email)],
 );
 
-export const customerIdentityKinds = ['shopify', 'allegro', 'empik', 'vonhalsky', 'email'] as const;
+export const customerIdentityKinds = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe', 'email'] as const;
 
 /** Keys a customer is recognised by: a marketplace buyer id, or a real e-mail. */
 export const customerIdentities = sqliteTable(

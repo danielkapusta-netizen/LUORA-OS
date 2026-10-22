@@ -84,6 +84,7 @@ function initialStatus(n: NormalizedOrder, historical: boolean): OrderStatus {
 const FEE_SOURCE: Partial<Record<MarketplaceAccount['type'], FeeSource>> = {
   shopify: 'shopify_payments',
   empik: 'mirakl',
+  hebe: 'mirakl',
   allegro: 'allegro_billing',
 };
 

@@ -1,14 +1,14 @@
 import { HttpError, request, type RequestOptions } from '../../../http';
 
-export interface EmpikCredentials {
-  /** Mirakl front URL given by Empik, e.g. "https://marketplace.empik.com". */
+export interface MiraklCredentials {
+  /** Mirakl front URL given by the marketplace, e.g. "https://marketplace.empik.com". */
   baseUrl: string;
   apiKey: string;
   /** Only needed when the API key has access to several shops. */
   shopId?: string;
 }
 
-/** Empik Marketplace runs on Mirakl; this is a thin client for the Mirakl Seller API. */
+/** Empik and HEBE both run on Mirakl; this is a thin client for the Mirakl Seller API. */
 export interface MiraklCarrier {
   code: string;
   label: string;
@@ -16,7 +16,11 @@ export interface MiraklCarrier {
 }
 
 export class MiraklClient {
-  constructor(private readonly creds: EmpikCredentials) {}
+  constructor(
+    private readonly creds: MiraklCredentials,
+    /** Marketplace name used in error messages, e.g. "Empik". */
+    private readonly label = 'Mirakl',
+  ) {}
 
   /** SH21: carriers registered on the marketplace (call at most once a day). */
   async listCarriers(): Promise<MiraklCarrier[]> {
@@ -35,19 +39,19 @@ export class MiraklClient {
       });
       return data;
     } catch (err) {
-      throw readableMiraklError(err);
+      throw readableMiraklError(err, this.label);
     }
   }
 }
 
 /** Mirakl errors look like {"message": "...", "status": 400}; surface the message. */
-function readableMiraklError(err: unknown): unknown {
+function readableMiraklError(err: unknown, label: string): unknown {
   if (!(err instanceof HttpError)) return err;
   try {
     const body = JSON.parse(err.body) as { message?: string; errors?: { field?: string; message?: string }[] };
     const details = body.errors?.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).filter(Boolean).join('; ');
     const message = [body.message, details].filter(Boolean).join(' – ');
-    if (message) return new Error(`Empik (HTTP ${err.status}): ${message}`);
+    if (message) return new Error(`${label} (HTTP ${err.status}): ${message}`);
   } catch {
     // Not JSON: keep the original error.
   }

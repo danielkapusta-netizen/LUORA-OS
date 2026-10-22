@@ -13,12 +13,13 @@ import {
   shippingRules,
   users,
   type CarrierSettings,
+  type MarketplaceAccount,
   type MarketplaceSettings,
   type RuleConditions,
 } from '../db/schema';
 import type { SenderSettings } from '../integrations/types';
 import { BUYER_CHOICE } from '../integrations/carriers/allegro-shipping/adapter';
-import { EmpikAdapter } from '../integrations/marketplaces/empik/adapter';
+import { MiraklAdapter } from '../integrations/marketplaces/mirakl/adapter';
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { getCarrierAdapter, getMarketplaceAdapter, loadCarrierAccount, loadMarketplaceAccount, readCredentials, withConfigured } from './accounts';
 import { removeDemoTasks } from './tasks';
@@ -131,7 +132,7 @@ export async function listMarketplaceAccounts() {
 
 export async function saveMarketplaceAccount(input: {
   id?: string;
-  type: 'shopify' | 'allegro' | 'empik' | 'vonhalsky';
+  type: MarketplaceAccount['type'];
   name: string;
   /** Only fields that were filled in; blank secrets keep their stored value. */
   credentials: Record<string, unknown>;
@@ -337,9 +338,9 @@ export async function resetPassword(id: string, password: string): Promise<void>
   await getDb().update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, id));
 }
 
-/** Empik carriers (SH21) for the settings dropdowns; empty in demo mode or when Empik can't be reached. */
-export async function empikCarriers(accountId: string, refresh = false): Promise<{ code: string; label: string }[]> {
+/** Carriers of a Mirakl marketplace (Empik, HEBE; SH21) for the settings dropdowns; empty in demo mode. */
+export async function miraklCarriers(accountId: string, refresh = false): Promise<{ code: string; label: string }[]> {
   const adapter = getMarketplaceAdapter(await loadMarketplaceAccount(accountId));
-  if (!(adapter instanceof EmpikAdapter)) return [];
+  if (!(adapter instanceof MiraklAdapter)) return [];
   return adapter.carriers(refresh);
 }

@@ -63,11 +63,11 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
             <fieldset>
               <legend className="mb-1 text-sm font-semibold">Marketplace fees when the marketplace reports none</legend>
               <p className="mb-2 text-xs text-slate-500">
-                Real fees are read from Allegro billing, Empik commissions and Shopify Payments. These rates (% of the gross price) are only used for orders
+                Real fees are read from Allegro billing, Empik and HEBE commissions and Shopify Payments. These rates (% of the gross price) are only used for orders
                 without a reported fee yet, and such orders are marked as estimated.
               </p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {(['allegro', 'empik', 'shopify', 'vonhalsky'] as const).map((m) => (
+                {(['allegro', 'empik', 'hebe', 'shopify', 'vonhalsky'] as const).map((m) => (
                   <Field key={m} label={`${MARKETPLACE_LABELS[m]}, %`}>
                     <Input name={`commission_${m}`} inputMode="decimal" defaultValue={pct(settings.fallbackCommission[m])} />
                   </Field>

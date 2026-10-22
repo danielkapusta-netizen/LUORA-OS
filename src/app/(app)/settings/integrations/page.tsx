@@ -43,7 +43,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       {isMockMode() && (
         <Alert>
           Demo mode (<code>INTEGRATIONS_MODE=mock</code>): orders and labels are generated locally and nothing is sent to Shopify, Allegro,
-          Empik or InPost. Set <code>INTEGRATIONS_MODE=live</code> to use real accounts.
+          Empik, HEBE or InPost. Set <code>INTEGRATIONS_MODE=live</code> to use real accounts.
         </Alert>
       )}
 
@@ -62,6 +62,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                 </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=empik">
                   + Empik
+                </Link>
+                <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=hebe">
+                  + HEBE
                 </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=vonhalsky">
                   + Von Halsky

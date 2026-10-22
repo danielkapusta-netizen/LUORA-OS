@@ -10,17 +10,18 @@ import type { MarketplaceAccount } from '@/server/db/schema';
 import { env } from '@/server/env';
 import { DEFAULT_SAFETY_TEXT } from '@/server/integrations/marketplaces/allegro/adapter';
 import { ALLEGRO_REDIRECT_PATH } from '@/server/integrations/marketplaces/allegro/client';
-import { EMPIK_CARRIER_CODES, resolveEmpikCarrier } from '@/server/integrations/marketplaces/empik/adapter';
+import { EMPIK_CARRIER_CODES } from '@/server/integrations/marketplaces/empik/adapter';
+import { resolveMiraklCarrier } from '@/server/integrations/marketplaces/mirakl/adapter';
 import { VON_HALSKY_REDIRECT_PATH } from '@/server/integrations/marketplaces/vonhalsky/client';
 import { DEFAULT_SHOPIFY_API_VERSION } from '@/server/integrations/marketplaces/shopify/client';
 import { DEFAULT_PICKUP_POINT_KEYS } from '@/server/integrations/marketplaces/shopify/mapper';
 import type { MarketplaceSettings } from '@/server/db/schema';
 import { loadMarketplaceAccount } from '@/server/services/accounts';
-import { empikCarriers, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
+import { miraklCarriers, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
 import {
   deleteMarketplaceAction,
   importListingsAction,
-  refreshEmpikCarriersAction,
+  refreshMiraklCarriersAction,
   saveMarketplaceAction,
   startHistoryAction,
   stopHistoryAction,
@@ -108,25 +109,29 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
       notFound();
     }
   }
-  const type = (account?.type ?? typeParam) as 'shopify' | 'allegro' | 'empik' | 'vonhalsky';
+  const type = (account?.type ?? typeParam) as MarketplaceAccount['type'];
   if (!MARKETPLACE_LABELS[type]) notFound();
   const stored = storedCredentialKeys(account?.credentials ?? null);
   const pub = publicCredentialFields(account?.credentials ?? null);
   const s = account?.settings ?? {};
-  let empikList: { code: string; label: string }[] = [];
-  let empikError: string | null = null;
-  if (account && type === 'empik') {
+  // Empik and HEBE both run on Mirakl and share one form; only Empik documents its carrier codes.
+  const mirakl = type === 'empik' || type === 'hebe';
+  const label = MARKETPLACE_LABELS[type];
+  const documented = type === 'empik' ? EMPIK_CARRIER_CODES : null;
+  let carrierList: { code: string; label: string }[] = [];
+  let carrierError: string | null = null;
+  if (account && mirakl) {
     try {
-      empikList = await empikCarriers(account.id);
+      carrierList = await miraklCarriers(account.id);
     } catch (err) {
-      empikError = err instanceof Error ? err.message : String(err);
+      carrierError = err instanceof Error ? err.message : String(err);
     }
   }
-  const lockerCarrier = empikList.length
-    ? resolveEmpikCarrier([s.carrierCodes?.inpostLocker, EMPIK_CARRIER_CODES.inpostLocker], empikList, 'inpostLocker')?.code
+  const lockerCarrier = carrierList.length
+    ? resolveMiraklCarrier([s.carrierCodes?.inpostLocker, documented?.inpostLocker], carrierList, 'inpostLocker')?.code
     : s.carrierCodes?.inpostLocker;
-  const courierCarrier = empikList.length
-    ? resolveEmpikCarrier([s.carrierCodes?.inpostCourier, EMPIK_CARRIER_CODES.inpostCourier], empikList, 'inpostCourier')?.code
+  const courierCarrier = carrierList.length
+    ? resolveMiraklCarrier([s.carrierCodes?.inpostCourier, documented?.inpostCourier], carrierList, 'inpostCourier')?.code
     : s.carrierCodes?.inpostCourier;
   const str = (key: string) => (typeof pub[key] === 'string' ? (pub[key] as string) : '');
 
@@ -294,13 +299,25 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
               </fieldset>
             )}
 
-            {type === 'empik' && (
+            {mirakl && (
               <fieldset className="space-y-3">
-                <legend className="mb-1 text-sm font-semibold">Empik Marketplace connection</legend>
-                <p className="text-xs text-slate-500">Empik runs on Mirakl. Generate an API key in the seller panel (My account → API key).</p>
+                <legend className="mb-1 text-sm font-semibold">{label} Marketplace connection</legend>
+                {type === 'empik' ? (
+                  <p className="text-xs text-slate-500">Empik runs on Mirakl. Generate an API key in the seller panel (My account → API key).</p>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    HEBE runs on Mirakl. In the HEBE seller panel open your user menu → API key and generate a key. The Marketplace URL is the address
+                    of that seller panel (the Mirakl front, often https://…mirakl.net), without /api.
+                  </p>
+                )}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Marketplace URL">
-                    <Input name="baseUrl" defaultValue={str('baseUrl') || 'https://marketplace.empik.com'} required />
+                    <Input
+                      name="baseUrl"
+                      defaultValue={str('baseUrl') || (type === 'empik' ? 'https://marketplace.empik.com' : '')}
+                      placeholder={type === 'hebe' ? 'https://…mirakl.net' : undefined}
+                      required
+                    />
                   </Field>
                   <Secret name="apiKey" label="API key" stored={stored.includes('apiKey')} />
                   <Field label="Shop ID (optional)">
@@ -308,15 +325,15 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   </Field>
                   {(
                     [
-                      ['carrierCodeInpostLocker', 'Empik carrier for InPost Paczkomat labels', lockerCarrier, EMPIK_CARRIER_CODES.inpostLocker],
-                      ['carrierCodeInpostCourier', 'Empik carrier for InPost courier labels', courierCarrier, EMPIK_CARRIER_CODES.inpostCourier],
+                      ['carrierCodeInpostLocker', `${label} carrier for InPost Paczkomat labels`, lockerCarrier, documented?.inpostLocker],
+                      ['carrierCodeInpostCourier', `${label} carrier for InPost courier labels`, courierCarrier, documented?.inpostCourier],
                     ] as const
-                  ).map(([name, label, selected, fallback]) =>
-                    empikList.length ? (
-                      <Field key={name} label={label} hint="From Empik's carrier list (SH21)">
+                  ).map(([name, fieldLabel, selected, fallback]) =>
+                    carrierList.length ? (
+                      <Field key={name} label={fieldLabel} hint={`From ${label}'s carrier list (SH21)`}>
                         <Select name={name} defaultValue={selected ?? ''}>
                           <option value="">Pick automatically</option>
-                          {empikList.map((c) => (
+                          {carrierList.map((c) => (
                             <option key={c.code} value={c.code}>
                               {c.label} ({c.code})
                             </option>
@@ -324,7 +341,11 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                         </Select>
                       </Field>
                     ) : (
-                      <Field key={name} label={label} hint={`Empik's carrier code; leave blank for ${fallback}`}>
+                      <Field
+                        key={name}
+                        label={fieldLabel}
+                        hint={fallback ? `${label}'s carrier code; leave blank for ${fallback}` : `${label}'s carrier code; leave blank to pick it from ${label}'s carrier list`}
+                      >
                         <Input name={name} defaultValue={selected ?? ''} placeholder={fallback} />
                       </Field>
                     ),
@@ -333,7 +354,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                 <Checkbox name="autoAccept" label="Accept new orders automatically when stock covers them" defaultChecked={s.autoAccept ?? false} />
                 <p className="pt-2 text-sm font-semibold">Offers created from Shopify</p>
                 <OfferPricing s={s} />
-                <Field label="Offer state code" hint="Empik's code for “new” (11 on most Mirakl shops)">
+                <Field label="Offer state code" hint={`${label}'s code for “new” (11 on most Mirakl shops)`}>
                   <Input name="empikOfferState" defaultValue={s.empikOfferState ?? '11'} />
                 </Field>
               </fieldset>
@@ -355,10 +376,14 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
 
       {account && (
         <div className="mt-5 flex flex-wrap gap-2">
-          {type === 'empik' && (
-            <ActionForm action={refreshEmpikCarriersAction.bind(null, account.id)}>
-              <SubmitButton variant="secondary">Refresh Empik carrier list</SubmitButton>
-              {empikError && <p className="mt-1 text-sm text-red-700">Could not load Empik carriers: {empikError}</p>}
+          {mirakl && (
+            <ActionForm action={refreshMiraklCarriersAction.bind(null, account.id)}>
+              <SubmitButton variant="secondary">Refresh {label} carrier list</SubmitButton>
+              {carrierError && (
+                <p className="mt-1 text-sm text-red-700">
+                  Could not load {label} carriers: {carrierError}
+                </p>
+              )}
             </ActionForm>
           )}
           {type === 'allegro' && (
@@ -366,9 +391,9 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
               <SubmitButton variant="secondary">Load choices from Allegro</SubmitButton>
             </ActionForm>
           )}
-          {(type === 'allegro' || type === 'empik') && (
+          {(type === 'allegro' || mirakl) && (
             <Link href={`/inventory/publish/${account.id}`} className={buttonClass('secondary')}>
-              Publish products to {type === 'allegro' ? 'Allegro' : 'Empik'}
+              Publish products to {label}
             </Link>
           )}
           <ActionForm action={importListingsAction.bind(null, account.id)}>

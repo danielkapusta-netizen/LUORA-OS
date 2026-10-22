@@ -26,7 +26,7 @@ export default async function AccountingSettingsPage() {
       <Card>
         <CardHeader
           title="ifirma"
-          description="Invoices are issued in ifirma for Allegro and Empik orders whose buyer asked for one, then attached to the order on the marketplace."
+          description="Invoices are issued in ifirma for Allegro, Empik and HEBE orders whose buyer asked for one, then attached to the order on the marketplace."
           actions={
             hasKey && (
               <ActionForm action={testAccountingAction}>
@@ -78,6 +78,7 @@ export default async function AccountingSettingsPage() {
               <legend className="mb-1 text-sm font-semibold">After an invoice is issued</legend>
               <Checkbox name="uploadAllegro" label="Attach the invoice to the Allegro order" defaultChecked={s.uploadAllegro} />
               <Checkbox name="uploadEmpik" label="Attach the invoice to the Empik order" defaultChecked={s.uploadEmpik} />
+              <Checkbox name="uploadHebe" label="Attach the invoice to the HEBE order" defaultChecked={s.uploadHebe} />
               <Checkbox name="sendB2bToKsef" label="Send invoices for companies (with a NIP) to KSeF" defaultChecked={s.sendB2bToKsef} />
             </fieldset>
 

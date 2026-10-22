@@ -1,4 +1,4 @@
-// Creating offers on Allegro and Empik from the Shopify product list. Only products the marketplace catalogue
+// Creating offers on Allegro, Empik and HEBE from the Shopify product list. Only products the marketplace catalogue
 // already knows (by EAN) are offered; the offer's price is Shopify's price plus a markup. Once an offer exists,
 // importing the account's listings links it to the product and the normal stock sync takes over.
 import { and, asc, eq, isNotNull } from 'drizzle-orm';
@@ -59,7 +59,7 @@ async function shopifyDetails(variantIds: string[], rows: { variantId: string | 
 }
 
 function publisher(account: Awaited<ReturnType<typeof loadMarketplaceAccount>>): OfferPublisher {
-  if (account.type !== 'allegro' && account.type !== 'empik') throw new Error('Offers can be created here for Allegro and Empik accounts');
+  if (account.type !== 'allegro' && account.type !== 'empik' && account.type !== 'hebe') throw new Error('Offers can be created here for Allegro, Empik and HEBE accounts');
   const adapter = getMarketplaceAdapter(account);
   if (!isOfferPublisher(adapter)) throw new Error('This account cannot create offers');
   return adapter;
@@ -117,8 +117,8 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
     const problems: string[] = [];
     if (!d) problems.push('not found in Shopify');
     if (!p.ean) problems.push('no EAN');
-    // Allegro needs the catalogue product to attach to. Empik's lookup is only advice: its own import accepts or refuses the offer, with the reason.
-    else if (match && !match.found && account.type !== 'empik') problems.push('not in the catalogue');
+    // Allegro needs the catalogue product to attach to. On Mirakl (Empik, HEBE) the lookup is only advice: its own import accepts or refuses the offer, with the reason.
+    else if (match && !match.found && account.type === 'allegro') problems.push('not in the catalogue');
     if (d && Number(d.price) <= 0) problems.push('no price');
     return {
       details: d,
