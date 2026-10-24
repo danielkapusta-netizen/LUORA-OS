@@ -111,8 +111,11 @@ describe('ShopifyAdapter', () => {
                     ? {
                         metafields: {
                           nodes: [
-                            { namespace: 'custom', key: 'responsible_person', value: ' Jan Kowalski, Warszawa ' },
-                            { namespace: 'custom', key: 'empty', value: ' ' },
+                            // As Shopify really answers a `keys: ["namespace.key"]` request: the key comes back with its namespace.
+                            { namespace: 'custom', key: 'custom.responsible_person', value: ' Jan Kowalski, Warszawa ' },
+                            { namespace: 'custom', key: 'custom.empty', value: ' ' },
+                            // And a plain key still gets its namespace.
+                            { namespace: 'custom', key: 'responsible_person_address', value: 'Warszawa' },
                           ],
                         },
                       }
@@ -126,7 +129,10 @@ describe('ShopifyAdapter', () => {
     );
     const adapter = new ShopifyAdapter(store({ shopDomain: 'luora.myshopify.com', accessToken: 'shpat_x' }));
     const withMeta = await adapter.variantDetails(['gid://shopify/ProductVariant/1'], ['custom.responsible_person', 'custom.empty']);
-    expect(withMeta.get('gid://shopify/ProductVariant/1')?.metafields).toEqual({ 'custom.responsible_person': 'Jan Kowalski, Warszawa' });
+    expect(withMeta.get('gid://shopify/ProductVariant/1')?.metafields).toEqual({
+      'custom.responsible_person': 'Jan Kowalski, Warszawa',
+      'custom.responsible_person_address': 'Warszawa',
+    });
     const without = await adapter.variantDetails(['gid://shopify/ProductVariant/1']);
     expect(without.get('gid://shopify/ProductVariant/1')?.metafields).toEqual({});
     expect(asked).toEqual([

@@ -104,6 +104,14 @@ export interface ShopifyVariantDetails {
   metafields: Record<string, string>;
 }
 
+/**
+ * "namespace.key" of a metafield. Asked for by `keys`, Shopify returns `key` already in that form
+ * ("custom.responsible_person"); a plain key ("responsible_person") gets its namespace put in front.
+ */
+function metafieldId(m: { namespace: string; key: string }): string {
+  return m.key.includes('.') ? m.key : `${m.namespace}.${m.key}`;
+}
+
 const GRAMS_PER_UNIT: Record<string, number> = { GRAMS: 1, KILOGRAMS: 1000, OUNCES: 28.3495, POUNDS: 453.592 };
 
 const VARIANT_COSTS = `query Costs($first: Int!, $after: String) {
@@ -318,7 +326,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           sku: v.sku || null,
           imageUrls: [...new Set(urls)],
           weightGrams: weight && weight.value > 0 ? Math.round(weight.value * (GRAMS_PER_UNIT[weight.unit] ?? 1)) : null,
-          metafields: Object.fromEntries((v.product.metafields?.nodes ?? []).filter((m) => m.value?.trim()).map((m) => [`${m.namespace}.${m.key}`, m.value!.trim()])),
+          metafields: Object.fromEntries((v.product.metafields?.nodes ?? []).filter((m) => m.value?.trim()).map((m) => [metafieldId(m), m.value!.trim()])),
         });
       }
     }
