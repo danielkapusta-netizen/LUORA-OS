@@ -1,9 +1,21 @@
 import type { MarketplaceSettings, MiraklOfferField } from '../../../db/schema';
 
+/** A source may name several Shopify metafields, separated by commas; their values are joined with ", " (name, then address). */
+export function sourceMetafieldKeys(source: string | undefined): string[] {
+  return (source ?? '').split(',').map((k) => k.trim()).filter(Boolean);
+}
+
 /** Shopify product metafields ("namespace.key") the account's offer fields are read from. */
 export function offerFieldMetafieldKeys(settings: MarketplaceSettings): string[] {
-  const keys = Object.values(settings.offerFieldSources ?? {}).map((s) => s.metafield?.trim());
-  return [...new Set(keys.filter((k): k is string => Boolean(k)))];
+  const keys = Object.values(settings.offerFieldSources ?? {}).flatMap((s) => sourceMetafieldKeys(s.metafield));
+  return [...new Set(keys)];
+}
+
+/** The product's value for a source: every metafield it names must be filled in, otherwise the product has none. */
+function fromMetafields(source: string | undefined, metafields: Record<string, string>): string {
+  const keys = sourceMetafieldKeys(source);
+  const values = keys.map((k) => metafields[k]?.trim() ?? '');
+  return keys.length > 0 && values.every(Boolean) ? values.join(', ') : '';
 }
 
 export interface ResolvedOfferFields {
@@ -22,8 +34,7 @@ export function resolveOfferFields(settings: MarketplaceSettings, metafields: Re
   const out: ResolvedOfferFields = { values: {}, problems: [] };
   for (const field of settings.offerFieldCache?.fields ?? []) {
     const source = settings.offerFieldSources?.[field.code];
-    const value =
-      (source?.metafield ? metafields[source.metafield.trim()]?.trim() : '') || source?.fallback?.trim() || field.defaultValue?.trim() || '';
+    const value = fromMetafields(source?.metafield, metafields) || source?.fallback?.trim() || field.defaultValue?.trim() || '';
     if (!value) {
       if (field.required) out.problems.push(`no ${field.label}`);
       continue;
@@ -41,6 +52,6 @@ export function resolveOfferFields(settings: MarketplaceSettings, metafields: Re
 export function unsourcedRequiredFields(settings: MarketplaceSettings): MiraklOfferField[] {
   return (settings.offerFieldCache?.fields ?? []).filter((f) => {
     const source = settings.offerFieldSources?.[f.code];
-    return f.required && !f.defaultValue && !source?.metafield?.trim() && !source?.fallback?.trim();
+    return f.required && !f.defaultValue && sourceMetafieldKeys(source?.metafield).length === 0 && !source?.fallback?.trim();
   });
 }

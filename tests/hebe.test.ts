@@ -230,6 +230,19 @@ describe('HEBE extra offer fields', () => {
     expect(resolveOfferFields(settings, {}).values).toEqual({ 'responsible-person': 'Luora Sp. z o.o., Kraków' });
   });
 
+  it('joins several metafields (name, then address) and needs all of them on the product', () => {
+    const joined: MarketplaceSettings = {
+      ...settings,
+      offerFieldSources: { 'responsible-person': { metafield: 'custom.responsible_person, custom.responsible_person_address' } },
+    };
+    expect(offerFieldMetafieldKeys(joined)).toEqual(['custom.responsible_person', 'custom.responsible_person_address']);
+    expect(resolveOfferFields(joined, { 'custom.responsible_person': 'Belab Services SL', 'custom.responsible_person_address': '7 Monaco Av., Barcelona, Spain' }).values).toEqual({
+      'responsible-person': 'Belab Services SL, 7 Monaco Av., Barcelona, Spain',
+    });
+    // A name without its address is not a usable responsible person.
+    expect(resolveOfferFields(joined, { 'custom.responsible_person': 'Belab Services SL' })).toEqual({ values: {}, problems: ['no Osoba odpowiedzialna'] });
+  });
+
   it('flags a product with nothing to send for a required field, and a value a list does not accept', () => {
     const noFallback: MarketplaceSettings = { ...settings, offerFieldSources: { 'responsible-person': { metafield: 'custom.responsible_person' } } };
     expect(resolveOfferFields(noFallback, {})).toEqual({ values: {}, problems: ['no Osoba odpowiedzialna'] });

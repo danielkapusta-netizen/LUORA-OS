@@ -378,8 +378,8 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                           </div>
                           {f.description && <p className="mt-0.5 text-xs text-slate-500">{f.description}</p>}
                           <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <Field label="Shopify product metafield" hint="namespace.key of a product metafield, e.g. custom.responsible_person">
-                              <Input name={`offerFieldMetafield:${f.code}`} defaultValue={source?.metafield ?? ''} placeholder="custom.responsible_person" />
+                            <Field label="Shopify product metafield" hint="namespace.key of a product metafield. Name several, separated by commas, to join their values (e.g. a name and an address)">
+                              <Input name={`offerFieldMetafield:${f.code}`} defaultValue={source?.metafield ?? ''} placeholder="custom.responsible_person, custom.responsible_person_address" />
                             </Field>
                             <Field label="Fixed value when the product has none" hint={f.defaultValue ? `${label} fills in “${f.defaultValue}” if this is empty` : undefined}>
                               {f.acceptedValues ? (
