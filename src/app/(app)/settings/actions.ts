@@ -19,6 +19,7 @@ import {
   deleteRule,
   deleteUser,
   miraklCarriers,
+  miraklOfferFields,
   removeDemoData,
   resetPassword,
   saveCarrierAccount,
@@ -101,6 +102,18 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
     if (text(fd, 'carrierCodeInpostLocker')) codes.inpostLocker = text(fd, 'carrierCodeInpostLocker');
     if (text(fd, 'carrierCodeInpostCourier')) codes.inpostCourier = text(fd, 'carrierCodeInpostCourier');
     settings.carrierCodes = codes;
+    // The extra offer fields shown in the form: where each one's value comes from.
+    const sources: NonNullable<MarketplaceSettings['offerFieldSources']> = {};
+    let shown = false;
+    for (const key of fd.keys()) {
+      if (!key.startsWith(OFFER_FIELD_METAFIELD)) continue;
+      shown = true;
+      const code = key.slice(OFFER_FIELD_METAFIELD.length);
+      const metafield = text(fd, key);
+      const fallback = text(fd, `${OFFER_FIELD_FALLBACK}${code}`);
+      if (metafield || fallback) sources[code] = { ...(metafield ? { metafield } : {}), ...(fallback ? { fallback } : {}) };
+    }
+    if (shown) settings.offerFieldSources = sources;
   }
 
   let savedId = id;
@@ -137,6 +150,19 @@ export async function deleteMarketplaceAction(id: string): Promise<void> {
   }
   revalidatePath('/settings/integrations');
   backWith('Account deleted');
+}
+
+/** Form field names of the extra offer fields: the prefix plus the field code. */
+const OFFER_FIELD_METAFIELD = 'offerFieldMetafield:';
+const OFFER_FIELD_FALLBACK = 'offerFieldFallback:';
+
+export async function refreshMiraklOfferFieldsAction(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    const fields = await miraklOfferFields(id, true);
+    revalidatePath(`/settings/integrations/marketplace/${id}`);
+    return `Loaded ${fields.length} offer field(s) from the marketplace`;
+  });
 }
 
 export async function refreshMiraklCarriersAction(id: string): Promise<ActionResult> {

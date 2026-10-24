@@ -96,6 +96,8 @@ export interface OfferDraft {
   /** Gross price with two decimals. */
   price: string;
   currency: string;
+  /** Extra fields the marketplace requires on its offers (Mirakl additional fields), by field code. */
+  extraFields?: Record<string, string>;
 }
 
 /** The marketplace's own catalogue product for an EAN: offers are attached to it. */

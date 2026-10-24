@@ -84,6 +84,57 @@ describe('ShopifyAdapter', () => {
     expect(creds.saved[0].accessToken).toBe('tok-1');
   });
 
+  it('reads the product metafields asked for with the variant details, only the filled-in ones', async () => {
+    const asked: { keys: string[]; withMeta: boolean }[] = [];
+    server.use(
+      http.post(`${SHOP}/admin/api/2026-07/graphql.json`, async ({ request }) => {
+        const { variables } = (await request.json()) as { variables: { keys: string[]; withMeta: boolean } };
+        asked.push({ keys: variables.keys, withMeta: variables.withMeta });
+        return HttpResponse.json({
+          data: {
+            nodes: [
+              {
+                id: 'gid://shopify/ProductVariant/1',
+                sku: 'LUO-1',
+                barcode: '5901234567890',
+                price: '49.99',
+                displayName: 'Cream',
+                image: null,
+                inventoryItem: { measurement: { weight: { value: 120, unit: 'GRAMS' } } },
+                product: {
+                  title: 'Cream',
+                  descriptionHtml: '<p>x</p>',
+                  vendor: 'Luora',
+                  productType: '',
+                  images: { nodes: [] },
+                  ...(variables.withMeta
+                    ? {
+                        metafields: {
+                          nodes: [
+                            { namespace: 'custom', key: 'responsible_person', value: ' Jan Kowalski, Warszawa ' },
+                            { namespace: 'custom', key: 'empty', value: ' ' },
+                          ],
+                        },
+                      }
+                    : {}),
+                },
+              },
+            ],
+          },
+        });
+      }),
+    );
+    const adapter = new ShopifyAdapter(store({ shopDomain: 'luora.myshopify.com', accessToken: 'shpat_x' }));
+    const withMeta = await adapter.variantDetails(['gid://shopify/ProductVariant/1'], ['custom.responsible_person', 'custom.empty']);
+    expect(withMeta.get('gid://shopify/ProductVariant/1')?.metafields).toEqual({ 'custom.responsible_person': 'Jan Kowalski, Warszawa' });
+    const without = await adapter.variantDetails(['gid://shopify/ProductVariant/1']);
+    expect(without.get('gid://shopify/ProductVariant/1')?.metafields).toEqual({});
+    expect(asked).toEqual([
+      { keys: ['custom.responsible_person', 'custom.empty'], withMeta: true },
+      { keys: [], withMeta: false },
+    ]);
+  });
+
   it('retries when throttled', async () => {
     let calls = 0;
     server.use(

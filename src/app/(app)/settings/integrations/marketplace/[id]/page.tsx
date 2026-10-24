@@ -22,6 +22,7 @@ import {
   deleteMarketplaceAction,
   importListingsAction,
   refreshMiraklCarriersAction,
+  refreshMiraklOfferFieldsAction,
   saveMarketplaceAction,
   startHistoryAction,
   stopHistoryAction,
@@ -133,6 +134,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
   const courierCarrier = carrierList.length
     ? resolveMiraklCarrier([s.carrierCodes?.inpostCourier, documented?.inpostCourier], carrierList, 'inpostCourier')?.code
     : s.carrierCodes?.inpostCourier;
+  const offerFields = mirakl ? (s.offerFieldCache?.fields ?? []) : [];
   const str = (key: string) => (typeof pub[key] === 'string' ? (pub[key] as string) : '');
 
   return (
@@ -357,6 +359,48 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                 <Field label="Offer state code" hint={`${label}'s code for “new” (11 on most Mirakl shops)`}>
                   <Input name="empikOfferState" defaultValue={s.empikOfferState ?? '11'} />
                 </Field>
+                <p className="pt-2 text-sm font-semibold">Extra offer fields required by {label}</p>
+                {offerFields.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    None loaded yet. Save the connection, then press “Load {label} offer fields” below the form. Fields {label} asks for on every offer (for example the
+                    responsible person) appear here, and each can be read from a Shopify product metafield.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {offerFields.map((f) => {
+                      const source = s.offerFieldSources?.[f.code];
+                      return (
+                        <div key={f.code} className="rounded-md border border-slate-200 p-3">
+                          <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                            {f.label}
+                            <code className="text-xs font-normal text-slate-500">{f.code}</code>
+                            {f.required && <Badge tone="red">required</Badge>}
+                          </div>
+                          {f.description && <p className="mt-0.5 text-xs text-slate-500">{f.description}</p>}
+                          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <Field label="Shopify product metafield" hint="namespace.key of a product metafield, e.g. custom.responsible_person">
+                              <Input name={`offerFieldMetafield:${f.code}`} defaultValue={source?.metafield ?? ''} placeholder="custom.responsible_person" />
+                            </Field>
+                            <Field label="Fixed value when the product has none" hint={f.defaultValue ? `${label} fills in “${f.defaultValue}” if this is empty` : undefined}>
+                              {f.acceptedValues ? (
+                                <Select name={`offerFieldFallback:${f.code}`} defaultValue={source?.fallback ?? ''}>
+                                  <option value="">None</option>
+                                  {f.acceptedValues.map((v) => (
+                                    <option key={v} value={v}>
+                                      {v}
+                                    </option>
+                                  ))}
+                                </Select>
+                              ) : (
+                                <Input name={`offerFieldFallback:${f.code}`} defaultValue={source?.fallback ?? ''} />
+                              )}
+                            </Field>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </fieldset>
             )}
 
@@ -384,6 +428,11 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   Could not load {label} carriers: {carrierError}
                 </p>
               )}
+            </ActionForm>
+          )}
+          {mirakl && (
+            <ActionForm action={refreshMiraklOfferFieldsAction.bind(null, account.id)}>
+              <SubmitButton variant="secondary">Load {label} offer fields</SubmitButton>
             </ActionForm>
           )}
           {type === 'allegro' && (

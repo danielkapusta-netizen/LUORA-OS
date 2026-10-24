@@ -1,3 +1,4 @@
+import type { MiraklOfferField } from '../../../db/schema';
 import { HttpError, request, type RequestOptions } from '../../../http';
 
 export interface MiraklCredentials {
@@ -26,6 +27,33 @@ export class MiraklClient {
   async listCarriers(): Promise<MiraklCarrier[]> {
     const data = await this.call<{ carriers: MiraklCarrier[] }>('GET', '/shipping/carriers');
     return data.carriers.map((c) => ({ code: c.code, label: c.label, tracking_url: c.tracking_url ?? null }));
+  }
+
+  /** AF01: the extra fields this marketplace defines on offers (call at most once a day). Fields the seller can't edit are left out. */
+  async listOfferFields(): Promise<MiraklOfferField[]> {
+    const data = await this.call<{
+      additional_fields?: {
+        code: string;
+        label: string;
+        type: string;
+        required?: boolean;
+        editable?: boolean;
+        description?: string | null;
+        default_value?: string | null;
+        accepted_values?: string[];
+      }[];
+    }>('GET', '/additional_fields', { query: { entities: 'OFFER' } });
+    return (data.additional_fields ?? [])
+      .filter((f) => f.editable !== false)
+      .map((f) => ({
+        code: f.code,
+        label: f.label || f.code,
+        type: f.type,
+        required: Boolean(f.required),
+        description: f.description || null,
+        defaultValue: f.default_value || null,
+        ...(f.accepted_values?.length ? { acceptedValues: f.accepted_values } : {}),
+      }));
   }
 
   async call<T>(method: string, path: string, options: Omit<RequestOptions, 'method'> = {}): Promise<T> {

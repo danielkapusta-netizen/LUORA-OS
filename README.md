@@ -153,6 +153,7 @@ Inventory → **Publish to Allegro / Empik / HEBE** (admins) lists the Shopify p
 
 - **Allegro:** the Allegro app needs the permissions "Offers: read and write" and "Seller settings: read" (reconnect Allegro after enabling them). In the account settings press "Load choices from Allegro", then pick the shipping rates, return policy and implied warranty, and fill in where the goods are sent from. Offers are published at once unless "create as drafts" is ticked.
 - **Empik and HEBE:** offers are sent with an OF01 import for the EAN; the offer state code defaults to 11 (new).
+- **Extra fields on HEBE / Empik offers (e.g. HEBE's "responsible person"):** Mirakl marketplaces can require extra fields on every offer. In the account settings press **Load … offer fields**: the app reads them from Mirakl (AF01, cached for a day) and lists them under "Extra offer fields". For each one, give the Shopify **product metafield** it is read from (`namespace.key`, e.g. `custom.responsible_person`; create it in Shopify under Settings → Custom data → Products, as single-line text) and, optionally, a fixed text for products that have none. A product with no value for a required field shows "no …" on the Publish page and is not sent. The values go into the OF01 file as columns named by the field's code.
 
 ## Purchase invoices
 

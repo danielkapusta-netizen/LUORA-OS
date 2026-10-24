@@ -73,13 +73,16 @@ const VARIANTS_QUERY = `query Variants($first: Int!, $after: String) {
   }
 }`;
 
-const VARIANT_DETAILS = `query Details($ids: [ID!]!) {
+const VARIANT_DETAILS = `query Details($ids: [ID!]!, $keys: [String!] = [], $withMeta: Boolean = false) {
   nodes(ids: $ids) {
     ... on ProductVariant {
       id sku barcode price displayName
       image { url }
       inventoryItem { measurement { weight { value unit } } }
-      product { title descriptionHtml vendor productType images(first: 10) { nodes { url } } }
+      product {
+        title descriptionHtml vendor productType images(first: 10) { nodes { url } }
+        metafields(first: 25, keys: $keys) @include(if: $withMeta) { nodes { namespace key value } }
+      }
     }
   }
 }`;
@@ -97,6 +100,8 @@ export interface ShopifyVariantDetails {
   imageUrls: string[];
   /** Grams, when Shopify knows it. */
   weightGrams: number | null;
+  /** The product metafields asked for, by "namespace.key"; only those that are filled in. */
+  metafields: Record<string, string>;
 }
 
 const GRAMS_PER_UNIT: Record<string, number> = { GRAMS: 1, KILOGRAMS: 1000, OUNCES: 28.3495, POUNDS: 453.592 };
@@ -272,8 +277,11 @@ export class ShopifyAdapter implements MarketplaceAdapter {
     }
   }
 
-  /** Title, description, brand, photos, price and weight of Shopify variants (by variant id). */
-  async variantDetails(variantIds: string[]): Promise<Map<string, ShopifyVariantDetails>> {
+  /**
+   * Title, description, brand, photos, price and weight of Shopify variants (by variant id), plus the product
+   * metafields named in `metafieldKeys` ("namespace.key", e.g. "custom.responsible_person").
+   */
+  async variantDetails(variantIds: string[], metafieldKeys: string[] = []): Promise<Map<string, ShopifyVariantDetails>> {
     const out = new Map<string, ShopifyVariantDetails>();
     for (let i = 0; i < variantIds.length; i += 50) {
       const data: {
@@ -285,9 +293,16 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           displayName: string;
           image: { url: string } | null;
           inventoryItem: { measurement: { weight: { value: number; unit: string } | null } | null } | null;
-          product: { title: string; descriptionHtml: string; vendor: string; productType: string; images: { nodes: { url: string }[] } };
+          product: {
+            title: string;
+            descriptionHtml: string;
+            vendor: string;
+            productType: string;
+            images: { nodes: { url: string }[] };
+            metafields?: { nodes: { namespace: string; key: string; value: string | null }[] };
+          };
         } | null)[];
-      } = await this.client.graphql(VARIANT_DETAILS, { ids: variantIds.slice(i, i + 50) });
+      } = await this.client.graphql(VARIANT_DETAILS, { ids: variantIds.slice(i, i + 50), keys: metafieldKeys, withMeta: metafieldKeys.length > 0 });
       for (const v of data.nodes) {
         if (!v?.product) continue;
         const weight = v.inventoryItem?.measurement?.weight;
@@ -303,6 +318,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           sku: v.sku || null,
           imageUrls: [...new Set(urls)],
           weightGrams: weight && weight.value > 0 ? Math.round(weight.value * (GRAMS_PER_UNIT[weight.unit] ?? 1)) : null,
+          metafields: Object.fromEntries((v.product.metafields?.nodes ?? []).filter((m) => m.value?.trim()).map((m) => [`${m.namespace}.${m.key}`, m.value!.trim()])),
         });
       }
     }

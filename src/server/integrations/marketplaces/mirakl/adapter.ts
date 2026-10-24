@@ -1,9 +1,10 @@
-import type { MarketplaceSettings } from '../../../db/schema';
+import type { MarketplaceSettings, MiraklOfferField } from '../../../db/schema';
 import type { Listing, NormalizedOrder, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
 import { httpConfig } from '../../../http';
 import { invoiceFileName, type CatalogueMatch, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { MiraklClient, type MiraklCarrier, type MiraklCredentials } from './client';
 import { mapMiraklOrder, type MiraklProfile } from './mapper';
+import { unsourcedRequiredFields } from './offer-fields';
 
 const PAGE = 100;
 const MAX_PAGES_PER_SYNC = 10;
@@ -58,12 +59,24 @@ export function buildStockCsv(updates: StockUpdate[]): string {
 
 /**
  * OF01 offer import for one offer, attached to the catalogue product with the same EAN.
- * `state` is the marketplace's offer state code (11 = new on Mirakl).
+ * `state` is the marketplace's offer state code (11 = new on Mirakl). The marketplace's extra offer fields
+ * (e.g. the responsible person) go in columns named by their field code.
  */
 export function buildOfferCsv(draft: OfferDraft, state: string, leadtimeDays: number): string {
   const quote = (v: string) => `"${v.replace(/"/g, '""')}"`;
-  const header = ['sku', 'product-id', 'product-id-type', 'price', 'quantity', 'state', 'leadtime-to-ship', 'update-delete'];
-  const row = [draft.sku, draft.ean, 'EAN', draft.price, String(Math.max(0, draft.quantity)), state, String(Math.max(0, leadtimeDays)), 'update'];
+  const extra = Object.entries(draft.extraFields ?? {}).filter(([, value]) => value !== '');
+  const header = ['sku', 'product-id', 'product-id-type', 'price', 'quantity', 'state', 'leadtime-to-ship', 'update-delete', ...extra.map(([code]) => code)];
+  const row = [
+    draft.sku,
+    draft.ean,
+    'EAN',
+    draft.price,
+    String(Math.max(0, draft.quantity)),
+    state,
+    String(Math.max(0, leadtimeDays)),
+    'update',
+    ...extra.map(([, value]) => value),
+  ];
   return `${header.map(quote).join(';')}\n${row.map(quote).join(';')}\n`;
 }
 
@@ -123,6 +136,16 @@ export class MiraklAdapter implements MarketplaceAdapter, OfferPublisher {
     this.settings = { ...this.settings, carrierCache: { fetchedAt: new Date().toISOString(), carriers } };
     await this.saveSettings?.(this.settings);
     return carriers;
+  }
+
+  /** The marketplace's extra offer fields (AF01), cached in the account settings for a day. */
+  async offerFields(forceRefresh = false): Promise<MiraklOfferField[]> {
+    const cache = this.settings.offerFieldCache;
+    if (!forceRefresh && cache && Date.now() - Date.parse(cache.fetchedAt) < CARRIER_CACHE_MS) return cache.fields;
+    const fields = await this.client.listOfferFields();
+    this.settings = { ...this.settings, offerFieldCache: { fetchedAt: new Date().toISOString(), fields } };
+    await this.saveSettings?.(this.settings);
+    return fields;
   }
 
   /** A01 */
@@ -311,8 +334,9 @@ export class MiraklAdapter implements MarketplaceAdapter, OfferPublisher {
 
   // ------------------------------------------------------------ creating offers
 
+  /** Required offer fields (read from the marketplace) that have nowhere to take their value from. */
   publishSetupProblems(): string[] {
-    return [];
+    return unsourcedRequiredFields(this.settings).map((f) => `choose where "${f.label}" comes from`);
   }
 
   /**

@@ -11,8 +11,10 @@ import { ShopifyAdapter, type ShopifyVariantDetails } from '../integrations/mark
 import { isOfferPublisher, type CatalogueMatch, type OfferDraft, type OfferPublisher } from '../integrations/marketplaces/types';
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { AllegroAdapter } from '../integrations/marketplaces/allegro/adapter';
+import { offerFieldMetafieldKeys, resolveOfferFields } from '../integrations/marketplaces/mirakl/offer-fields';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { importListings } from './inventory';
+import { miraklOfferFields } from './settings';
 
 export const MAX_OFFERS_PER_RUN = 25;
 
@@ -20,7 +22,11 @@ export function publishPrice(shopifyPrice: string | number, settings: Marketplac
   return markupPrice(shopifyPrice, settings.offerMarkupPercent ?? 0, settings.offerRounding ?? 'x.99');
 }
 
-async function shopifyDetails(variantIds: string[], rows: { variantId: string | null; name: string; brand: string | null; imageUrl: string | null; sku: string }[]): Promise<Map<string, ShopifyVariantDetails>> {
+async function shopifyDetails(
+  variantIds: string[],
+  rows: { variantId: string | null; name: string; brand: string | null; imageUrl: string | null; sku: string }[],
+  metafieldKeys: string[] = [],
+): Promise<Map<string, ShopifyVariantDetails>> {
   if (isMockMode()) {
     // Demo mode has no Shopify: describe the products from what the database knows.
     return new Map(
@@ -40,6 +46,7 @@ async function shopifyDetails(variantIds: string[], rows: { variantId: string | 
                   sku: p.sku,
                   imageUrls: p.imageUrl ? [p.imageUrl] : [],
                   weightGrams: null,
+                  metafields: {},
                 } as unknown as ShopifyVariantDetails,
               ] as const,
             ]
@@ -55,7 +62,7 @@ async function shopifyDetails(variantIds: string[], rows: { variantId: string | 
   if (!account) throw new Error('There is no Shopify account');
   const adapter = getMarketplaceAdapter(account);
   if (!(adapter instanceof ShopifyAdapter)) throw new Error('Shopify adapter is not available');
-  return adapter.variantDetails(variantIds);
+  return adapter.variantDetails(variantIds, metafieldKeys);
 }
 
 function publisher(account: Awaited<ReturnType<typeof loadMarketplaceAccount>>): OfferPublisher {
@@ -91,6 +98,12 @@ type Loaded = { row: PublishRow; match: CatalogueMatch | null; details: ShopifyV
 
 async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ rows: Loaded[]; setupProblems: string[]; settings: MarketplaceSettings }> {
   const db = getDb();
+  // A Mirakl marketplace's extra offer fields are read once a day; if it can't be asked, its import still decides.
+  try {
+    await miraklOfferFields(accountId);
+  } catch (err) {
+    console.warn('[offers] extra offer fields not loaded:', err instanceof Error ? err.message : err);
+  }
   const account = await loadMarketplaceAccount(accountId);
   const pub = publisher(account);
   const setupProblems = pub.publishSetupProblems();
@@ -107,7 +120,7 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
   const missing = items.filter((p) => !linked.has(p.id) && !(p.ean && eans.has(p.ean)) && !skus.has(p.sku.toLowerCase()) && !(p.ean && skus.has(p.ean)) && (!onlyIds || onlyIds.has(p.id)));
   if (missing.length === 0) return { rows: [], setupProblems, settings: account.settings };
 
-  const details = await shopifyDetails(missing.map((p) => p.variantId!), missing);
+  const details = await shopifyDetails(missing.map((p) => p.variantId!), missing, offerFieldMetafieldKeys(account.settings));
   const wanted = [...new Set(missing.map((p) => p.ean).filter((e): e is string => Boolean(e)))];
   const catalogue = wanted.length ? await pub.checkCatalogue(wanted) : new Map<string, CatalogueMatch>();
 
@@ -120,6 +133,7 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
     // Allegro needs the catalogue product to attach to. On Mirakl (Empik, HEBE) the lookup is only advice: its own import accepts or refuses the offer, with the reason.
     else if (match && !match.found && account.type === 'allegro') problems.push('not in the catalogue');
     if (d && Number(d.price) <= 0) problems.push('no price');
+    if (d) problems.push(...resolveOfferFields(account.settings, d.metafields).problems);
     return {
       details: d,
       match,
@@ -159,7 +173,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
   if (productIds.length > MAX_OFFERS_PER_RUN) throw new Error(`Create at most ${MAX_OFFERS_PER_RUN} offers at a time`);
   const account = await loadMarketplaceAccount(accountId);
   const pub = publisher(account);
-  const { rows, setupProblems } = await loadRows(accountId, new Set(productIds));
+  const { rows, setupProblems, settings } = await loadRows(accountId, new Set(productIds));
   if (setupProblems.length) throw new Error(`Finish the account settings first: ${setupProblems.join(', ')}`);
 
   const result: PublishResult = { created: [], failed: [], notes: [] };
@@ -180,6 +194,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
       quantity: row.stock,
       price: row.price!,
       currency: 'PLN',
+      extraFields: resolveOfferFields(settings, details.metafields).values,
     };
     try {
       const done = await pub.createOffer(draft, match);

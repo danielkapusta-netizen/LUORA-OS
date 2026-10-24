@@ -61,6 +61,19 @@ export const sessions = sqliteTable('sessions', {
 
 // ---------------------------------------------------------------- accounts
 
+/** An extra field a Mirakl marketplace defines on offers (AF01), e.g. HEBE's "responsible person". */
+export interface MiraklOfferField {
+  code: string;
+  label: string;
+  /** STRING, TEXTAREA, LIST, NUMERIC, ... as Mirakl names them. */
+  type: string;
+  required: boolean;
+  description?: string | null;
+  defaultValue?: string | null;
+  /** The only values a LIST field takes. */
+  acceptedValues?: string[];
+}
+
 export interface MarketplaceSettings {
   /** Created by the demo-mode seed; removable from Settings → Integrations. */
   demo?: boolean;
@@ -119,6 +132,13 @@ export interface MarketplaceSettings {
   };
   /** Empik and HEBE (Mirakl): offer state code of new offers (Mirakl "new"). The name predates HEBE. */
   empikOfferState?: string;
+  /** Empik and HEBE (Mirakl): the marketplace's extra offer fields (AF01), refreshed at most daily. */
+  offerFieldCache?: { fetchedAt: string; fields: MiraklOfferField[] };
+  /**
+   * Empik and HEBE (Mirakl): where each extra offer field's value comes from, keyed by field code: a Shopify
+   * product metafield ("custom.responsible_person"), else the fixed text.
+   */
+  offerFieldSources?: Record<string, { metafield?: string; fallback?: string }>;
 }
 
 export const marketplaceAccounts = sqliteTable('marketplace_accounts', {

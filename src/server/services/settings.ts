@@ -15,6 +15,7 @@ import {
   type CarrierSettings,
   type MarketplaceAccount,
   type MarketplaceSettings,
+  type MiraklOfferField,
   type RuleConditions,
 } from '../db/schema';
 import type { SenderSettings } from '../integrations/types';
@@ -336,6 +337,13 @@ export async function setUserRole(id: string, role: Role): Promise<void> {
 export async function resetPassword(id: string, password: string): Promise<void> {
   if (password.length < 8) throw new Error('Password must have at least 8 characters');
   await getDb().update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, id));
+}
+
+/** A Mirakl marketplace's extra offer fields (AF01) for the settings form; empty in demo mode. */
+export async function miraklOfferFields(accountId: string, refresh = false): Promise<MiraklOfferField[]> {
+  const adapter = getMarketplaceAdapter(await loadMarketplaceAccount(accountId));
+  if (!(adapter instanceof MiraklAdapter)) return [];
+  return adapter.offerFields(refresh);
 }
 
 /** Carriers of a Mirakl marketplace (Empik, HEBE; SH21) for the settings dropdowns; empty in demo mode. */

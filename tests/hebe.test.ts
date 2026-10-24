@@ -1,15 +1,23 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import order from './fixtures/empik/order.json';
 import { HEBE, HebeAdapter } from '@/server/integrations/marketplaces/hebe/adapter';
+import { buildOfferCsv } from '@/server/integrations/marketplaces/mirakl/adapter';
 import { mapMiraklOrder } from '@/server/integrations/marketplaces/mirakl/mapper';
+import { offerFieldMetafieldKeys, resolveOfferFields, unsourcedRequiredFields } from '@/server/integrations/marketplaces/mirakl/offer-fields';
+import type { MarketplaceSettings } from '@/server/db/schema';
+import type { OfferDraft } from '@/server/integrations/marketplaces/types';
+import { httpConfig } from '@/server/http';
 
 // HEBE runs on Mirakl like Empik, so an Empik order payload is a HEBE order payload too.
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
+beforeEach(() => {
+  httpConfig.sleep = async () => {};
+});
 
 const BASE = 'https://hebe.mirakl.test';
 const creds = { baseUrl: BASE, apiKey: 'hebe-key' };
@@ -160,5 +168,101 @@ describe('HebeAdapter', () => {
     );
     await new HebeAdapter(creds).setStock([{ externalId: '1', sku: 'LUO-1', ref: { shopSku: 'LUO-1' }, quantity: 4 }]);
     expect(csv).toContain('"LUO-1";"4";"";"update"');
+  });
+});
+
+// HEBE asks for a "responsible person" (GPSR) on every offer. It is an extra offer field that Mirakl lists (AF01).
+const PERSON = { code: 'responsible-person', label: 'Osoba odpowiedzialna', type: 'STRING', required: true };
+const SAFETY = { code: 'safety-class', label: 'Klasa', type: 'LIST', required: false, acceptedValues: ['A', 'B'] };
+const offerDraft: OfferDraft = {
+  sku: 'LUO-1',
+  ean: '5901234567890',
+  name: 'Cream',
+  descriptionHtml: '<p>x</p>',
+  brand: 'Luora',
+  imageUrls: [],
+  weightGrams: 120,
+  quantity: 7,
+  price: '49.99',
+  currency: 'PLN',
+};
+
+describe('HEBE extra offer fields', () => {
+  const settings: MarketplaceSettings = {
+    offerFieldCache: { fetchedAt: '2026-10-24T00:00:00Z', fields: [PERSON, SAFETY] },
+    offerFieldSources: { 'responsible-person': { metafield: ' custom.responsible_person ', fallback: 'Luora Sp. z o.o., Kraków' } },
+  };
+
+  it('reads the offer fields with AF01, drops the ones a seller cannot edit, and caches them for a day', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${BASE}/api/additional_fields`, ({ request }) => {
+        calls++;
+        expect(new URL(request.url).searchParams.get('entities')).toBe('OFFER');
+        return HttpResponse.json({
+          total_count: 3,
+          additional_fields: [
+            { code: 'responsible-person', label: 'Osoba odpowiedzialna', type: 'STRING', required: true, editable: true },
+            { code: 'safety-class', label: 'Klasa', type: 'LIST', required: false, editable: true, accepted_values: ['A', 'B'], default_value: 'A' },
+            { code: 'internal', label: 'Internal', type: 'STRING', required: true, editable: false },
+          ],
+        });
+      }),
+    );
+    const saved: MarketplaceSettings[] = [];
+    const adapter = new HebeAdapter(creds, {}, async (next) => void saved.push(next));
+    const fields = await adapter.offerFields();
+    expect(fields).toEqual([
+      { code: 'responsible-person', label: 'Osoba odpowiedzialna', type: 'STRING', required: true, description: null, defaultValue: null },
+      { code: 'safety-class', label: 'Klasa', type: 'LIST', required: false, description: null, defaultValue: 'A', acceptedValues: ['A', 'B'] },
+    ]);
+    await adapter.offerFields();
+    expect(calls).toBe(1);
+    expect(saved).toHaveLength(1);
+    expect(saved[0].offerFieldCache?.fields).toHaveLength(2);
+    await adapter.offerFields(true);
+    expect(calls).toBe(2);
+  });
+
+  it('takes the product’s metafield first, then the fixed text', () => {
+    expect(offerFieldMetafieldKeys(settings)).toEqual(['custom.responsible_person']);
+    expect(resolveOfferFields(settings, { 'custom.responsible_person': ' Jan Kowalski, Warszawa ' })).toEqual({ values: { 'responsible-person': 'Jan Kowalski, Warszawa' }, problems: [] });
+    expect(resolveOfferFields(settings, {}).values).toEqual({ 'responsible-person': 'Luora Sp. z o.o., Kraków' });
+  });
+
+  it('flags a product with nothing to send for a required field, and a value a list does not accept', () => {
+    const noFallback: MarketplaceSettings = { ...settings, offerFieldSources: { 'responsible-person': { metafield: 'custom.responsible_person' } } };
+    expect(resolveOfferFields(noFallback, {})).toEqual({ values: {}, problems: ['no Osoba odpowiedzialna'] });
+    const wrongList: MarketplaceSettings = { ...settings, offerFieldSources: { ...settings.offerFieldSources, 'safety-class': { fallback: 'Z' } } };
+    expect(resolveOfferFields(wrongList, {}).problems).toEqual(['Klasa "Z" is not accepted']);
+  });
+
+  it('stops publishing until every required field has a source', () => {
+    expect(unsourcedRequiredFields({ offerFieldCache: settings.offerFieldCache }).map((f) => f.code)).toEqual(['responsible-person']);
+    expect(unsourcedRequiredFields(settings)).toEqual([]);
+    expect(new HebeAdapter(creds, { offerFieldCache: settings.offerFieldCache }).publishSetupProblems()).toEqual(['choose where "Osoba odpowiedzialna" comes from']);
+    expect(new HebeAdapter(creds, settings).publishSetupProblems()).toEqual([]);
+    expect(new HebeAdapter(creds, {}).publishSetupProblems()).toEqual([]);
+  });
+
+  it('adds the fields to the offer file as columns named by their code', () => {
+    expect(buildOfferCsv({ ...offerDraft, extraFields: { 'responsible-person': 'Jan "JK" Kowalski', 'safety-class': '' } }, '11', 2)).toBe(
+      '"sku";"product-id";"product-id-type";"price";"quantity";"state";"leadtime-to-ship";"update-delete";"responsible-person"\n"LUO-1";"5901234567890";"EAN";"49.99";"7";"11";"2";"update";"Jan ""JK"" Kowalski"\n',
+    );
+    expect(buildOfferCsv(offerDraft, '11', 2).split('\n')[0]).not.toContain('responsible');
+  });
+
+  it('sends the responsible person with the offer (OF01)', async () => {
+    let csv = '';
+    server.use(
+      http.post(`${BASE}/api/offers/imports`, async ({ request }) => {
+        csv = await ((await request.formData()).get('file') as File).text();
+        return HttpResponse.json({ import_id: 9 });
+      }),
+      http.get(`${BASE}/api/offers/imports/9`, () => HttpResponse.json({ status: 'COMPLETE', lines_in_error: 0, has_error_report: false })),
+    );
+    await new HebeAdapter(creds).createOffer({ ...offerDraft, extraFields: { 'responsible-person': 'Jan Kowalski' } });
+    expect(csv).toContain('"responsible-person"');
+    expect(csv).toContain('"update";"Jan Kowalski"');
   });
 });

@@ -56,11 +56,17 @@ export function getMarketplaceAdapter(account: MarketplaceAccount): MarketplaceA
       const creds = readCredentials<MiraklCredentials>(account.credentials);
       if (!creds) throw new Error(`${account.name} has no API key yet. Add it in Settings → Integrations.`);
       return new MiraklAdapter(account.type === 'hebe' ? HEBE : EMPIK, creds, account.settings, async (next) => {
-        // Only the carrier cache changes here; merge into fresh settings so a concurrent edit isn't lost.
+        // Only the carrier and offer-field caches change here; merge into fresh settings so a concurrent edit isn't lost.
         const fresh = await loadMarketplaceAccount(account.id);
         await getDb()
           .update(marketplaceAccounts)
-          .set({ settings: { ...fresh.settings, carrierCache: next.carrierCache } })
+          .set({
+            settings: {
+              ...fresh.settings,
+              ...(next.carrierCache ? { carrierCache: next.carrierCache } : {}),
+              ...(next.offerFieldCache ? { offerFieldCache: next.offerFieldCache } : {}),
+            },
+          })
           .where(eq(marketplaceAccounts.id, account.id));
       });
     }
