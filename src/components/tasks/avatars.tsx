@@ -1,25 +1,8 @@
-import { avatarStyle, initials } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
 import { getT } from '@/lib/i18n/server';
+import { Avatar, SIZE, type Person } from './avatar';
 
-const SIZE = { sm: 'size-6 text-[10px]', md: 'size-7 text-[11px]', lg: 'size-9 text-xs' } as const;
-
-interface Person {
-  id: string;
-  name: string;
-}
-
-/** A round badge with a person's initials in a colour that is theirs everywhere. */
-export function Avatar({ person, size = 'md', className }: { person: Person; size?: keyof typeof SIZE; className?: string }) {
-  return (
-    <span
-      title={person.name}
-      className={cn('inline-flex shrink-0 items-center justify-center rounded-full font-semibold ring-2 ring-white', SIZE[size], avatarStyle(person.id), className)}
-    >
-      {initials(person.name)}
-    </span>
-  );
-}
+export { Avatar };
 
 /** Overlapping avatars, "+N" for the ones that do not fit, and a dashed circle when nobody is assigned. */
 export async function AvatarStack({ people, max = 3, size = 'md' }: { people: Person[]; max?: number; size?: keyof typeof SIZE }) {

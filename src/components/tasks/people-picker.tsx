@@ -1,9 +1,11 @@
-import { Avatar } from './avatars';
-import { getT } from '@/lib/i18n/server';
+'use client';
+
+import { useT } from '@/lib/i18n/client';
+import { Avatar } from './avatar';
 
 /** One tick-able pill per person (checkboxes named `name`), for choosing who a task is for. */
-export async function PeoplePicker({ people, name = 'assigneeIds', selected = [] }: { people: { id: string; name: string }[]; name?: string; selected?: string[] }) {
-  const t = await getT();
+export function PeoplePicker({ people, name = 'assigneeIds', selected = [] }: { people: { id: string; name: string }[]; name?: string; selected?: string[] }) {
+  const t = useT();
   if (people.length === 0) return <p className="text-sm text-slate-500">{t('There are no users to assign yet.')}</p>;
   return (
     <div className="flex flex-wrap gap-2">
