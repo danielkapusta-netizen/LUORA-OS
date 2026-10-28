@@ -90,8 +90,9 @@ export function buildOfferCsv(draft: OfferDraft, state: string, leadtimeDays: nu
 }
 
 /**
- * OF01 import that changes only the price of existing offers (import mode PARTIAL leaves every
- * column that is not in the file alone, so descriptions, stock and lead times stay as they are).
+ * OF01 import that changes only the price of existing offers: the file has just the SKU, the price and
+ * "update", and Mirakl's NORMAL mode only touches the columns that are in the file. (The old
+ * PARTIAL_UPDATE mode is deprecated and HEBE refuses "PARTIAL" outright.)
  */
 export function buildPriceCsv(updates: PriceUpdate[]): string {
   const quote = (v: string) => `"${v.replace(/"/g, '""')}"`;
@@ -429,7 +430,7 @@ export class MiraklAdapter implements MarketplaceAdapter, OfferPublisher {
     if (sendable.length === 0) return failures;
     const form = new FormData();
     form.append('file', new Blob([buildPriceCsv(sendable)], { type: 'text/csv' }), 'prices.csv');
-    form.append('import_mode', 'PARTIAL');
+    form.append('import_mode', 'NORMAL');
     const { import_id: importId } = await this.client.call<{ import_id: number | string }>('POST', '/offers/imports', { body: form });
     try {
       await this.awaitImport(importId, 'the price update');

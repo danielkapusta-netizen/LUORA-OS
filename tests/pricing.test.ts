@@ -171,7 +171,7 @@ describe('Empik prices', () => {
     );
   });
 
-  it('uploads the CSV as a PARTIAL import and waits for its verdict', async () => {
+  it('uploads the CSV as a NORMAL import (the only mode besides REPLACE) and waits for its verdict', async () => {
     let csv = '';
     let mode: FormDataEntryValue | null = null;
     server.use(
@@ -185,7 +185,7 @@ describe('Empik prices', () => {
     );
     const failures = await new EmpikAdapter(creds).setPrices([update({ ref: { shopSku: 'LUO-1' }, price: '5.00' })]);
     expect(failures).toEqual([]);
-    expect(mode).toBe('PARTIAL');
+    expect(mode).toBe('NORMAL');
     expect(csv).toContain('"LUO-1";"5.00";"update"');
   });
 

@@ -335,3 +335,25 @@ describe('HEBE extra offer fields', () => {
     expect(csv).toContain('"update";"Jan Kowalski"');
   });
 });
+
+describe('HEBE price updates', () => {
+  it('sends only SKU and price, as a NORMAL import (HEBE refuses "PARTIAL")', async () => {
+    let csv = '';
+    let mode: FormDataEntryValue | null = null;
+    server.use(
+      http.post(`${BASE}/api/offers/imports`, async ({ request }) => {
+        const form = await request.formData();
+        mode = form.get('import_mode');
+        // Mirakl's own check: only NORMAL and REPLACE are valid.
+        if (mode !== 'NORMAL' && mode !== 'REPLACE') return HttpResponse.json({ message: `Value '${mode}' is not valid for parameter 'import_mode'`, status: 400 }, { status: 400 });
+        csv = await (form.get('file') as File).text();
+        return HttpResponse.json({ import_id: 11 });
+      }),
+      http.get(`${BASE}/api/offers/imports/11`, () => HttpResponse.json({ status: 'COMPLETE', lines_in_error: 0, has_error_report: false })),
+    );
+    const failures = await new HebeAdapter(creds).setPrices([{ externalId: '1', sku: 'AREN-VCSR30', ean: '8809562192770', ref: { shopSku: 'AREN-VCSR30' }, price: '74.90', currency: 'PLN' }]);
+    expect(failures).toEqual([]);
+    expect(mode).toBe('NORMAL');
+    expect(csv).toBe('"sku";"price";"update-delete"\n"AREN-VCSR30";"74.90";"update"\n');
+  });
+});
