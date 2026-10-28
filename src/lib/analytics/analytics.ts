@@ -12,6 +12,7 @@ import { brandOf, categoryOf } from './orders'
 import { bucketKey, nextBucket, type ResolvedPeriod } from './period'
 import { ratio, sum } from './parse'
 import type { DailyPoint, Granularity, Order } from './types'
+import { msg } from '@/lib/i18n/msg'
 
 /** Metrics the workspace can plot. Each is a full analytical section. */
 export type AnalyticsMetric =
@@ -36,48 +37,48 @@ export interface MetricDefinition {
 export const METRIC_DEFINITIONS: Record<AnalyticsMetric, MetricDefinition> = {
   revenue: {
     key: 'revenue',
-    label: 'Revenue',
-    description: 'What buyers paid for the goods, VAT included, converted to PLN.',
+    label: msg('Revenue'),
+    description: msg('What buyers paid for the goods, VAT included, converted to PLN.'),
     format: 'pln',
     pick: (point) => point.revenuePLN,
     higherIsBetter: true,
   },
   profit: {
     key: 'profit',
-    label: 'Profit',
-    description: 'What is kept after VAT, marketplace fees, landed product cost, shipping and refunds.',
+    label: msg('Profit'),
+    description: msg('What is kept after VAT, marketplace fees, landed product cost, shipping and refunds.'),
     format: 'pln',
     pick: (point) => point.marginPLN,
     higherIsBetter: true,
   },
   margin: {
     key: 'margin',
-    label: 'Margin',
-    description: 'Profit as a share of revenue — the rate at which sales become money.',
+    label: msg('Margin'),
+    description: msg('Profit as a share of revenue — the rate at which sales become money.'),
     format: 'percent',
     pick: (point) => point.marginPct,
     higherIsBetter: true,
   },
   orders: {
     key: 'orders',
-    label: 'Orders',
-    description: 'Customer purchases. A multi-item basket counts once.',
+    label: msg('Orders'),
+    description: msg('Customer purchases. A multi-item basket counts once.'),
     format: 'number',
     pick: (point) => point.orders,
     higherIsBetter: true,
   },
   basket: {
     key: 'basket',
-    label: 'Average basket',
-    description: 'Revenue divided by orders — what a typical customer spends.',
+    label: msg('Average basket'),
+    description: msg('Revenue divided by orders — what a typical customer spends.'),
     format: 'pln',
     pick: (point) => point.avgOrderValuePLN,
     higherIsBetter: true,
   },
   contribution: {
     key: 'contribution',
-    label: 'Profit per order',
-    description: 'Profit divided by orders — what each purchase actually contributes.',
+    label: msg('Profit per order'),
+    description: msg('Profit divided by orders — what each purchase actually contributes.'),
     format: 'pln',
     pick: (point) => ratio(point.marginPLN, point.orders),
     higherIsBetter: true,

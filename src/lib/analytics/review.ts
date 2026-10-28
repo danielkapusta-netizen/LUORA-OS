@@ -13,6 +13,7 @@ import { ratio } from './parse'
 import { shortLabel } from './sku'
 import type { Snapshot } from './snapshot'
 import type { DataCoverage } from './types'
+import { msg } from '@/lib/i18n/msg'
 
 export interface ReviewInsight {
   /** Short label, e.g. "Margin" or "Basket". */
@@ -63,40 +64,40 @@ export function buildBusinessReview(
 
   const summary = [
     {
-      label: 'Revenue',
+      label: msg('Revenue'),
       value: formatPLN(totals.revenuePLN),
       caption: previousTotals ? `from ${formatPLN(previousTotals.revenuePLN)}` : 'no prior window',
     },
     ...(showProfit
       ? [
           {
-            label: 'Profit',
+            label: msg('Profit'),
             value: formatPLN(totals.marginPLN),
             caption: previousTotals ? `from ${formatPLN(previousTotals.marginPLN)}` : 'no prior window',
           },
         ]
       : []),
     {
-      label: 'Margin',
+      label: msg('Margin'),
       value: formatPercent(totals.marginPct),
       caption: previousTotals
         ? `from ${formatPercent(previousTotals.marginPct)}`
         : 'no prior window',
     },
     {
-      label: 'Orders',
+      label: msg('Orders'),
       value: totals.orders.toLocaleString('en-GB'),
       caption: `${totals.customers.toLocaleString('en-GB')} customers`,
     },
     {
-      label: 'Average basket',
+      label: msg('Average basket'),
       value: formatPLN(totals.avgOrderValuePLN),
       caption: previousTotals
         ? `from ${formatPLN(previousTotals.avgOrderValuePLN)}`
         : 'no prior window',
     },
     {
-      label: 'Business health',
+      label: msg('Business health'),
       value: `${snapshot.health.score}/100`,
       caption: snapshot.health.band.replace('-', ' '),
     },

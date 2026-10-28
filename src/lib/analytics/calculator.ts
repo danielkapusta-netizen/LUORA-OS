@@ -46,6 +46,7 @@ import {
 } from './pricing'
 import { ratio, sum } from './parse'
 import type { Channel, Order, ProductPerformance } from './types'
+import { msg } from '@/lib/i18n/msg'
 
 /** Currencies a Korean-skincare quote realistically arrives in. */
 export type SourceCurrency = 'PLN' | 'USD' | 'EUR' | 'KRW'
@@ -348,7 +349,7 @@ export function evaluateCandidate(
   const targets: MarginTarget[] = CALCULATOR_TARGETS.map((target) => {
     const required = cost > 0 ? priceForMargin(target, commissionRate, cost) : null
     return {
-      label: target === 0 ? 'Break even' : `${Math.round(target * 100)}% margin`,
+      label: target === 0 ? msg('Break even') : `${Math.round(target * 100)}% margin`,
       marginPct: target * 100,
       requiredPricePLN: required,
       achieved: required !== null && price >= required,
@@ -358,17 +359,17 @@ export function evaluateCandidate(
   const waterfall: WaterfallStep[] | null = isIncomplete
     ? null
     : [
-        { label: 'Selling price', amountPLN: price, kind: 'start' },
-        { label: 'VAT (23%)', amountPLN: -(price - price * NET), kind: 'deduction' },
-        { label: 'Marketplace fees', amountPLN: -(price * commissionRate), kind: 'deduction' },
-        { label: 'Product cost', amountPLN: -parts.goodsPLN, kind: 'deduction' },
+        { label: msg('Selling price'), amountPLN: price, kind: 'start' },
+        { label: msg('VAT (23%)'), amountPLN: -(price - price * NET), kind: 'deduction' },
+        { label: msg('Marketplace fees'), amountPLN: -(price * commissionRate), kind: 'deduction' },
+        { label: msg('Product cost'), amountPLN: -parts.goodsPLN, kind: 'deduction' },
         ...(parts.freightPLN > 0
-          ? [{ label: 'Inbound freight', amountPLN: -parts.freightPLN, kind: 'deduction' as const }]
+          ? [{ label: msg('Inbound freight'), amountPLN: -parts.freightPLN, kind: 'deduction' as const }]
           : []),
         ...(parts.dutyPLN > 0
-          ? [{ label: 'Duty & customs', amountPLN: -parts.dutyPLN, kind: 'deduction' as const }]
+          ? [{ label: msg('Duty & customs'), amountPLN: -parts.dutyPLN, kind: 'deduction' as const }]
           : []),
-        { label: 'Net profit', amountPLN: profit, kind: 'result' },
+        { label: msg('Net profit'), amountPLN: profit, kind: 'result' },
       ]
 
   return {

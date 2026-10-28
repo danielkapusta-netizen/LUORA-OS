@@ -180,7 +180,7 @@ export function Calculator({
               {result.waterfall && (
                 <Waterfall
                   steps={result.waterfall.map((w) => ({
-                    label: w.label,
+                    label: t(w.label),
                     value: w.kind === 'result' ? w.amountPLN : Math.abs(w.amountPLN),
                     kind: w.kind === 'start' ? 'start' : w.kind === 'result' ? 'total' : 'minus',
                   }))}
@@ -189,7 +189,7 @@ export function Calculator({
               <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
                 {result.targets.map((target) => (
                   <li key={target.label} className="flex justify-between gap-2">
-                    <span className={target.achieved ? 'text-emerald-700' : 'text-slate-600'}>{target.label}</span>
+                    <span className={target.achieved ? 'text-emerald-700' : 'text-slate-600'}>{target.marginPct === 0 ? t('Break even') : t('{n}% margin', { n: Math.round(target.marginPct) })}</span>
                     <span className="tabular-nums">{target.requiredPricePLN === null ? '—' : `${target.requiredPricePLN.toFixed(2)} zł`}</span>
                   </li>
                 ))}

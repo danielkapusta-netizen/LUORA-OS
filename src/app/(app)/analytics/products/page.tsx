@@ -157,7 +157,7 @@ async function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: An
             <ul className="space-y-1 text-xs">
               {health.factors.map((f) => (
                 <li key={f.label} className={f.positive ? 'text-emerald-800' : 'text-red-800'}>
-                  <span className="font-medium">{f.label}:</span> {f.detail}
+                  <span className="font-medium">{t(f.label)}:</span> {t(f.detail)}
                 </li>
               ))}
             </ul>

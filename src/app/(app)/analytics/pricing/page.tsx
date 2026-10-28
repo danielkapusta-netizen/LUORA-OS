@@ -268,7 +268,7 @@ async function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit:
               <p className="mb-2 text-sm font-semibold">{t('Where one unit\'s price goes')}</p>
               <Waterfall
                 steps={waterfall.map((w) => ({
-                  label: w.label,
+                  label: t(w.label),
                   // Deductions are drawn downwards from the running total; the result keeps its sign.
                   value: w.kind === 'result' ? w.amountPLN : Math.abs(w.amountPLN),
                   kind: w.kind === 'start' ? 'start' : w.kind === 'result' ? 'total' : 'minus',

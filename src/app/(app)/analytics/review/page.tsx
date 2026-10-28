@@ -71,7 +71,7 @@ export default async function BusinessReviewPage({
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           {review.summary.map((s) => (
             <Card key={s.label} className="px-4 py-3">
-              <p className="text-xs font-medium text-slate-500">{s.label}</p>
+              <p className="text-xs font-medium text-slate-500">{t(s.label)}</p>
               <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{s.value}</p>
               <p className="text-xs text-slate-500">{s.caption}</p>
             </Card>
@@ -107,11 +107,11 @@ export default async function BusinessReviewPage({
       <section>
         <SectionTitle
           title={t('Trend')}
-          description={definition.description}
+          description={t(definition.description)}
           actions={
             <Pills
               label={t('Metric')}
-              options={metrics.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))}
+              options={metrics.map((m) => ({ value: m, label: t(METRIC_DEFINITIONS[m].label) }))}
               active={metric}
               href={(v) => link({ metric: v })}
             />
@@ -123,7 +123,7 @@ export default async function BusinessReviewPage({
               data={series.points}
               format={definition.format}
               granularity={series.granularity}
-              label={definition.label}
+              label={t(definition.label)}
               overlays={{ previous: series.available.previous && period.previousCoverage === 'full', movingAverage: series.available.movingAverage }}
             />
           </CardBody>

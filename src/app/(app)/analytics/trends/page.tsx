@@ -59,7 +59,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
     <div className="space-y-6">
       <ViewFilters view={view} path="/analytics/trends" extra={current} />
       <div className="flex flex-wrap items-center gap-2">
-        <Pills label={t('Metric')} options={metrics.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))} active={metric} href={(v) => link({ metric: v })} />
+        <Pills label={t('Metric')} options={metrics.map((m) => ({ value: m, label: t(METRIC_DEFINITIONS[m].label) }))} active={metric} href={(v) => link({ metric: v })} />
         <Pills label={t('Grain')} options={grains.map((g) => ({ value: g, label: GRAINS[g] }))} active={grain} href={(v) => link({ grain: v })} />
       </div>
       {view.snapshot.isEmpty ? (
@@ -72,7 +72,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
             <CardBody className="space-y-4">
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{definition.label}</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t(definition.label)}</p>
                   <p className="text-3xl font-semibold tabular-nums">{formatValue(series.total, definition.format, false, t.locale)}</p>
                   <div className="flex items-center gap-2">
                     <Delta value={series.changePct} unit={definition.format === 'percent' ? 'pp' : '%'} higherIsBetter={definition.higherIsBetter} />
@@ -81,7 +81,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
                       <span className="text-xs text-slate-500">· {t('projected {value}', { value: formatValue(series.projectedTotal, definition.format, false, t.locale) })}</span>
                     )}
                   </div>
-                  <p className="mt-1 max-w-xl text-xs text-slate-500">{definition.description}</p>
+                  <p className="mt-1 max-w-xl text-xs text-slate-500">{t(definition.description)}</p>
                 </div>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Overlays')}>
                   {OVERLAYS.map((o) => {
@@ -109,7 +109,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
                 data={series.points}
                 format={definition.format}
                 granularity={series.granularity}
-                label={definition.label}
+                label={t(definition.label)}
                 overlays={{
                   previous: shown.has('previous') && series.available.previous && period.previousCoverage === 'full',
                   lastYear: shown.has('lastYear') && series.available.lastYear,
@@ -123,7 +123,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
             <SectionTitle title={t('Weekday rhythm')} description={t('Average revenue per weekday in this period, so a range with two Mondays and one Sunday compares fairly.')} />
             <Card>
               <CardBody>
-                <WeekdayBars data={weekdays.map((w) => ({ label: w.label, value: Math.round(w.avgRevenuePLN) }))} />
+                <WeekdayBars data={weekdays.map((w) => ({ label: t(w.label), value: Math.round(w.avgRevenuePLN) }))} />
               </CardBody>
             </Card>
           </section>

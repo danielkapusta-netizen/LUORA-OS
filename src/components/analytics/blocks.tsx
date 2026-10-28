@@ -80,15 +80,15 @@ export async function KpiCard({ kpi, comparisonLabel, granularity = 'day' }: { k
   return (
     <Card>
       <CardBody className="space-y-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500" title={kpi.hint}>
-          {kpi.label}
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500" title={t(kpi.hint)}>
+          {t(kpi.label)}
         </p>
         <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatValue(kpi.value, kpi.format, false, t.locale)}</p>
         <div className="flex items-center gap-1.5">
           <Delta value={change} unit={kpi.isRate ? 'pp' : '%'} higherIsBetter={kpi.higherIsBetter ?? true} />
           {change !== null && <span className="text-xs text-slate-400">{comparisonLabel}</span>}
         </div>
-        <Sparkline values={kpi.series} color={color} label={t('{label} over the period', { label: kpi.label })} />
+        <Sparkline values={kpi.series} color={color} label={t('{label} over the period', { label: t(kpi.label) })} />
         {kpi.peak && (
           <p className="text-xs text-slate-500">
             {t('Best {when}: {value}', { when: /^\d{4}-\d{2}-\d{2}$/.test(kpi.peak.label) ? formatBucket(kpi.peak.label, granularity, t.locale) : kpi.peak.label, value: formatValue(kpi.peak.value, kpi.format, false, t.locale) })}
