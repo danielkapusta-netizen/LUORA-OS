@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import order from './fixtures/empik/order.json';
 import { HEBE, HebeAdapter } from '@/server/integrations/marketplaces/hebe/adapter';
-import { buildOfferCsv } from '@/server/integrations/marketplaces/mirakl/adapter';
+import { buildOfferCsv, resolveMiraklCarrier } from '@/server/integrations/marketplaces/mirakl/adapter';
 import { mapMiraklOrder } from '@/server/integrations/marketplaces/mirakl/mapper';
 import { offerFieldMetafieldKeys, resolveOfferFields, unsourcedRequiredFields } from '@/server/integrations/marketplaces/mirakl/offer-fields';
 import type { MarketplaceSettings } from '@/server/db/schema';
@@ -168,6 +168,62 @@ describe('HebeAdapter', () => {
     );
     await new HebeAdapter(creds).setStock([{ externalId: '1', sku: 'LUO-1', ref: { shopSku: 'LUO-1' }, quantity: 4 }]);
     expect(csv).toContain('"LUO-1";"4";"";"update"');
+  });
+});
+
+// HEBE's real carrier list (SH21): one InPost carrier for lockers and couriers alike, codes with a country suffix.
+const HEBE_CARRIERS = [
+  { code: 'dhl-pl', label: 'DHL Poland', tracking_url: null },
+  { code: 'dpd-pl', label: 'DPD Poland', tracking_url: null },
+  { code: 'fedex-pl', label: 'Fedex Poland', tracking_url: null },
+  { code: 'gls', label: 'GLS', tracking_url: null },
+  { code: 'inpost-pl', label: 'Inpost Pologne', tracking_url: null },
+  { code: 'pl-post', label: 'Poczta Polska', tracking_url: null },
+  { code: 'ups', label: 'UPS', tracking_url: null },
+];
+
+describe('HEBE carriers', () => {
+  const ref = { externalId: '210045-A', externalNumber: '210045', raw: order, items: [] };
+  function send(tracking: Parameters<HebeAdapter['pushTracking']>[1]) {
+    const calls: string[] = [];
+    server.use(
+      http.get(`${BASE}/api/shipping/carriers`, () => HttpResponse.json({ carriers: HEBE_CARRIERS })),
+      http.get(`${BASE}/api/orders`, () => HttpResponse.json({ orders: [order], total_count: 1 })),
+      http.put(`${BASE}/api/orders/:id/tracking`, async ({ request }) => {
+        calls.push(JSON.stringify(await request.json()));
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.put(`${BASE}/api/orders/:id/ship`, () => new HttpResponse(null, { status: 204 })),
+    );
+    return new HebeAdapter(creds).pushTracking(ref, tracking).then(() => calls);
+  }
+
+  it('sends InPost Paczkomat and courier labels with HEBE’s single InPost carrier', async () => {
+    expect(await send({ carrier: 'inpost', carrierName: 'InPost', service: 'inpost_locker_standard', trackingNumber: '62001' })).toEqual(['{"carrier_code":"inpost-pl","tracking_number":"62001"}']);
+    expect(await send({ carrier: 'inpost', carrierName: 'InPost', service: 'inpost_courier_standard', trackingNumber: '52000' })).toEqual(['{"carrier_code":"inpost-pl","tracking_number":"52000"}']);
+  });
+
+  it('maps the carriers Allegro Delivery reports to HEBE’s codes', async () => {
+    const as = (carrierCode: string) => send({ carrier: 'allegro_shipping', carrierCode, carrierName: carrierCode, trackingNumber: '9' });
+    expect(await as('DPD')).toEqual(['{"carrier_code":"dpd-pl","tracking_number":"9"}']);
+    expect(await as('POCZTA_POLSKA')).toEqual(['{"carrier_code":"pl-post","tracking_number":"9"}']);
+    expect(await as('GLS')).toEqual(['{"carrier_code":"gls","tracking_number":"9"}']);
+  });
+
+  it('sends a carrier HEBE does not list as an unregistered one', async () => {
+    expect(await send({ carrier: 'allegro_shipping', carrierCode: 'ORLEN', carrierName: 'Orlen Paczka', trackingNumber: '7', trackingUrl: 'https://orlen.test/7' })).toEqual([
+      '{"carrier_name":"Orlen Paczka","carrier_url":"https://orlen.test/7","tracking_number":"7"}',
+    ]);
+  });
+
+  it('matches a code with a country suffix, and a lone InPost carrier for both kinds', () => {
+    expect(resolveMiraklCarrier(['dpd'], HEBE_CARRIERS, null)?.code).toBe('dpd-pl');
+    expect(resolveMiraklCarrier([], HEBE_CARRIERS, 'inpostLocker')?.code).toBe('inpost-pl');
+    expect(resolveMiraklCarrier([], HEBE_CARRIERS, 'inpostCourier')?.code).toBe('inpost-pl');
+    // Two letters is too short to guess from.
+    expect(resolveMiraklCarrier(['pl'], HEBE_CARRIERS, null)).toBeNull();
+    // A marketplace that has a courier InPost only must not get a locker label sent to it.
+    expect(resolveMiraklCarrier([], [{ code: 'inpost-kurier', label: 'InPost Kurier' }], 'inpostLocker')).toBeNull();
   });
 });
 

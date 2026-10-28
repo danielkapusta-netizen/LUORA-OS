@@ -31,11 +31,20 @@ export function resolveMiraklCarrier(
     const loose = carriers.find((c) => squash(c.code) === squash(candidate) || squash(c.label) === squash(candidate));
     if (loose) return loose;
   }
+  // Last resort for a carrier the marketplace lists with a country suffix: "dpd" finds "dpd-pl". The first listed wins.
+  for (const candidate of candidates) {
+    if (!candidate?.trim() || squash(candidate).length < 3) continue;
+    const prefixed = carriers.find((c) => squash(c.code).startsWith(squash(candidate)) || squash(c.label).startsWith(squash(candidate)));
+    if (prefixed) return prefixed;
+  }
   if (kind) {
     const inpost = carriers.filter((c) => /inpost/i.test(`${c.label} ${c.code}`));
     const wantsLocker = kind === 'inpostLocker';
     const match = inpost.find((c) => /paczkomat/i.test(`${c.label} ${c.code}`) === wantsLocker && (wantsLocker || /kurier/i.test(`${c.label} ${c.code}`)));
     if (match) return match;
+    // A marketplace with one InPost carrier that names neither locker nor courier (HEBE's "inpost-pl") means it for both.
+    const [only] = inpost;
+    if (inpost.length === 1 && !/paczkomat|locker|kurier|courier/i.test(`${only.label} ${only.code}`)) return only;
   }
   return null;
 }
