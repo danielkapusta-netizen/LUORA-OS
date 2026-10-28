@@ -1,6 +1,7 @@
 'use client';
 
 import { Check } from 'lucide-react';
+import { useT } from '@/lib/i18n/client';
 import { useOptimistic, useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
 import { setPackedAction } from './actions';
@@ -8,6 +9,7 @@ import { setPackedAction } from './actions';
 /** A checkbox styled as a button: grey "Packed" when not packed, green with a tick once packed. */
 export function PackedToggle({ shipmentId, packed }: { shipmentId: string; packed: boolean }) {
   const [optimistic, setOptimistic] = useOptimistic(packed);
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +46,7 @@ export function PackedToggle({ shipmentId, packed }: { shipmentId: string; packe
         >
           {optimistic && <Check className="size-3" strokeWidth={3} />}
         </span>
-        Packed
+        {t('Packed')}
       </button>
       {error && <p className="mt-1 text-xs text-red-700">{error}</p>}
     </div>

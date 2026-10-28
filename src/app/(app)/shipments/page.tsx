@@ -22,6 +22,7 @@ import { PackedToggle } from './packed-toggle';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { retryFailedTrackingAction } from './actions';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -29,11 +30,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const STATES = [
-  { value: '', label: 'All' },
-  { value: 'pending', label: 'Being created' },
-  { value: 'created', label: 'Label ready' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: '', label: msg('All') },
+  { value: 'pending', label: msg('Being created') },
+  { value: 'created', label: msg('Label ready') },
+  { value: 'failed', label: msg('Failed') },
+  { value: 'cancelled', label: msg('Cancelled') },
 ];
 
 export default async function ShipmentsPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
@@ -69,7 +70,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                 href={s.value ? `/shipments?state=${s.value}` : '/shipments'}
                 className={cn('press rounded-md px-2 py-1 text-xs font-medium max-md:px-3 max-md:py-2 max-md:text-sm', state === s.value ? 'bg-brand-50 text-brand-700' : 'text-slate-500 hover:bg-slate-100')}
               >
-                {s.label}
+                {t(s.label)}
               </Link>
             ))}
           />
@@ -113,7 +114,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                         {s.error && <div className="mt-1 max-w-80 text-xs text-red-700">{s.error}</div>}
                         <div className="mt-1 text-xs">
                           {s.trackingPushedAt ? (
-                            <span className="text-emerald-700">Tracking sent to {MARKETPLACE_LABELS[order.marketplace]}</span>
+                            <span className="text-emerald-700">{t('Tracking sent to {account}', { account: MARKETPLACE_LABELS[order.marketplace] })}</span>
                           ) : s.trackingPushError ? (
                             <span className="text-red-700">{t('Tracking not sent:')} {s.trackingPushError}</span>
                           ) : s.state === 'created' ? (
@@ -157,10 +158,10 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
               {batches.map((b) => (
                 <li key={b.id}>
                   <Link href={`/shipments/batches/${b.id}`} className="block px-4 py-2.5 hover:bg-slate-50">
-                    <p className="text-sm font-medium text-brand-700">{b.total} order(s)</p>
+                    <p className="text-sm font-medium text-brand-700">{t.plural(b.total, '{n} order', '{n} orders')}</p>
                     <p className="text-xs text-slate-500">
                       {formatDate(b.createdAt, true, t.locale)}
-                      {b.skipped.length ? ` · ${b.skipped.length} skipped` : ''}
+                      {b.skipped.length ? ` · ${t('{n} skipped', { n: b.skipped.length })}` : ''}
                     </p>
                   </Link>
                 </li>

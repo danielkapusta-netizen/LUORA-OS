@@ -29,7 +29,7 @@ export async function ShipmentOrderDetails({
         <div className="flex gap-3 px-1">
           <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />
           <div className="min-w-0 text-sm">
-            <p className="text-xs text-slate-400">{point ? 'Pickup point' : 'Ship to'}</p>
+            <p className="text-xs text-slate-400">{point ? t('Pickup point') : t('Ship to')}</p>
             {point && <p className="font-semibold">{point}</p>}
             <p className="text-slate-700">
               {a.street}, {a.postalCode} {a.city}

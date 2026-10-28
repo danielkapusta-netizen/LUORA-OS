@@ -45,12 +45,12 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
         <ArrowLeft className="size-4" /> {t('Shipments')}
       </Link>
       <PageHeader
-        title={`Label batch · ${batch.total} order(s)`}
-        description={`Started ${formatDate(batch.createdAt, true, t.locale)}`}
+        title={t('Label batch · {orders}', { orders: t.plural(batch.total, '{n} order', '{n} orders') })}
+        description={t('Started {date}', { date: formatDate(batch.createdAt, true, t.locale) })}
         actions={
           done > 0 && (
             <PrintLabelButton className={buttonClass('primary')} href={`/api/labels/merged?batch=${batch.id}`}>
-              <Printer className="size-4" /> Print {done} label(s)
+              <Printer className="size-4" /> {t.plural(done, 'Print {n} label', 'Print {n} labels')}
             </PrintLabelButton>
           )
         }
@@ -58,10 +58,10 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
       <Card className="mb-5 px-4 py-3">
         <div className="mb-2 flex flex-wrap gap-4 text-sm">
-          <span className="text-emerald-700">{done} ready</span>
-          <span className="text-amber-700">{pending} in progress</span>
-          <span className="text-red-700">{failed} failed</span>
-          <span className="text-slate-500">{skipped.length} skipped</span>
+          <span className="text-emerald-700">{t('{n} ready', { n: done })}</span>
+          <span className="text-amber-700">{t('{n} in progress', { n: pending })}</span>
+          <span className="text-red-700">{t('{n} failed', { n: failed })}</span>
+          <span className="text-slate-500">{t('{n} skipped', { n: skipped.length })}</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full bg-brand-600 transition-all" style={{ width: `${percent}%` }} />

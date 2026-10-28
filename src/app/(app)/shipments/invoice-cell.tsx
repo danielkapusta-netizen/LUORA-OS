@@ -27,7 +27,7 @@ export async function InvoiceCell({ orderId, marketplace, invoice, uploads }: { 
     </ActionForm>
   );
 
-  if (!invoice) return create('Create invoice');
+  if (!invoice) return create(t('Create invoice'));
 
   if (invoice.state === 'pending') return <span className="text-xs text-slate-500">{t('Issuing the invoice…')}</span>;
 
@@ -35,10 +35,10 @@ export async function InvoiceCell({ orderId, marketplace, invoice, uploads }: { 
     return (
       <div className="space-y-1.5">
         <p className="max-w-56 text-xs text-red-700">
-          {invoice.state === 'manual' ? 'Issue by hand: ' : 'Not issued: '}
+          {invoice.state === 'manual' ? t('Issue by hand:') : t('Not issued:')}{' '}
           {invoice.error}
         </p>
-        {invoice.state === 'failed' ? retry('Try again') : null}
+        {invoice.state === 'failed' ? retry(t('Try again')) : null}
       </div>
     );
   }
@@ -54,23 +54,23 @@ export async function InvoiceCell({ orderId, marketplace, invoice, uploads }: { 
         </a>
       ) : (
         <>
-          <p className="max-w-56 text-xs text-amber-700">{invoice.error ?? 'Issued in ifirma, fetching the PDF…'}</p>
-          {retry('Retry')}
+          <p className="max-w-56 text-xs text-amber-700">{invoice.error ?? t('Issued in ifirma, fetching the PDF…')}</p>
+          {retry(t('Retry'))}
         </>
       )}
       <p className="text-xs">
         {invoice.number && <span className="text-slate-500">{invoice.number} · </span>}
         {!toUpload ? (
-          <span className="text-slate-500">{invoice.r2Key ? 'PDF ready' : ''}</span>
+          <span className="text-slate-500">{invoice.r2Key ? t('PDF ready') : ''}</span>
         ) : invoice.uploadedAt ? (
-          <span className="text-emerald-700">sent to {place}</span>
+          <span className="text-emerald-700">{t('sent to {account}', { account: place })}</span>
         ) : invoice.uploadError ? (
-          <span className="text-red-700">not sent to {place}: {invoice.uploadError}</span>
+          <span className="text-red-700">{t('not sent to {account}:', { account: place })} {invoice.uploadError}</span>
         ) : (
-          <span className="text-slate-500">sending to {place}…</span>
+          <span className="text-slate-500">{t('sending to {account}…', { account: place })}</span>
         )}
       </p>
-      {toUpload && invoice.uploadError && !invoice.uploadedAt ? retry('Retry sending') : null}
+      {toUpload && invoice.uploadError && !invoice.uploadedAt ? retry(t('Retry sending')) : null}
     </div>
   );
 }
