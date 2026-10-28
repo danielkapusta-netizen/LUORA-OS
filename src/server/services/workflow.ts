@@ -81,7 +81,7 @@ export async function changeStatus(
   options: { userId?: string | null; reason?: string; force?: boolean } = {},
 ): Promise<void> {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-  if (!order) throw new TransitionError('Order not found');
+  if (!order) throw new TransitionError(msg('Order not found'));
   if (order.status === to) return;
   if (!options.force && !canTransition(order.status, to)) {
     throw new TransitionError(`Can't move an order from "${STATUS_LABELS[order.status]}" to "${STATUS_LABELS[to]}"`);
@@ -93,7 +93,7 @@ export async function changeStatus(
     .set({ status: to, ...(to === 'shipped' && !order.shippedAt ? { shippedAt: new Date() } : {}) })
     .where(and(eq(orders.id, orderId), eq(orders.status, order.status)))
     .returning({ id: orders.id });
-  if (updated.length === 0) throw new TransitionError('The order changed meanwhile; reload and try again');
+  if (updated.length === 0) throw new TransitionError(msg('The order changed meanwhile; reload and try again'));
   await logEvent(db, orderId, 'status', `${STATUS_LABELS[order.status]} → ${STATUS_LABELS[to]}${options.reason ? ` (${options.reason})` : ''}`, {
     userId: options.userId,
     data: { from: order.status, to },

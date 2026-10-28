@@ -16,6 +16,7 @@ import {
   type Order,
 } from '../db/schema';
 import { listTasks } from './tasks';
+import { msg } from '@/lib/i18n/msg';
 
 /** E-mail domains that are marketplace relays, not the buyer's own address. */
 const RELAY = /@(.+\.)?(allegromail\.(pl|com)|allegro\.pl|mirakl\.net|empik\.com|marketplace\.empik\.com|inpost\.pl|members\.ebay\.com)$/i;
@@ -127,7 +128,7 @@ export async function mergeCustomers(targetId: string, sourceIds: string[], know
   if (!sources.length) return;
   const all = known ?? (await db.select().from(customers).where(inArray(customers.id, [targetId, ...sources])));
   const target = all.find((c) => c.id === targetId);
-  if (!target) throw new Error('Customer not found');
+  if (!target) throw new Error(msg('Customer not found'));
   const tags = [...new Set(all.flatMap((c) => c.tags))];
   const email = target.email ?? all.find((c) => c.email)?.email ?? null;
   // Identities that both have would collide on the unique key: drop the source's copy first.

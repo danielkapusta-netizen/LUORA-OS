@@ -32,6 +32,8 @@ import {
 import { retryTrackingPush } from '@/server/services/tracking';
 import { changeStatus } from '@/server/services/workflow';
 import { eq } from 'drizzle-orm';
+import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
 function ids(formData: FormData): string[] {
   return String(formData.get('ids') ?? '')
@@ -57,7 +59,7 @@ export async function syncNowAction(): Promise<void> {
 export async function bulkCreateLabelsAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
   const selected = ids(formData);
-  if (selected.length === 0) return { error: 'Select at least one order' };
+  if (selected.length === 0) return { error: msg('Select at least one order') };
   const batchId = await createBatch(selected, user.id);
   redirect(`/shipments/batches/${batchId}`);
 }
@@ -66,7 +68,7 @@ export async function bulkStatusAction(_prev: ActionResult, formData: FormData):
   const user = await requireUser();
   const status = String(formData.get('status') ?? '') as OrderStatus;
   const selected = ids(formData);
-  if (!status || selected.length === 0) return { error: 'Pick a status and at least one order' };
+  if (!status || selected.length === 0) return { error: msg('Pick a status and at least one order') };
   const errors: string[] = [];
   for (const id of selected) {
     try {
@@ -76,8 +78,11 @@ export async function bulkStatusAction(_prev: ActionResult, formData: FormData):
     }
   }
   refresh();
-  if (errors.length) return { error: `${selected.length - errors.length} updated, ${errors.length} skipped: ${[...new Set(errors)].join('; ')}` };
-  return { ok: `${selected.length} order(s) updated` };
+  if (errors.length) {
+    const t = await getT();
+    return { error: t('{updated} updated, {skipped} skipped: {reasons}', { updated: selected.length - errors.length, skipped: errors.length, reasons: [...new Set(errors)].map((e) => t(e)).join('; ') }) };
+  }
+  return { ok: (await getT()).plural(selected.length, '{n} order updated', '{n} orders updated') };
 }
 
 export async function bulkAssignAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -159,7 +164,7 @@ export async function updateAddressAction(orderId: string, _prev: ActionResult, 
     email: field('email') || null,
   };
   return attempt(async () => {
-    if (!address.name || !address.street || !address.city || !address.postalCode) throw new Error('Name, street, city and postal code are required');
+    if (!address.name || !address.street || !address.city || !address.postalCode) throw new Error(msg('Name, street, city and postal code are required'));
     await updateShippingDetails(orderId, { address, pickupPointId: field('pickupPointId').toUpperCase() || null }, user.id);
     refresh(orderId);
     return 'Address saved';
@@ -197,7 +202,7 @@ export async function createLabelAction(orderId: string, _prev: ActionResult, fo
   };
   return attempt(async () => {
     if (![parcel.lengthCm, parcel.widthCm, parcel.heightCm, parcel.weightKg].every((n) => Number.isFinite(n) && n > 0)) {
-      throw new ShippingError('Enter the parcel dimensions and weight');
+      throw new ShippingError(msg('Enter the parcel dimensions and weight'));
     }
     await requestShipment(
       {
@@ -263,9 +268,9 @@ export async function quickLabelAction(orderId: string): Promise<ActionResult> {
     const order = await withPickupPoint(await loadOrder(orderId));
     const data = await loadRoutingData();
     const route = routeOrder(order, data);
-    if (!route) throw new ShippingError('No shipping rule matches this order. Open the full order to choose a carrier.');
+    if (!route) throw new ShippingError(msg('No shipping rule matches this order. Open the full order to choose a carrier.'));
     const preset = data.presets.find((p) => p.id === route.packagePresetId) ?? data.presets.find((p) => p.isDefault) ?? data.presets[0];
-    if (!preset) throw new ShippingError('Add a package preset in Settings → Shipping first.');
+    if (!preset) throw new ShippingError(msg('Add a package preset in Settings → Shipping first.'));
     await requestShipment(
       {
         orderId,

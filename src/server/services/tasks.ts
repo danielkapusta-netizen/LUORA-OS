@@ -20,6 +20,7 @@ import {
 import type { Role } from '../../lib/permissions';
 import { chunk, getDb, insertStatements, type Db } from '../db/client';
 import { customers, orders, projects, taskAssignees, taskComments, tasks, users, type Project, type Task } from '../db/schema';
+import { msg } from '@/lib/i18n/msg';
 
 const TITLE_MAX = 200;
 const DESCRIPTION_MAX = 5000;
@@ -283,22 +284,22 @@ export interface TaskInput {
 }
 
 function checkWhen(dueDate: string | null, start: string | null, end: string | null): void {
-  if (dueDate !== null && !isDay(dueDate)) throw new Error('The day is not a valid date');
+  if (dueDate !== null && !isDay(dueDate)) throw new Error(msg('The day is not a valid date'));
   const slot = validateSlot(start, end);
   if (slot) throw new Error(slot);
-  if ((start || end) && !dueDate) throw new Error('A time slot needs a day');
+  if ((start || end) && !dueDate) throw new Error(msg('A time slot needs a day'));
 }
 
 function checkTitle(raw: string): string {
   const title = (raw ?? '').trim();
-  if (!title) throw new Error('Give the task a title');
+  if (!title) throw new Error(msg('Give the task a title'));
   if (title.length > TITLE_MAX) throw new Error(`The title can have at most ${TITLE_MAX} characters`);
   return title;
 }
 
 async function assertProject(projectId: string): Promise<Project> {
   const [project] = await getDb().select().from(projects).where(eq(projects.id, projectId));
-  if (!project) throw new Error('That project no longer exists');
+  if (!project) throw new Error(msg('That project no longer exists'));
   if (project.archivedAt) throw new Error(`The project “${project.name}” is archived`);
   return project;
 }
@@ -307,14 +308,14 @@ async function peopleByIds(ids: string[]): Promise<Person[]> {
   if (ids.length === 0) return [];
   const found: Person[] = [];
   for (const part of chunk(ids)) found.push(...(await getDb().select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, part))));
-  if (found.length !== new Set(ids).size) throw new Error('One of the people is no longer a user');
+  if (found.length !== new Set(ids).size) throw new Error(msg('One of the people is no longer a user'));
   return found.sort((a, b) => a.name.localeCompare(b.name, 'pl'));
 }
 
 async function assertLinks(customerId: string | null | undefined, orderId: string | null | undefined): Promise<void> {
   const db = getDb();
-  if (customerId && !(await db.select({ id: customers.id }).from(customers).where(eq(customers.id, customerId))).length) throw new Error('That customer no longer exists');
-  if (orderId && !(await db.select({ id: orders.id }).from(orders).where(eq(orders.id, orderId))).length) throw new Error('That order no longer exists');
+  if (customerId && !(await db.select({ id: customers.id }).from(customers).where(eq(customers.id, customerId))).length) throw new Error(msg('That customer no longer exists'));
+  if (orderId && !(await db.select({ id: orders.id }).from(orders).where(eq(orders.id, orderId))).length) throw new Error(msg('That order no longer exists'));
 }
 
 const event = (db: Db, taskId: string, userId: string | null, body: string) => db.insert(taskComments).values({ taskId, userId, kind: 'event', body });
@@ -329,8 +330,8 @@ export async function createTask(input: TaskInput, actor: Pick<Actor, 'id'>): Pr
   checkWhen(dueDate, startTime, endTime);
   const status = input.status ?? 'todo';
   const priority = input.priority ?? 'normal';
-  if (!isTaskStatus(status)) throw new Error('Unknown status');
-  if (!isTaskPriority(priority)) throw new Error('Unknown priority');
+  if (!isTaskStatus(status)) throw new Error(msg('Unknown status'));
+  if (!isTaskPriority(priority)) throw new Error(msg('Unknown priority'));
   if (input.projectId) await assertProject(input.projectId);
   await assertLinks(input.customerId, input.orderId);
   const people = await peopleByIds([...new Set(input.assigneeIds ?? [])]);
@@ -372,7 +373,7 @@ export interface TaskPatch {
 
 async function loadTask(id: string): Promise<Task> {
   const [task] = await getDb().select().from(tasks).where(eq(tasks.id, id));
-  if (!task) throw new Error('This task no longer exists');
+  if (!task) throw new Error(msg('This task no longer exists'));
   return task;
 }
 
@@ -389,7 +390,7 @@ export async function updateTask(id: string, patch: TaskPatch, actor: Pick<Actor
     endTime: patch.endTime === undefined ? current.endTime : patch.endTime || null,
     tags: patch.tags === undefined ? current.tags : parseTags(patch.tags),
   };
-  if (!isTaskPriority(next.priority)) throw new Error('Unknown priority');
+  if (!isTaskPriority(next.priority)) throw new Error(msg('Unknown priority'));
   checkWhen(next.dueDate, next.startTime, next.endTime);
   let projectName: string | null = null;
   if (next.projectId && next.projectId !== current.projectId) projectName = (await assertProject(next.projectId)).name;
@@ -408,7 +409,7 @@ export async function updateTask(id: string, patch: TaskPatch, actor: Pick<Actor
 }
 
 export async function setTaskStatus(id: string, status: TaskStatus, actor: Pick<Actor, 'id'>): Promise<void> {
-  if (!isTaskStatus(status)) throw new Error('Unknown status');
+  if (!isTaskStatus(status)) throw new Error(msg('Unknown status'));
   const db = getDb();
   const current = await loadTask(id);
   if (current.status === status) return;
@@ -454,13 +455,13 @@ export async function toggleAssignee(id: string, userId: string, actor: Pick<Act
 /** Only whoever created a task, or an admin, can delete it (tasks without a creator can be deleted by anyone). */
 export async function deleteTask(id: string, actor: Actor): Promise<void> {
   const task = await loadTask(id);
-  if (task.createdBy && task.createdBy !== actor.id && actor.role !== 'admin') throw new Error('Only the person who created this task, or an admin, can delete it');
+  if (task.createdBy && task.createdBy !== actor.id && actor.role !== 'admin') throw new Error(msg('Only the person who created this task, or an admin, can delete it'));
   await getDb().delete(tasks).where(eq(tasks.id, id));
 }
 
 export async function addComment(taskId: string, body: string, actor: Pick<Actor, 'id'>): Promise<void> {
   const text = body.trim();
-  if (!text) throw new Error('Write a comment first');
+  if (!text) throw new Error(msg('Write a comment first'));
   if (text.length > COMMENT_MAX) throw new Error(`A comment can have at most ${COMMENT_MAX} characters`);
   await loadTask(taskId);
   await getDb().insert(taskComments).values({ taskId, userId: actor.id, kind: 'comment', body: text });
@@ -473,7 +474,7 @@ async function saveChecklist(taskId: string, change: (items: ChecklistItem[]) =>
 
 export async function addChecklistItem(taskId: string, text: string): Promise<void> {
   const item = newChecklistItem(text);
-  if (!item.text) throw new Error('Write the checklist item first');
+  if (!item.text) throw new Error(msg('Write the checklist item first'));
   await saveChecklist(taskId, (items) => (items.length >= 50 ? items : [...items, item]));
 }
 
@@ -551,7 +552,7 @@ export interface ProjectInput {
 
 async function checkProjectName(raw: string, exceptId?: string): Promise<string> {
   const name = (raw ?? '').trim();
-  if (!name) throw new Error('Give the project a name');
+  if (!name) throw new Error(msg('Give the project a name'));
   if (name.length > PROJECT_NAME_MAX) throw new Error(`The name can have at most ${PROJECT_NAME_MAX} characters`);
   const same = await getDb().select({ id: projects.id }).from(projects).where(sql`lower(${projects.name}) = ${name.toLowerCase()}`);
   if (same.some((p) => p.id !== exceptId)) throw new Error(`There is already a project called “${name}”`);
@@ -574,7 +575,7 @@ export async function createProject(input: ProjectInput, actor: Pick<Actor, 'id'
 export async function updateProject(id: string, input: Partial<ProjectInput>): Promise<void> {
   const db = getDb();
   const [current] = await db.select().from(projects).where(eq(projects.id, id));
-  if (!current) throw new Error('That project no longer exists');
+  if (!current) throw new Error(msg('That project no longer exists'));
   const color = input.color === undefined ? current.color : (PROJECT_COLOR_KEYS as string[]).includes(input.color) ? input.color : current.color;
   if (input.ownerId) await peopleByIds([input.ownerId]);
   await db

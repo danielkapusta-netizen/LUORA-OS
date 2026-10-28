@@ -4,6 +4,7 @@ import type { CredentialsStore, Listing, NormalizedOrder, PriceFailure, PriceUpd
 import type { MarketplaceAdapter, SyncResult } from '../types';
 import { VonHalskyApiError, VonHalskyClient, type VonHalskyCredentials } from './client';
 import { isImportable, mapVonHalskyOrder, vonHalskyOrderSchema } from './mapper';
+import { msg } from '@/lib/i18n/msg';
 
 const ORDERS_PAGE = 30;
 const OFFERS_PAGE = 30;
@@ -124,7 +125,7 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
         leaves.push({ id: node.id, path: node.path });
         continue;
       }
-      if (++calls > maxCalls) throw new Error('InPost category tree is too large to read in one go');
+      if (++calls > maxCalls) throw new Error(msg('InPost category tree is too large to read in one go'));
       for (const child of await this.categoryChildren(node.id)) queue.push({ ...child, path: `${node.path} › ${child.name}` });
     }
     return leaves.sort((x, y) => x.path.localeCompare(y.path));

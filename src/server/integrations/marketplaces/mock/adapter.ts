@@ -2,6 +2,7 @@
 // deterministically from their index, so re-syncing never produces duplicates.
 import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
 import type { CatalogueMatch, MarketplaceAdapter, OfferDraft, OfferPublisher, SyncResult } from '../types';
+import { msg } from '@/lib/i18n/msg';
 
 export const MOCK_CATALOG = [
   { sku: 'LUO-MUG-01', name: 'Kubek ceramiczny Luora 350 ml', price: 39.99 },
@@ -119,7 +120,7 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
   }
 
   async createOffer(draft: OfferDraft): Promise<{ externalId?: string; note?: string }> {
-    if (draft.price === '0.00') throw new Error('Demo marketplace refused the offer: price must be above zero');
+    if (draft.price === '0.00') throw new Error(msg('Demo marketplace refused the offer: price must be above zero'));
     console.log(`[mock ${this.marketplace}] create offer ${draft.sku} at ${draft.price} ${draft.currency}`);
     return { externalId: draft.sku };
   }

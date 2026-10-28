@@ -3,6 +3,7 @@ import type { CarrierSettings } from '../../../db/schema';
 import { formatPostalCode, normalizePhone, splitStreet } from '../../address';
 import type { Address, LabelFormat, LabelSize, SenderSettings } from '../../types';
 import { inpostTrackingUrl, type CarrierAdapter, type CarrierService, type DeliveryStatus, type ShipmentRequest, type ShipmentStatus } from '../types';
+import { msg } from '@/lib/i18n/msg';
 
 export interface InpostCredentials {
   /** API token generated in InPost Manager Paczek (Moje konto → API). */
@@ -131,11 +132,11 @@ export class InpostAdapter implements CarrierAdapter {
 
   async createShipment(req: ShipmentRequest): Promise<ShipmentStatus> {
     if (req.service === 'inpost_locker_standard' && !req.pickupPointId) {
-      return { state: 'failed', externalId: '', error: 'Parcel locker service needs a pickup point (Paczkomat) code' };
+      return { state: 'failed', externalId: '', error: msg('Parcel locker service needs a pickup point (Paczkomat) code') };
     }
     const sendingMethod = sendingMethodFor(req.service, this.settings);
     if (NEEDS_DROPOFF_POINT.has(sendingMethod) && !this.settings.dropoffPoint) {
-      return { state: 'failed', externalId: '', error: 'InPost needs the Paczkomat you drop parcels at: set "Drop-off point" in Settings → Integrations → InPost' };
+      return { state: 'failed', externalId: '', error: msg('InPost needs the Paczkomat you drop parcels at: set "Drop-off point" in Settings → Integrations → InPost') };
     }
     const shipment = await this.call<ShipxShipment>('POST', `/v1/organizations/${this.creds.organizationId}/shipments`, {
       body: buildShipxPayload(req, this.settings),
@@ -147,7 +148,7 @@ export class InpostAdapter implements CarrierAdapter {
 
   /** ShipX buys the label asynchronously; the tracking number appears once the status is "confirmed". */
   async refreshShipment(ref: { externalId: string | null }): Promise<ShipmentStatus> {
-    if (!ref.externalId) throw new Error('InPost shipment has no id yet');
+    if (!ref.externalId) throw new Error(msg('InPost shipment has no id yet'));
     return this.toStatus(await this.call<ShipxShipment>('GET', `/v1/shipments/${ref.externalId}`));
   }
 

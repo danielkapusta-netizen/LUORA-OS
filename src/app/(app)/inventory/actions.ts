@@ -6,13 +6,14 @@ import { requireUser } from '@/server/auth';
 import { enqueue, JOBS } from '@/server/jobs/queue';
 import { adjustStock, confirmClearSuggestions, linkGroup, linkListing, setListingStock } from '@/server/services/inventory';
 import { listMarketplaceAccounts } from '@/server/services/settings';
+import { msg } from '@/lib/i18n/msg';
 
 export async function adjustStockAction(productId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
   const mode = formData.get('mode') === 'add' ? 'add' : 'set';
   const value = Number(formData.get('value'));
   return attempt(async () => {
-    if (!Number.isInteger(value)) throw new Error('Enter a whole number');
+    if (!Number.isInteger(value)) throw new Error(msg('Enter a whole number'));
     await adjustStock({ productId, mode, value, userId: user.id, note: String(formData.get('note') ?? '') });
     revalidatePath('/inventory');
     return 'Stock updated; marketplaces will follow shortly';
@@ -24,7 +25,7 @@ export async function linkGroupAction(listingIds: string[], _prev: ActionResult,
   await requireUser();
   return attempt(async () => {
     const productId = String(formData.get('productId') ?? '');
-    if (!productId) throw new Error('Choose the Shopify product first');
+    if (!productId) throw new Error(msg('Choose the Shopify product first'));
     await linkGroup(listingIds, productId);
     revalidatePath('/inventory');
     return 'Linked';

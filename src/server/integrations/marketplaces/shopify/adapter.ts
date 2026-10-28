@@ -3,6 +3,7 @@ import type { CredentialsStore, Listing, OrderRef, PriceFailure, PriceUpdate, St
 import type { MarketplaceAdapter, SyncResult } from '../types';
 import { DEFAULT_SHOPIFY_API_VERSION, ShopifyClient, type ShopifyCredentials } from './client';
 import { DEFAULT_PICKUP_POINT_KEYS, mapShopifyOrder } from './mapper';
+import { msg } from '@/lib/i18n/msg';
 
 const ORDER_FIELDS = `
   id name createdAt updatedAt processedAt cancelledAt
@@ -429,7 +430,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
   private async primaryLocationId(): Promise<string> {
     const data = await this.client.graphql<{ locations: { nodes: { id: string; isActive: boolean }[] } }>(SHOP_QUERY);
     const location = data.locations.nodes.find((l) => l.isActive);
-    if (!location) throw new Error('Shopify store has no active location; set locationId in the account settings');
+    if (!location) throw new Error(msg('Shopify store has no active location; set locationId in the account settings'));
     return location.id;
   }
 }

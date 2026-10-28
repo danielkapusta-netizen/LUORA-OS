@@ -79,8 +79,8 @@ export function ActionForm({
   return (
     <form ref={ref} action={formAction} className={className}>
       {children}
-      {state?.error && <p className="mt-2 text-sm text-red-700">{state.error}</p>}
-      {state?.ok && showOk && <p className="mt-2 text-sm text-emerald-700">{state.ok}</p>}
+      {state?.error && <p className="mt-2 text-sm text-red-700">{t(state.error)}</p>}
+      {state?.ok && showOk && <p className="mt-2 text-sm text-emerald-700">{t(state.ok)}</p>}
       {popup && shown && (
         <div
           role="status"
@@ -97,7 +97,7 @@ export function ActionForm({
               ×
             </button>
           </div>
-          <p className="mt-1 max-h-48 overflow-auto text-sm text-slate-700">{shown.error ?? shown.ok}</p>
+          <p className="mt-1 max-h-48 overflow-auto text-sm text-slate-700">{t(shown.error ?? shown.ok ?? '')}</p>
         </div>
       )}
     </form>

@@ -6,6 +6,7 @@ import type { Carrier, LabelFormat, LabelSize } from '../../types';
 import { inpostTrackingUrl, type CarrierAdapter, type CarrierService, type ShipmentRequest, type ShipmentStatus } from '../types';
 import { INPOST_SERVICES } from '../inpost/adapter';
 import { BUYER_CHOICE } from '../allegro-shipping/adapter';
+import { msg } from '@/lib/i18n/msg';
 
 interface MockLabelData {
   carrier: Carrier;
@@ -109,7 +110,7 @@ export class MockCarrierAdapter implements CarrierAdapter {
 
   async createShipment(req: ShipmentRequest): Promise<ShipmentStatus> {
     if (req.service === 'inpost_locker_standard' && !req.pickupPointId) {
-      return { state: 'failed', externalId: '', error: 'Parcel locker service needs a pickup point (Paczkomat) code' };
+      return { state: 'failed', externalId: '', error: msg('Parcel locker service needs a pickup point (Paczkomat) code') };
     }
     const tracking = this.carrier === 'inpost' ? `6${digitsFrom(req.shipmentId, 23)}` : `A00${digitsFrom(req.shipmentId, 9)}`;
     const r = req.receiver;
@@ -128,7 +129,7 @@ export class MockCarrierAdapter implements CarrierAdapter {
   }
 
   async refreshShipment(ref: { externalId: string | null }): Promise<ShipmentStatus> {
-    if (!ref.externalId) throw new Error('Mock shipment has no id');
+    if (!ref.externalId) throw new Error(msg('Mock shipment has no id'));
     const data = decode(ref.externalId);
     return {
       state: 'created',

@@ -23,6 +23,7 @@ import {
   updateProject,
   updateTask,
 } from '@/server/services/tasks';
+import { msg } from '@/lib/i18n/msg';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 /** Tasks show up on the sidebar badge, the dashboard and the customer and order pages too. */
@@ -97,7 +98,7 @@ export async function toggleDoneAction(id: string, done: boolean): Promise<Actio
 export async function moveTaskAction(id: string, status: string): Promise<ActionResult> {
   const user = await requireUser();
   return attempt(async () => {
-    if (!isTaskStatus(status)) throw new Error('Unknown status');
+    if (!isTaskStatus(status)) throw new Error(msg('Unknown status'));
     await setTaskStatus(id, status, user);
     refresh();
   });

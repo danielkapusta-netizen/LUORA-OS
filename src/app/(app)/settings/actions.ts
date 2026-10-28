@@ -29,6 +29,7 @@ import {
   testCarrierConnection,
   testMarketplaceConnection,
 } from '@/server/services/settings';
+import { msg } from '@/lib/i18n/msg';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const bool = (fd: FormData, name: string) => fd.get(name) === 'on';
@@ -119,7 +120,7 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
   let savedId = id;
   const result = await attempt(async () => {
     const name = text(fd, 'name');
-    if (!name) throw new Error('Give the account a name');
+    if (!name) throw new Error(msg('Give the account a name'));
     savedId = await saveMarketplaceAccount({
       id: id ?? undefined,
       type,
@@ -238,13 +239,13 @@ export async function saveCarrierAction(id: string | null, _prev: ActionResult, 
 
   let savedId = id;
   const result = await attempt(async () => {
-    if (!text(fd, 'name')) throw new Error('Give the account a name');
+    if (!text(fd, 'name')) throw new Error(msg('Give the account a name'));
     if (!sender.name || !sender.street || !sender.city || !sender.postalCode || !sender.phone || !sender.email) {
-      throw new Error('Fill in the whole sender address, phone and email');
+      throw new Error(msg('Fill in the whole sender address, phone and email'));
     }
-    if (type === 'allegro_shipping' && !text(fd, 'marketplaceAccountId')) throw new Error('Choose the Allegro account to ship with');
+    if (type === 'allegro_shipping' && !text(fd, 'marketplaceAccountId')) throw new Error(msg('Choose the Allegro account to ship with'));
     if (type === 'inpost' && settings.sendingMethod === 'parcel_locker' && !settings.dropoffPoint) {
-      throw new Error('Enter the drop-off point: the Paczkomat where you drop parcels (e.g. ZOF01M)');
+      throw new Error(msg('Enter the drop-off point: the Paczkomat where you drop parcels (e.g. ZOF01M)'));
     }
     savedId = await saveCarrierAccount({
       id: id ?? undefined,
@@ -292,7 +293,7 @@ export async function saveRuleAction(id: string | null, _prev: ActionResult, fd:
   // "route" is "<carrier account id>|<service id>" from one combined select.
   const [carrierAccountId, service] = text(fd, 'route').split('|');
   return attempt(async () => {
-    if (!text(fd, 'name') || !carrierAccountId || !service) throw new Error('Name, carrier and service are required');
+    if (!text(fd, 'name') || !carrierAccountId || !service) throw new Error(msg('Name, carrier and service are required'));
     await saveRule({
       id: id ?? undefined,
       name: text(fd, 'name'),
@@ -332,7 +333,7 @@ export async function savePresetAction(id: string | null, _prev: ActionResult, f
     const dims = ['lengthCm', 'widthCm', 'heightCm'].map((k) => Number(text(fd, k)));
     const weight = Number(text(fd, 'weightKg').replace(',', '.'));
     if (!text(fd, 'name') || dims.some((d) => !Number.isInteger(d) || d <= 0) || !(weight > 0)) {
-      throw new Error('Name, whole-centimetre dimensions and a weight are required');
+      throw new Error(msg('Name, whole-centimetre dimensions and a weight are required'));
     }
     await savePreset({
       id: id ?? undefined,
@@ -373,7 +374,7 @@ export async function setRoleAction(id: string, _prev: ActionResult, fd: FormDat
   await requireAdmin();
   return attempt(async () => {
     const role = text(fd, 'role');
-    if (!isRole(role)) throw new Error('Unknown role');
+    if (!isRole(role)) throw new Error(msg('Unknown role'));
     await setUserRole(id, role);
     revalidatePath('/settings/users');
     return 'Role changed';
@@ -383,7 +384,7 @@ export async function setRoleAction(id: string, _prev: ActionResult, fd: FormDat
 export async function deleteUserAction(id: string): Promise<ActionResult> {
   const me = await requireAdmin();
   return attempt(async () => {
-    if (me.id === id) throw new Error("You can't delete yourself");
+    if (me.id === id) throw new Error(msg("You can't delete yourself"));
     await deleteUser(id);
     revalidatePath('/settings/users');
     return 'User deleted';

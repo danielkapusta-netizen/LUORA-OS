@@ -1,5 +1,6 @@
 import { httpConfig, HttpError, request } from '../../../http';
 import type { CredentialsStore } from '../../types';
+import { msg } from '@/lib/i18n/msg';
 
 export interface ShopifyCredentials {
   /** e.g. "my-shop.myshopify.com" */
@@ -45,7 +46,7 @@ export class ShopifyClient {
   async accessToken(forceRefresh = false): Promise<string> {
     const c = this.creds.get();
     if (!this.usesClientCredentials()) {
-      if (!c.accessToken) throw new Error('Shopify account has neither client credentials nor an access token');
+      if (!c.accessToken) throw new Error(msg('Shopify account has neither client credentials nor an access token'));
       return c.accessToken;
     }
     const expiresAt = c.tokenExpiresAt ? Date.parse(c.tokenExpiresAt) : 0;

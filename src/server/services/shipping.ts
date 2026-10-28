@@ -28,6 +28,7 @@ import { loadOrder, withPickupPoint } from './orders';
 import { carrierSupportsOrder, chooseRoute, type RouteDecision } from './routing';
 import { changeStatus, shipWhenReady } from './workflow';
 import { refreshProfit } from './profit';
+import { msg } from '@/lib/i18n/msg';
 
 /** Give up polling a pending shipment after this many attempts. */
 const MAX_POLLS = 40;
@@ -192,7 +193,7 @@ async function findShipment(shipmentId: string): Promise<{ shipment: Shipment; o
 
 async function loadShipment(shipmentId: string) {
   const row = await findShipment(shipmentId);
-  if (!row) throw new ShippingError('Shipment not found');
+  if (!row) throw new ShippingError(msg('Shipment not found'));
   return row;
 }
 
@@ -425,7 +426,7 @@ export async function setPacked(shipmentId: string, packed: boolean, userId: str
     .set(packed ? { packedAt: new Date(), packedBy: userId } : { packedAt: null, packedBy: null })
     .where(eq(shipments.id, shipmentId))
     .returning({ orderId: shipments.orderId });
-  if (!row) throw new ShippingError('Shipment not found');
+  if (!row) throw new ShippingError(msg('Shipment not found'));
   await logEvent(db, row.orderId, 'edit', packed ? 'Parcel marked as packed' : 'Parcel marked as not packed', { userId });
   if (packed) {
     await shipWhenReady(db, row.orderId, 'parcel packed and tracking sent', userId);
@@ -446,7 +447,7 @@ export async function cancelShipment(shipmentId: string, userId: string): Promis
   const { shipment, order, carrier } = await loadShipment(shipmentId);
   if (shipment.state === 'cancelled') return;
   if (shipment.trackingPushedAt) {
-    throw new ShippingError('Tracking was already sent to the marketplace; cancel the shipment there and in the carrier panel');
+    throw new ShippingError(msg('Tracking was already sent to the marketplace; cancel the shipment there and in the carrier panel'));
   }
   if (shipment.externalId && shipment.state === 'created') {
     await (await getCarrierAdapter(carrier)).cancelShipment(shipment.externalId);
@@ -459,7 +460,7 @@ export async function cancelShipment(shipmentId: string, userId: string): Promis
 /** Re-queues a failed shipment with the same settings. */
 export async function retryShipment(shipmentId: string, userId: string): Promise<string> {
   const { shipment } = await loadShipment(shipmentId);
-  if (shipment.state !== 'failed') throw new ShippingError('Only failed labels can be retried');
+  if (shipment.state !== 'failed') throw new ShippingError(msg('Only failed labels can be retried'));
   return requestShipment(
     {
       orderId: shipment.orderId,
@@ -489,7 +490,7 @@ export async function getLabel(shipmentId: string) {
 
 /** Joins labels into one printable file: PDFs are merged, ZPL is concatenated. */
 export async function mergeLabels(files: { format: LabelFormat; content: Buffer }[]): Promise<{ format: LabelFormat; content: Buffer }> {
-  if (files.length === 0) throw new ShippingError('No labels to print');
+  if (files.length === 0) throw new ShippingError(msg('No labels to print'));
   const pdfs = files.filter((f) => f.format === 'pdf');
   if (pdfs.length === 0) return { format: 'zpl', content: Buffer.concat(files.map((f) => Buffer.concat([f.content, Buffer.from('\n')]))) };
   const merged = await PDFDocument.create();

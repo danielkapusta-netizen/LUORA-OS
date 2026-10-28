@@ -24,6 +24,7 @@ import { MiraklAdapter } from '../integrations/marketplaces/mirakl/adapter';
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { getCarrierAdapter, getMarketplaceAdapter, loadCarrierAccount, loadMarketplaceAccount, readCredentials, withConfigured } from './accounts';
 import { removeDemoTasks } from './tasks';
+import { msg } from '@/lib/i18n/msg';
 
 export const DEFAULT_PRESETS = [
   { name: 'Paczkomat A (small)', lengthCm: 64, widthCm: 38, heightCm: 8, weightKg: '5', inpostTemplate: 'small', isDefault: false },
@@ -309,7 +310,7 @@ export async function listUsers() {
 }
 
 export async function createUser(input: { email: string; name: string; password: string; role: Role }): Promise<void> {
-  if (input.password.length < 8) throw new Error('Password must have at least 8 characters');
+  if (input.password.length < 8) throw new Error(msg('Password must have at least 8 characters'));
   await getDb()
     .insert(users)
     .values({ email: input.email.trim().toLowerCase(), name: input.name.trim(), role: input.role, passwordHash: await hashPassword(input.password) });
@@ -322,20 +323,20 @@ async function adminCount(): Promise<number> {
 
 export async function deleteUser(id: string): Promise<void> {
   const [target] = await getDb().select({ role: users.role }).from(users).where(eq(users.id, id));
-  if (target?.role === 'admin' && (await adminCount()) <= 1) throw new Error('There must be at least one admin');
+  if (target?.role === 'admin' && (await adminCount()) <= 1) throw new Error(msg('There must be at least one admin'));
   await getDb().delete(users).where(eq(users.id, id));
 }
 
 export async function setUserRole(id: string, role: Role): Promise<void> {
-  if (!isRole(role)) throw new Error('Unknown role');
+  if (!isRole(role)) throw new Error(msg('Unknown role'));
   const [target] = await getDb().select({ role: users.role }).from(users).where(eq(users.id, id));
-  if (!target) throw new Error('User not found');
-  if (target.role === 'admin' && role !== 'admin' && (await adminCount()) <= 1) throw new Error('There must be at least one admin');
+  if (!target) throw new Error(msg('User not found'));
+  if (target.role === 'admin' && role !== 'admin' && (await adminCount()) <= 1) throw new Error(msg('There must be at least one admin'));
   await getDb().update(users).set({ role }).where(eq(users.id, id));
 }
 
 export async function resetPassword(id: string, password: string): Promise<void> {
-  if (password.length < 8) throw new Error('Password must have at least 8 characters');
+  if (password.length < 8) throw new Error(msg('Password must have at least 8 characters'));
   await getDb().update(users).set({ passwordHash: await hashPassword(password) }).where(eq(users.id, id));
 }
 

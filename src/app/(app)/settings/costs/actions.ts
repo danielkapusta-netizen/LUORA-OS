@@ -18,6 +18,7 @@ import {
   type ImportResult,
 } from '@/server/services/costs';
 import { scheduleFullRecompute } from '@/server/services/profit';
+import { msg } from '@/lib/i18n/msg';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const amount = (fd: FormData, name: string) => parseAmount(text(fd, name));
@@ -103,7 +104,7 @@ export async function pasteCostsAction(_prev: ActionResult, fd: FormData): Promi
   const user = await requireAdmin();
   return attempt(async () => {
     const lines = parseCostLines(text(fd, 'lines'));
-    if (!lines.length) throw new Error('No lines with a product and a cost were found');
+    if (!lines.length) throw new Error(msg('No lines with a product and a cost were found'));
     const result = await importCosts(lines, { effectiveFrom: text(fd, 'effectiveFrom') || undefined, userId: user.id, source: 'import' });
     if (result.saved) await scheduleFullRecompute();
     revalidatePath('/settings/costs');

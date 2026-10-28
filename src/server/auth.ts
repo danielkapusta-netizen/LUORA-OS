@@ -5,6 +5,7 @@ import { can, type Capability } from '@/lib/permissions';
 import { randomToken, sha256, verifyPassword } from './crypto';
 import { getDb } from './db/client';
 import { sessions, users, type User } from './db/schema';
+import { msg } from '@/lib/i18n/msg';
 
 const COOKIE = 'luora_session';
 const SESSION_DAYS = 30;
@@ -56,7 +57,7 @@ export async function requireUser(): Promise<SessionUser> {
 
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser();
-  if (user.role !== 'admin') throw new Error('Only admins can do this');
+  if (user.role !== 'admin') throw new Error(msg('Only admins can do this'));
   return user;
 }
 
@@ -70,6 +71,6 @@ export async function requireCapability(capability: Capability): Promise<Session
 /** Server-action guard: throws, since a redirect makes no sense mid-action. */
 export async function assertCapability(capability: Capability): Promise<SessionUser> {
   const user = await requireUser();
-  if (!can(user.role, capability)) throw new Error('Your role does not allow this');
+  if (!can(user.role, capability)) throw new Error(msg('Your role does not allow this'));
   return user;
 }

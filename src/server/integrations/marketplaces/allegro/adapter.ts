@@ -4,6 +4,7 @@ import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, Pri
 import { invoiceFileName, type CatalogueMatch, type ExternalFee, type ExternalRefund, type FeeFeed, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { AllegroApiError, AllegroClient, describeAllegroErrors, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
+import { msg } from '@/lib/i18n/msg';
 
 interface OrderEvent {
   id: string;
@@ -434,7 +435,7 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
 
   async createOffer(draft: OfferDraft, match: CatalogueMatch): Promise<{ externalId?: string; note?: string }> {
     const s = this.settings;
-    if (!match.ref) throw new Error('not in the Allegro catalogue');
+    if (!match.ref) throw new Error(msg('not in the Allegro catalogue'));
     const created = await this.client.call<{ id: string }>('POST', '/sale/product-offers', {
       body: {
         productSet: [

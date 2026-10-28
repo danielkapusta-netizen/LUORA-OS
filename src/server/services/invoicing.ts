@@ -26,6 +26,7 @@ import { getMarketplaceAdapter, loadMarketplaceAccount, readCredentials } from '
 import { logEvent } from './events';
 import { orderRef } from './orders';
 import { isUniqueViolation } from './shipping';
+import { msg } from '@/lib/i18n/msg';
 
 export class InvoicingError extends Error {}
 
@@ -60,7 +61,7 @@ export async function saveAccounting(input: { enabled: boolean; login: string; i
   const [row] = await db.select().from(accountingSettings).where(eq(accountingSettings.id, 'main'));
   const previous = readCredentials<IfirmaCredentials>(row?.credentials ?? null);
   const invoiceKey = input.invoiceKey?.trim() || previous?.invoiceKey || '';
-  if (invoiceKey && !/^[0-9a-fA-F]+$/.test(invoiceKey)) throw new InvoicingError('The ifirma key should be the hex code shown in ifirma (letters A–F and digits)');
+  if (invoiceKey && !/^[0-9a-fA-F]+$/.test(invoiceKey)) throw new InvoicingError(msg('The ifirma key should be the hex code shown in ifirma (letters A–F and digits)'));
   const credentials = input.login || invoiceKey ? encryptJson({ login: input.login.trim(), invoiceKey }) : null;
   await db
     .insert(accountingSettings)
@@ -72,7 +73,7 @@ export async function getInvoicingAdapter(): Promise<InvoicingAdapter> {
   if (isMockMode()) return new MockInvoicingAdapter();
   const [row] = await getDb().select().from(accountingSettings).where(eq(accountingSettings.id, 'main'));
   const creds = readCredentials<IfirmaCredentials>(row?.credentials ?? null);
-  if (!creds?.login || !creds.invoiceKey) throw new InvoicingError('ifirma is not connected yet. Add the login and API key in Settings → Accounting.');
+  if (!creds?.login || !creds.invoiceKey) throw new InvoicingError(msg('ifirma is not connected yet. Add the login and API key in Settings → Accounting.'));
   return new IfirmaClient(creds);
 }
 
@@ -140,11 +141,11 @@ export function invoiceRequestFor(order: Pick<Order, 'invoiceRequest' | 'shippin
 export async function requestInvoice(orderId: string, userId: string | null, opts: { anyOrder?: boolean } = {}): Promise<string> {
   const db = getDb();
   const accounting = await loadAccounting();
-  if (!accounting.enabled) throw new InvoicingError('Invoicing is switched off in Settings → Accounting');
+  if (!accounting.enabled) throw new InvoicingError(msg('Invoicing is switched off in Settings → Accounting'));
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-  if (!order) throw new InvoicingError('Order not found');
+  if (!order) throw new InvoicingError(msg('Order not found'));
   if (!opts.anyOrder) {
-    if (!isUploadable(order.marketplace)) throw new InvoicingError('Invoices are only issued for Allegro, Empik and HEBE orders');
+    if (!isUploadable(order.marketplace)) throw new InvoicingError(msg('Invoices are only issued for Allegro, Empik and HEBE orders'));
     if (!order.invoiceRequest) throw new InvoicingError(`The buyer of order ${order.externalNumber} did not ask for an invoice`);
   }
   if (order.status === 'cancelled') throw new InvoicingError(`Order ${order.externalNumber} is cancelled`);
@@ -325,7 +326,7 @@ async function invoicedElsewhere(orderId: string): Promise<boolean> {
 export async function markInvoicedElsewhere(orderId: string, userId: string | null): Promise<void> {
   const db = getDb();
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-  if (!order) throw new InvoicingError('Order not found');
+  if (!order) throw new InvoicingError(msg('Order not found'));
   if (await liveInvoice(orderId)) throw new InvoicingError(`Order ${order.externalNumber} already has an invoice from Luora`);
   if (await invoicedElsewhere(orderId)) return;
   // Earlier "issue by hand" / failed attempts are settled by this.
@@ -338,7 +339,7 @@ export async function markInvoicedElsewhere(orderId: string, userId: string | nu
 export async function undoInvoicedElsewhere(invoiceId: string, userId: string | null): Promise<void> {
   const db = getDb();
   const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
-  if (!invoice || invoice.state !== 'external') throw new InvoicingError('Only orders marked as invoiced outside Luora can be undone');
+  if (!invoice || invoice.state !== 'external') throw new InvoicingError(msg('Only orders marked as invoiced outside Luora can be undone'));
   await db.delete(invoices).where(eq(invoices.id, invoiceId));
   await logEvent(db, invoice.orderId, 'invoice', 'No longer marked as invoiced outside Luora', { userId });
 }
@@ -347,13 +348,13 @@ export async function undoInvoicedElsewhere(invoiceId: string, userId: string | 
 export async function retryInvoice(invoiceId: string, userId: string): Promise<void> {
   const db = getDb();
   const [invoice] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
-  if (!invoice) throw new InvoicingError('Invoice not found');
+  if (!invoice) throw new InvoicingError(msg('Invoice not found'));
   if (invoice.state === 'failed' || invoice.state === 'manual') {
     // The invoice already exists, so the order was eligible (it may have come from the Shipments page).
     await requestInvoice(invoice.orderId, userId, { anyOrder: true });
     return;
   }
-  if (invoice.state === 'external') throw new InvoicingError('This order is marked as invoiced outside Luora');
+  if (invoice.state === 'external') throw new InvoicingError(msg('This order is marked as invoiced outside Luora'));
   if (invoice.state === 'pending') {
     await enqueue(JOBS.invoiceCreate, { invoiceId });
     return;

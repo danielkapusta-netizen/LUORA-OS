@@ -6,6 +6,7 @@ import { assertCapability } from '@/server/auth';
 import { enqueue, JOBS } from '@/server/jobs/queue';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 import { isPricePlatform, pushPrices, PRICE_PLATFORM_LABEL } from '@/server/services/pricing';
+import { msg } from '@/lib/i18n/msg';
 
 const FIELD = 'price:';
 
@@ -20,7 +21,7 @@ export async function pushPricesAction(platform: string, _prev: ActionResult, fo
     const requests = [...formData.entries()]
       .flatMap(([key, value]) => (key.startsWith(FIELD) && typeof value === 'string' && value.trim() !== '' ? [{ listingId: key.slice(FIELD.length), price: value }] : []))
       .filter((r) => !only || r.listingId === only);
-    if (requests.length === 0) throw new Error('Type a new price first');
+    if (requests.length === 0) throw new Error(msg('Type a new price first'));
     const label = isPricePlatform(platform) ? PRICE_PLATFORM_LABEL[platform] : 'the platform';
     const { updated, unchanged, failed } = await pushPrices(requests);
     revalidatePath('/pricing');
@@ -36,7 +37,7 @@ export async function refreshPricesAction(platform: string): Promise<ActionResul
   await assertCapability('pricing');
   return attempt(async () => {
     const accounts = (await listMarketplaceAccounts()).filter((a) => a.enabled && a.type === platform);
-    if (accounts.length === 0) throw new Error('This platform has no connected account');
+    if (accounts.length === 0) throw new Error(msg('This platform has no connected account'));
     for (const a of accounts) await enqueue(JOBS.listingsImport, { accountId: a.id }, { singletonKey: a.id });
     return 'Reading the prices again. Refresh the page in a moment.';
   });

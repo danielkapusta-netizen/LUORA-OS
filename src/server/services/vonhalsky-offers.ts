@@ -8,6 +8,7 @@ import { VonHalskyAdapter, type VonHalskyOfferInput } from '../integrations/mark
 import { ShopifyAdapter, type ShopifyVariantDetails } from '../integrations/marketplaces/shopify/adapter';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { importListings } from './inventory';
+import { msg } from '@/lib/i18n/msg';
 
 /** Prefix of the externalId on offers Luora created; only those get their prices managed. */
 export const LUORA_OFFER_PREFIX = 'luora:';
@@ -88,15 +89,15 @@ async function shopifyAdapter(): Promise<ShopifyAdapter> {
     .from(marketplaceAccounts)
     .where(and(eq(marketplaceAccounts.type, 'shopify'), eq(marketplaceAccounts.enabled, true)))
     .limit(1);
-  if (!account) throw new Error('There is no Shopify account');
+  if (!account) throw new Error(msg('There is no Shopify account'));
   const adapter = getMarketplaceAdapter(account);
-  if (!(adapter instanceof ShopifyAdapter)) throw new Error('Shopify adapter is not available (demo mode?)');
+  if (!(adapter instanceof ShopifyAdapter)) throw new Error(msg('Shopify adapter is not available (demo mode?)'));
   return adapter;
 }
 
 function vonHalsky(account: Awaited<ReturnType<typeof loadMarketplaceAccount>>): VonHalskyAdapter {
   const adapter = getMarketplaceAdapter(account);
-  if (!(adapter instanceof VonHalskyAdapter)) throw new Error('This is not a Von Halsky account');
+  if (!(adapter instanceof VonHalskyAdapter)) throw new Error(msg('This is not a Von Halsky account'));
   return adapter;
 }
 

@@ -15,6 +15,7 @@ import { offerFieldMetafieldKeys, resolveOfferFields } from '../integrations/mar
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { importListings } from './inventory';
 import { miraklOfferFields } from './settings';
+import { msg } from '@/lib/i18n/msg';
 
 export const MAX_OFFERS_PER_RUN = 25;
 
@@ -59,16 +60,16 @@ async function shopifyDetails(
     .from(marketplaceAccounts)
     .where(and(eq(marketplaceAccounts.type, 'shopify'), eq(marketplaceAccounts.enabled, true)))
     .limit(1);
-  if (!account) throw new Error('There is no Shopify account');
+  if (!account) throw new Error(msg('There is no Shopify account'));
   const adapter = getMarketplaceAdapter(account);
-  if (!(adapter instanceof ShopifyAdapter)) throw new Error('Shopify adapter is not available');
+  if (!(adapter instanceof ShopifyAdapter)) throw new Error(msg('Shopify adapter is not available'));
   return adapter.variantDetails(variantIds, metafieldKeys);
 }
 
 function publisher(account: Awaited<ReturnType<typeof loadMarketplaceAccount>>): OfferPublisher {
-  if (account.type !== 'allegro' && account.type !== 'empik' && account.type !== 'hebe') throw new Error('Offers can be created here for Allegro, Empik and HEBE accounts');
+  if (account.type !== 'allegro' && account.type !== 'empik' && account.type !== 'hebe') throw new Error(msg('Offers can be created here for Allegro, Empik and HEBE accounts'));
   const adapter = getMarketplaceAdapter(account);
-  if (!isOfferPublisher(adapter)) throw new Error('This account cannot create offers');
+  if (!isOfferPublisher(adapter)) throw new Error(msg('This account cannot create offers'));
   return adapter;
 }
 
@@ -169,7 +170,7 @@ export interface PublishResult {
 
 /** Creates offers for the chosen products (only those that are ready), then imports the listings so stock can follow. */
 export async function publishOffers(accountId: string, productIds: string[]): Promise<PublishResult> {
-  if (productIds.length === 0) throw new Error('Choose at least one product');
+  if (productIds.length === 0) throw new Error(msg('Choose at least one product'));
   if (productIds.length > MAX_OFFERS_PER_RUN) throw new Error(`Create at most ${MAX_OFFERS_PER_RUN} offers at a time`);
   const account = await loadMarketplaceAccount(accountId);
   const pub = publisher(account);
@@ -216,7 +217,7 @@ export async function loadAllegroOptions(accountId: string, force = false) {
   const cached = account.settings.allegroOptions;
   if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < OPTIONS_TTL_MS) return cached;
   const adapter = getMarketplaceAdapter(account);
-  if (!(adapter instanceof AllegroAdapter)) throw new Error('This is not an Allegro account');
+  if (!(adapter instanceof AllegroAdapter)) throw new Error(msg('This is not an Allegro account'));
   const options = { fetchedAt: new Date().toISOString(), ...(await adapter.publishOptions()) };
   await getDb()
     .update(marketplaceAccounts)

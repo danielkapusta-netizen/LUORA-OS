@@ -59,7 +59,7 @@ function ProjectForm({ people, project }: { people: { id: string; name: string }
           ))}
         </Select>
       </Field>
-      {state?.error && <p className="text-sm text-red-700">{state.error}</p>}
+      {state?.error && <p className="text-sm text-red-700">{t(state.error)}</p>}
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
         <button type="button" onClick={() => modal?.close()} className="h-10 rounded-full px-5 text-sm font-medium text-slate-600 hover:bg-slate-100">
           {t('Cancel')}

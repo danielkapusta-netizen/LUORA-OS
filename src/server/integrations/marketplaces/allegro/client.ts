@@ -1,5 +1,6 @@
 import { HttpError, request, type RequestOptions } from '../../../http';
 import type { CredentialsStore } from '../../types';
+import { msg } from '@/lib/i18n/msg';
 
 export interface AllegroCredentials {
   clientId: string;
@@ -115,7 +116,7 @@ export class AllegroClient {
   /** Access tokens live 12 hours; refresh tokens rotate on every refresh. */
   async accessToken(forceRefresh = false): Promise<string> {
     const c = this.creds.get();
-    if (!c.accessToken || !c.refreshToken) throw new Error('Allegro account is not connected. Use "Connect Allegro" in Settings.');
+    if (!c.accessToken || !c.refreshToken) throw new Error(msg('Allegro account is not connected. Use "Connect Allegro" in Settings.'));
     const expiresAt = c.expiresAt ? Date.parse(c.expiresAt) : 0;
     if (!forceRefresh && expiresAt - Date.now() > 10 * 60_000) return c.accessToken;
     const next = await tokenRequest(c, { grant_type: 'refresh_token', refresh_token: c.refreshToken });
