@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { Input, buttonClass } from '@/components/ui';
 import { parsePrice, priceChangePercent, samePrice } from '@/lib/price';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/client';
 
 /** A change this big is shown in amber, as it is more likely a typo than a decision. */
 const BIG_CHANGE_PERCENT = 30;
@@ -14,6 +15,7 @@ const BIG_CHANGE_PERCENT = 30;
  * this price. Enter in the field does the same. The change in percent shows while typing.
  */
 export function PriceCell({ listingId, current, label }: { listingId: string; current: string | null; label: string }) {
+  const t = useT();
   const [value, setValue] = useState(current ?? '');
   const button = useRef<HTMLButtonElement>(null);
   // Any submit locks every button; only the one that was pressed shows it is working.
@@ -44,10 +46,10 @@ export function PriceCell({ listingId, current, label }: { listingId: string; cu
         />
       </div>
       <button ref={button} type="submit" name="only" value={listingId} disabled={!changed || pending} className={buttonClass('primary', 'sm')}>
-        {working ? '…' : 'Update'}
+        {working ? '…' : t('Update')}
       </button>
       <span className={cn('w-16 text-xs tabular-nums', invalid ? 'text-red-600' : change !== null && Math.abs(change) >= BIG_CHANGE_PERCENT ? 'font-medium text-amber-700' : 'text-slate-500')}>
-        {invalid ? 'not a price' : change !== null ? `${change > 0 ? '+' : ''}${change.toFixed(1)}%` : ''}
+        {invalid ? t('not a price') : change !== null ? `${change > 0 ? '+' : ''}${change.toFixed(1)}%` : ''}
       </span>
     </div>
   );
