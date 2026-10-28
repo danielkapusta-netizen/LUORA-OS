@@ -1,5 +1,6 @@
 // What a task looks like, without the database: labels, colours, sorting, grouping and the productivity figures.
 import { addDays, daysBetween } from './dates';
+import { msg } from '@/lib/i18n/msg';
 
 export const TASK_STATUSES = ['todo', 'in_progress', 'done'] as const;
 export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
@@ -16,8 +17,8 @@ export interface ChecklistItem {
 export const isTaskStatus = (v: unknown): v is TaskStatus => (TASK_STATUSES as readonly unknown[]).includes(v);
 export const isTaskPriority = (v: unknown): v is TaskPriority => (TASK_PRIORITIES as readonly unknown[]).includes(v);
 
-export const STATUS_LABEL: Record<TaskStatus, string> = { todo: 'To do', in_progress: 'In progress', done: 'Done' };
-export const PRIORITY_LABEL: Record<TaskPriority, string> = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' };
+export const STATUS_LABEL: Record<TaskStatus, string> = { todo: msg('To do'), in_progress: msg('In progress'), done: msg('Done') };
+export const PRIORITY_LABEL: Record<TaskPriority, string> = { low: msg('Low'), normal: msg('Normal'), high: msg('High'), urgent: msg('Urgent') };
 export const PRIORITY_RANK: Record<TaskPriority, number> = { low: 0, normal: 1, high: 2, urgent: 3 };
 
 /** Colours of the priority flag and chip on a card. Full class names, so Tailwind finds them. */

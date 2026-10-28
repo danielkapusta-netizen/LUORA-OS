@@ -11,10 +11,10 @@ export async function MyTasksHeading({ count, limit }: { count: number; limit: n
   return (
     <p className="flex items-center justify-between gap-2 text-sm font-semibold">
       <span className="flex items-center gap-2">
-        My tasks
+        {t('My tasks')}
         <span
           className={cn('inline-flex min-w-6 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums', count > 0 ? 'bg-amber-300 text-amber-950' : 'bg-slate-100 text-slate-500')}
-          aria-label={`${count} open tasks`}
+          aria-label={t.plural(count, '{n} open task', '{n} open tasks')}
         >
           {count >= limit ? `${limit}+` : count}
         </span>

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { dayLabel, timeRange } from '@/lib/tasks/dates';
 import { dueState, PRIORITY_LABEL, PRIORITY_STYLE, projectColor, tagStyle, type DueState, type TaskPriority } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
+import { getT } from '@/lib/i18n/server';
 
 /** "#posters": the same colour every time. A link when `href` is given. */
 export function TagChip({ tag, href, active, className }: { tag: string; href?: string; active?: boolean; className?: string }) {
@@ -46,7 +47,7 @@ const DUE_TONE: Record<DueState, string> = {
  * When a task is planned. In "time" mode (a day's own list) it shows the slot, or "All day"; in "day" mode it
  * shows the day ("Tomorrow", "Tue, 13 Oct"), followed by the slot when there is one.
  */
-export function DueChip({
+export async function DueChip({
   task,
   today,
   mode = 'day',
@@ -57,16 +58,17 @@ export function DueChip({
   mode?: 'day' | 'time';
   className?: string;
 }) {
+  const t = await getT();
   const slot = timeRange(task.startTime, task.endTime);
   const state = dueState(task, today);
   let label: string | null;
-  if (mode === 'time') label = slot ?? (task.dueDate ? 'All day' : null);
-  else label = task.dueDate ? `${dayLabel(task.dueDate, today)}${slot ? ` · ${slot}` : ''}` : null;
+  if (mode === 'time') label = slot ?? (task.dueDate ? t('All day') : null);
+  else label = task.dueDate ? `${dayLabel(task.dueDate, today, t)}${slot ? ` · ${slot}` : ''}` : null;
   if (!label) return null;
   return (
     <span
       className={cn('inline-flex shrink-0 items-center whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium tabular-nums', mode === 'time' && state !== 'overdue' ? 'bg-slate-100 text-slate-600' : DUE_TONE[state], className)}
-      title={state === 'overdue' ? 'Overdue' : undefined}
+      title={state === 'overdue' ? t('Overdue') : undefined}
     >
       {label}
     </span>
@@ -74,12 +76,13 @@ export function DueChip({
 }
 
 /** A flag for high and urgent tasks; normal and low priority show nothing. */
-export function PriorityFlag({ priority, className }: { priority: TaskPriority; className?: string }) {
+export async function PriorityFlag({ priority, className }: { priority: TaskPriority; className?: string }) {
   if (priority !== 'high' && priority !== 'urgent') return null;
+  const t = await getT();
   return (
-    <span className={cn('inline-flex items-center gap-1 text-xs font-medium', PRIORITY_STYLE[priority].flag, className)} title={`${PRIORITY_LABEL[priority]} priority`}>
+    <span className={cn('inline-flex items-center gap-1 text-xs font-medium', PRIORITY_STYLE[priority].flag, className)} title={t('{priority} priority', { priority: t(PRIORITY_LABEL[priority]) })}>
       <Flag className="size-3.5" aria-hidden />
-      {PRIORITY_LABEL[priority]}
+      {t(PRIORITY_LABEL[priority])}
     </span>
   );
 }

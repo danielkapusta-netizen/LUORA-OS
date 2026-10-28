@@ -21,9 +21,9 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
-          {cards.length} {cards.length === 1 ? 'project' : 'projects'}.{' '}
+          {t.plural(cards.length, '{n} project', '{n} projects')}.{' '}
           <Link href={link('/tasks/projects', params, { archived: showArchived ? undefined : '1' })} className="font-medium text-brand-700 hover:underline">
-            {showArchived ? 'Hide archived' : 'Show archived'}
+            {showArchived ? t('Hide archived') : t('Show archived')}
           </Link>
         </p>
         <ProjectDialog people={people} variant="primary" />
@@ -43,7 +43,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
           >
             <FolderKanban className="size-5" aria-hidden />
             <span className="text-sm font-medium">{t('Tasks without a project')}</span>
-            <span className="text-xs">{loose} open</span>
+            <span className="text-xs">{t('{n} open', { n: loose })}</span>
           </Link>
         </div>
       )}

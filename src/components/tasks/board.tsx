@@ -4,6 +4,7 @@ import { useOptimistic, useState, useTransition, type ReactNode } from 'react';
 import { moveTaskAction } from '@/app/(app)/tasks/actions';
 import { STATUS_LABEL, type TaskStatus } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/client';
 
 export interface BoardItem {
   id: string;
@@ -26,6 +27,7 @@ const DOT: Record<TaskStatus, string> = { todo: 'bg-slate-400', in_progress: 'bg
  * change is saved behind it. (On a touch screen use the card's menu: "Move to…".)
  */
 export function Board({ columns }: { columns: BoardColumn[] }) {
+  const t = useT();
   const [shown, move] = useOptimistic(columns, (state, change: { id: string; to: TaskStatus }) => {
     const item = state.flatMap((c) => c.items).find((i) => i.id === change.id);
     if (!item) return state;
@@ -53,7 +55,7 @@ export function Board({ columns }: { columns: BoardColumn[] }) {
       {shown.map((col) => (
         <section
           key={col.status}
-          aria-label={STATUS_LABEL[col.status]}
+          aria-label={t(STATUS_LABEL[col.status])}
           onDragOver={(e) => {
             if (!dragging) return;
             e.preventDefault();
@@ -71,7 +73,7 @@ export function Board({ columns }: { columns: BoardColumn[] }) {
           <header className="mb-3 flex items-center justify-between gap-2 px-1">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
               <span className={cn('size-2 rounded-full', DOT[col.status])} aria-hidden />
-              {STATUS_LABEL[col.status]}
+              {t(STATUS_LABEL[col.status])}
               <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium tabular-nums text-slate-500">{col.items.length}</span>
             </h2>
             {col.header}
@@ -95,7 +97,7 @@ export function Board({ columns }: { columns: BoardColumn[] }) {
                 {item.node}
               </div>
             ))}
-            {col.items.length === 0 && <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">{col.empty ?? 'Nothing here'}</p>}
+            {col.items.length === 0 && <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400">{col.empty ?? t('Nothing here')}</p>}
           </div>
         </section>
       ))}

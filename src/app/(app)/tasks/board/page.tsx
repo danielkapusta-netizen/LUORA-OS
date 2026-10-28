@@ -24,6 +24,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
   ]);
   const dialog = { people, projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((item) => item.tag), meId: user.id };
   const columns = statusColumns({
+    t,
     cards,
     today: now,
     me: { id: user.id, role: user.role },
@@ -37,9 +38,9 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       <TaskFilterBar path="/tasks/board" params={params} people={people} projects={dialog.projects} meId={user.id} />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
         <p>
-          {cards.length} {cards.length === 1 ? 'task' : 'tasks'} · {STATUS_LABEL.done} shows the last 7 days.{' '}
+          {t.plural(cards.length, '{n} task', '{n} tasks')} · {t('{status} shows the last 7 days.', { status: t(STATUS_LABEL.done) })}{' '}
           <Link href={link('/tasks/board', params, { done: allDone ? undefined : 'all' })} className="font-medium text-brand-700 hover:underline">
-            {allDone ? 'Show only the last week' : 'Show every finished task'}
+            {allDone ? t('Show only the last week') : t('Show every finished task')}
           </Link>
         </p>
         <p>{t('Drag a card to another column to change its status.')}</p>

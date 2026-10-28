@@ -64,7 +64,7 @@ function ProjectForm({ people, project }: { people: { id: string; name: string }
         <button type="button" onClick={() => modal?.close()} className="h-10 rounded-full px-5 text-sm font-medium text-slate-600 hover:bg-slate-100">
           {t('Cancel')}
         </button>
-        <SubmitButton pendingText={t('Saving…')}>{project ? 'Save project' : 'Create project'}</SubmitButton>
+        <SubmitButton pendingText={t('Saving…')}>{project ? t('Save project') : t('Create project')}</SubmitButton>
       </div>
     </form>
   );
@@ -86,10 +86,11 @@ export function ProjectDialog({
   size?: 'sm' | 'md';
   buttonClassName?: string;
 }) {
+  const t = useT();
   return (
     <Modal
-      label={label ?? (project ? 'Edit' : 'New project')}
-      title={project ? 'Edit project' : 'New project'}
+      label={label ?? (project ? t('Edit') : t('New project'))}
+      title={project ? t('Edit project') : t('New project')}
       variant={variant}
       size={size}
       buttonClassName={buttonClassName}

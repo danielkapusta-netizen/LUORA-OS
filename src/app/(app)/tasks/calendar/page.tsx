@@ -58,8 +58,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <MonthGrid weeks={weeks} today={now} selected={selected} tasksByDay={tasksByDay} dayHref={(d) => here({ day: d })} />
         <aside aria-label={t('The picked day')} className="space-y-3">
           <h2 className="text-base font-semibold text-slate-900">
-            {selected ? dayLabel(selected, now, t) : 'Pick a day'}
-            {selected && ['Today', 'Tomorrow', 'Yesterday'].includes(dayLabel(selected, now, t)) && <span className="ml-2 text-sm font-normal text-slate-500">{shortDay(selected, now, t)}</span>}
+            {selected ? dayLabel(selected, now, t) : t('Pick a day')}
+            {selected && [t('Today'), t('Tomorrow'), t('Yesterday')].includes(dayLabel(selected, now, t)) && <span className="ml-2 text-sm font-normal text-slate-500">{shortDay(selected, now, t)}</span>}
           </h2>
           {selected === null ? (
             <Card>

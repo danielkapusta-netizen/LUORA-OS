@@ -37,13 +37,13 @@ export async function ProductivityCard({ data, now = warsawToday() }: { data: Pr
     <Card>
       <CardBody className="grid gap-6 sm:grid-cols-[13rem_minmax(0,1fr)]">
         <div className="space-y-5">
-          <Figure value={data.doneToday} label={t('daily tasks done')} note={data.plannedToday ? `${data.plannedToday} planned for today` : 'nothing planned for today'} />
+          <Figure value={data.doneToday} label={t('daily tasks done')} note={data.plannedToday ? t('{n} planned for today', { n: data.plannedToday }) : t('nothing planned for today')} />
           <Figure value={data.onTime} label={t('finished on time')} note={t('last 30 days')} />
         </div>
         <div>
-          <div className="flex h-28 items-end gap-2" role="img" aria-label={`Tasks finished per day over the last seven days: ${data.perDay.map((d) => d.count).join(', ')}`}>
+          <div className="flex h-28 items-end gap-2" role="img" aria-label={t('Tasks finished per day over the last seven days: {counts}', { counts: data.perDay.map((d) => d.count).join(', ') })}>
             {data.perDay.map((d) => (
-              <div key={d.day} className="flex h-full flex-1 flex-col justify-end" title={`${dayLabel(d.day, now, t)}: ${d.count} finished`}>
+              <div key={d.day} className="flex h-full flex-1 flex-col justify-end" title={`${dayLabel(d.day, now, t)}: ${t('{n} finished', { n: d.count })}`}>
                 <div
                   className={cn('w-full rounded-sm', d.count === 0 ? 'bg-slate-200' : d.day === now ? 'bg-brand-600' : 'bg-slate-900')}
                   style={{ height: `${d.count === 0 ? 4 : Math.max(10, (d.count / max) * 100)}%` }}
@@ -59,7 +59,7 @@ export async function ProductivityCard({ data, now = warsawToday() }: { data: Pr
             ))}
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            {data.completedWeek} {data.completedWeek === 1 ? 'task' : 'tasks'} finished in the last 7 days
+            {t.plural(data.completedWeek, '{n} task finished in the last 7 days', '{n} tasks finished in the last 7 days')}
           </p>
         </div>
       </CardBody>

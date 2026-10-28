@@ -43,7 +43,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         <Link href="/tasks" className="text-sm text-slate-500 hover:text-slate-800">
           {t('← All tasks')}
         </Link>
-        <Badge tone={STATUS_TONE[taskCard.status]}>{STATUS_LABEL[taskCard.status]}</Badge>
+        <Badge tone={STATUS_TONE[taskCard.status]}>{t(STATUS_LABEL[taskCard.status])}</Badge>
         {taskCard.project && <ProjectChip project={taskCard.project} />}
         <DueChip task={taskCard} today={now} />
       </div>
@@ -70,7 +70,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 <Select name="status" defaultValue={taskCard.status}>
                   {TASK_STATUSES.map((s) => (
                     <option key={s} value={s}>
-                      {STATUS_LABEL[s]}
+                      {t(STATUS_LABEL[s])}
                     </option>
                   ))}
                 </Select>
@@ -79,7 +79,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                 <Select name="priority" defaultValue={taskCard.priority}>
                   {TASK_PRIORITIES.map((p) => (
                     <option key={p} value={p}>
-                      {PRIORITY_LABEL[p]}
+                      {t(PRIORITY_LABEL[p])}
                     </option>
                   ))}
                 </Select>
@@ -118,7 +118,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-5">
           <Card>
-            <CardHeader title={t('Checklist')} description={taskCard.progress.total ? `${taskCard.progress.done} of ${taskCard.progress.total} done` : 'Break the task into small steps'} />
+            <CardHeader title={t('Checklist')} description={taskCard.progress.total ? t('{done} of {total} done', { done: taskCard.progress.done, total: taskCard.progress.total }) : t('Break the task into small steps')} />
             <CardBody className="space-y-3">
               {taskCard.progress.total > 0 && (
                 <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -137,7 +137,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                     </form>
                     <span className={cn('min-w-0 flex-1 text-sm', item.done && 'text-slate-400 line-through')}>{item.text}</span>
                     <form action={removeChecklistItemAction.bind(null, taskCard.id, item.id)}>
-                      <button aria-label={`Remove: ${item.text}`} className="rounded p-1 text-slate-300 hover:text-red-600">
+                      <button aria-label={t('Remove: {text}', { text: item.text })} className="rounded p-1 text-slate-300 hover:text-red-600">
                         <X className="size-3.5" aria-hidden />
                       </button>
                     </form>

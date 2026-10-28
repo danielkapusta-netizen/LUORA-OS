@@ -45,6 +45,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const path = `/tasks/projects/${id}`;
   const dialog = { people, projects: active.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((item) => item.tag), meId: user.id };
   const columns = statusColumns({
+    t,
     cards,
     today: now,
     me: { id: user.id, role: user.role },
@@ -69,8 +70,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
             </div>
             {project.description && <p className="whitespace-pre-wrap text-sm text-slate-600">{project.description}</p>}
             <p className="text-xs text-slate-500">
-              {owner ? `Owner: ${owner.name}` : 'No owner'}
-              {nextDue && ` · next due ${shortDay(nextDue, now, t)}`}
+              {owner ? t('Owner: {name}', { name: owner.name }) : t('No owner')}
+              {nextDue && ` · ${t('next due {date}', { date: shortDay(nextDue, now, t) })}`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -114,9 +115,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
       </div>
       <TaskFilterBar path={path} params={query} people={people} meId={user.id} />
       <div className="mb-3 text-xs text-slate-500">
-        Finished tasks from the last 14 days.{' '}
+        {t('Finished tasks from the last 14 days.')}{' '}
         <Link href={link(path, query, { done: allDone ? undefined : 'all' })} className="font-medium text-brand-700 hover:underline">
-          {allDone ? 'Show only recent ones' : 'Show every finished task'}
+          {allDone ? t('Show only recent ones') : t('Show every finished task')}
         </Link>
       </div>
       <Board columns={columns} />

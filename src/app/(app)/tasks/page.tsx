@@ -93,7 +93,7 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
               <h2 className="text-base font-semibold text-slate-900">{t('Tags')}</h2>
               {tagList.length > SHOWN_TAGS && (
                 <Link href={here({ tags: allTags ? undefined : 'all' })} className="text-xs text-slate-600 hover:text-slate-900 hover:underline">
-                  {allTags ? 'Fewer tags' : 'All tags →'}
+                  {allTags ? t('Fewer tags') : t('All tags →')}
                 </Link>
               )}
             </div>
@@ -116,7 +116,7 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
               <Link href={here({ day: addDays(day, -1) })} aria-label={t('Previous day')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
                 <ChevronLeft className="size-4" />
               </Link>
-              <h2 className="text-xl font-semibold tracking-tight text-slate-900">{day === now ? 'Tasks for today' : `Tasks for ${dayLabel(day, now, t)}`}</h2>
+              <h2 className="text-xl font-semibold tracking-tight text-slate-900">{day === now ? t('Tasks for today') : t('Tasks for {day}', { day: dayLabel(day, now, t) })}</h2>
               <Link href={here({ day: addDays(day, 1) })} aria-label={t('Next day')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
                 <ChevronRight className="size-4" />
               </Link>
@@ -152,7 +152,7 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
 
           {groups.overdue.length > 0 && (
             <section aria-label={t('Overdue')} className="space-y-2.5">
-              <h3 className="text-sm font-semibold text-red-700">Overdue · {groups.overdue.length}</h3>
+              <h3 className="text-sm font-semibold text-red-700">{t('Overdue')} · {groups.overdue.length}</h3>
               {groups.overdue.map((item) => (
                 <TaskCardView key={item.id} card={item} today={now} me={me} due="day" compact={compact} tagHref={tagHref} />
               ))}
@@ -163,7 +163,7 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
             {groups.overdue.length > 0 && <h3 className="text-sm font-semibold text-slate-700">{day === now ? 'Today' : dayLabel(day, now, t)}</h3>}
             {groups.planned.length === 0 ? (
               <Card>
-                <EmptyState title={day === now ? 'Nothing planned for today' : 'Nothing planned for this day'}>
+                <EmptyState title={day === now ? t('Nothing planned for today') : t('Nothing planned for this day')}>
                   {t('Add a task for it, or pick another day in the calendar.')}
                 </EmptyState>
               </Card>
@@ -174,13 +174,13 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
 
           {groups.undated.length > 0 && (
             <section aria-label={t('No day set')} className="space-y-2.5">
-              <h3 className="text-sm font-semibold text-slate-700">No day set · {groups.undated.length}</h3>
+              <h3 className="text-sm font-semibold text-slate-700">{t('No day set')} · {groups.undated.length}</h3>
               {groups.undated.slice(0, UNDATED_SHOWN).map((item) => (
                 <TaskCardView key={item.id} card={item} today={now} me={me} due="day" compact={compact} tagHref={tagHref} />
               ))}
               {groups.undated.length > UNDATED_SHOWN && (
                 <Link href={link('/tasks/board', params)} className="inline-block text-xs font-medium text-brand-700 hover:underline">
-                  {groups.undated.length - UNDATED_SHOWN} more on the board
+                  {t('{n} more on the board', { n: groups.undated.length - UNDATED_SHOWN })}
                 </Link>
               )}
             </section>
@@ -192,8 +192,8 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
               <Pills
                 label={t('Which tasks')}
                 options={[
-                  { value: 'high', label: 'High priority' },
-                  { value: 'all', label: 'Everything open' },
+                  { value: 'high', label: t('High priority') },
+                  { value: 'all', label: t('Everything open') },
                 ]}
                 active={allPriorities ? 'all' : 'high'}
                 href={(v) => here({ prio: v === 'all' ? 'all' : undefined })}
@@ -201,7 +201,7 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
             </div>
             {comingUp.length === 0 ? (
               <Card>
-                <EmptyState title={allPriorities ? 'Nothing else is open' : 'No high priority tasks waiting'} />
+                <EmptyState title={allPriorities ? t('Nothing else is open') : t('No high priority tasks waiting')} />
               </Card>
             ) : (
               comingUp.map((item) => <TaskCardView key={item.id} card={item} today={now} me={me} due="day" compact={compact} tagHref={tagHref} />)

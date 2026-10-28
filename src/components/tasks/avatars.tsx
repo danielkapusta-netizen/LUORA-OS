@@ -34,7 +34,7 @@ export async function AvatarStack({ people, max = 3, size = 'md' }: { people: Pe
   const shown = people.slice(0, max);
   const rest = people.length - shown.length;
   return (
-    <span className="inline-flex -space-x-1.5" aria-label={`Assigned to ${people.map((p) => p.name).join(', ')}`}>
+    <span className="inline-flex -space-x-1.5" aria-label={t('Assigned to {names}', { names: people.map((p) => p.name).join(', ') })}>
       {shown.map((p) => (
         <Avatar key={p.id} person={p} size={size} />
       ))}

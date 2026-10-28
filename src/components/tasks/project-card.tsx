@@ -24,7 +24,7 @@ export async function ProjectCardView({ card, size = 'compact', today }: { card:
       <Link href={href} className={cn('group flex min-h-32 flex-col justify-between gap-5 rounded-2xl border border-black/5 bg-white p-4 transition-colors hover:border-brand-500', archived && 'opacity-60')}>
         <div className="flex items-center justify-between">
           {members.length ? <AvatarStack people={members} size="sm" max={4} /> : <span className={cn('size-2.5 rounded-full', color.dot)} aria-hidden />}
-          {overdue > 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">{overdue} late</span>}
+          {overdue > 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">{t('{n} late', { n: overdue })}</span>}
         </div>
         <div>
           <p className="font-medium leading-snug text-slate-900">{project.name}</p>
@@ -50,7 +50,7 @@ export async function ProjectCardView({ card, size = 'compact', today }: { card:
         </div>
         <div>
           <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500">
-            <span>{total === 0 ? 'No tasks yet' : `${done} of ${total} done`}</span>
+            <span>{total === 0 ? t('No tasks yet') : t('{done} of {total} done', { done, total })}</span>
             {total > 0 && <span className="tabular-nums">{Math.round((done / total) * 100)}%</span>}
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -60,10 +60,10 @@ export async function ProjectCardView({ card, size = 'compact', today }: { card:
         <div className="mt-auto flex items-end justify-between gap-3">
           <div className="space-y-0.5 text-xs text-slate-500">
             <p>
-              <span className="font-medium text-slate-800">{open}</span> open
-              {overdue > 0 && <span className="font-medium text-red-700"> · {overdue} overdue</span>}
+              <span className="font-medium text-slate-800">{open}</span> {t('open')}
+              {overdue > 0 && <span className="font-medium text-red-700"> · {t('{n} overdue', { n: overdue })}</span>}
             </p>
-            {nextDue && <p>Next due {shortDay(nextDue, today, t)}</p>}
+            {nextDue && <p>{t('Next due {date}', { date: shortDay(nextDue, today, t) })}</p>}
           </div>
           <AvatarStack people={members} max={4} />
         </div>

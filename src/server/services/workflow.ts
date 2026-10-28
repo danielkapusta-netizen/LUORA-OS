@@ -4,15 +4,16 @@ import { invoices, orders, shipments, type OrderStatus } from '../db/schema';
 import { enqueue, JOBS } from '../jobs/queue';
 import { logEvent } from './events';
 import { applyOrderStock, restockOrder, scheduleStockPush } from './inventory';
+import { msg } from '@/lib/i18n/msg';
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
-  new: 'New',
-  processing: 'Processing',
-  label_created: 'Label created',
-  shipped: 'Shipped',
-  delivered: 'Delivered',
-  on_hold: 'On hold',
-  cancelled: 'Cancelled',
+  new: msg('New'),
+  processing: msg('Processing'),
+  label_created: msg('Label created'),
+  shipped: msg('Shipped'),
+  delivered: msg('Delivered'),
+  on_hold: msg('On hold'),
+  cancelled: msg('Cancelled'),
 };
 
 /** Which statuses an order may move to from each status. */

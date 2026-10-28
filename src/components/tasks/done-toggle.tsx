@@ -4,9 +4,11 @@ import { Check } from 'lucide-react';
 import { useOptimistic, useTransition } from 'react';
 import { toggleDoneAction } from '@/app/(app)/tasks/actions';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/client';
 
 /** The round check box of a task card. It fills straight away; the list refreshes behind it. */
 export function DoneToggle({ id, done, title }: { id: string; done: boolean; title: string }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [checked, setChecked] = useOptimistic(done);
   return (
@@ -14,7 +16,7 @@ export function DoneToggle({ id, done, title }: { id: string; done: boolean; tit
       type="button"
       role="checkbox"
       aria-checked={checked}
-      aria-label={`${checked ? 'Reopen' : 'Mark as done'}: ${title}`}
+      aria-label={`${checked ? t('Reopen') : t('Mark as done')}: ${title}`}
       disabled={pending}
       onClick={() =>
         start(async () => {

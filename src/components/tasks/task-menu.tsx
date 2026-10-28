@@ -60,11 +60,11 @@ export function TaskMenu({ id, status, assignedToMe, canDelete }: { id: string; 
           </Link>
           {TASK_STATUSES.filter((s) => s !== status).map((s) => (
             <button key={s} type="button" role="menuitem" className={ITEM} onClick={() => run(() => moveTaskAction(id, s))}>
-              Move to {STATUS_LABEL[s]}
+              {t('Move to {status}', { status: t(STATUS_LABEL[s]) })}
             </button>
           ))}
           <button type="button" role="menuitem" className={ITEM} onClick={() => run(() => toggleAssignMeAction(id))}>
-            {assignedToMe ? 'Take me off' : 'Assign to me'}
+            {assignedToMe ? t('Take me off') : t('Assign to me')}
           </button>
           {canDelete && (
             <button
@@ -72,7 +72,7 @@ export function TaskMenu({ id, status, assignedToMe, canDelete }: { id: string; 
               role="menuitem"
               className={cn(ITEM, 'text-red-700 hover:bg-red-50')}
               onClick={() => {
-                if (window.confirm('Delete this task? This cannot be undone.')) run(() => deleteTaskAction(id));
+                if (window.confirm(t('Delete this task? This cannot be undone.'))) run(() => deleteTaskAction(id));
               }}
             >
               {t('Delete')}

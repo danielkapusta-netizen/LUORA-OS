@@ -72,7 +72,7 @@ function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
           <Select name="priority" defaultValue="normal">
             {TASK_PRIORITIES.map((p) => (
               <option key={p} value={p}>
-                {PRIORITY_LABEL[p]}
+                {t(PRIORITY_LABEL[p])}
               </option>
             ))}
           </Select>
@@ -93,7 +93,7 @@ function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
         <span className="text-xs font-medium text-slate-600">{t('Who is it for?')}</span>
         <PeoplePicker people={people} selected={defaults.assigneeIds ?? [meId]} />
       </div>
-      <Field label={t('Tags')} hint={tags.length ? `Separate with commas. In use: ${tags.slice(0, 8).map((tag) => `#${tag}`).join(' ')}` : 'Separate with commas'}>
+      <Field label={t('Tags')} hint={tags.length ? t('Separate with commas. In use: {tags}', { tags: tags.slice(0, 8).map((tag) => `#${tag}`).join(' ') }) : t('Separate with commas')}>
         <Input name="tags" placeholder={t('posters, ideas')} />
       </Field>
       {state?.error && <p className="text-sm text-red-700">{state.error}</p>}
