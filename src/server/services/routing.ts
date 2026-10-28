@@ -2,6 +2,7 @@
 // Pure functions so the rules are easy to test.
 import type { RuleConditions } from '../db/schema';
 import type { Marketplace } from '../integrations/types';
+import { createT, type T } from '@/lib/i18n/translate';
 
 export interface RoutableOrder {
   accountId: string;
@@ -80,11 +81,12 @@ export function chooseRoute(order: RoutableOrder, rules: RuleLike[], carriers: C
   return null;
 }
 
-export function describeConditions(c: RuleConditions): string {
+/** A rule's conditions in words. Pass a translator to read them in the person's language. */
+export function describeConditions(c: RuleConditions, t: T = createT('en')): string {
   const parts: string[] = [];
-  if (c.marketplaces?.length) parts.push(`marketplace is ${c.marketplaces.join(' or ')}`);
-  if (c.deliveryMethodContains) parts.push(`delivery method contains "${c.deliveryMethodContains}"`);
-  if (c.hasPickupPoint !== undefined) parts.push(c.hasPickupPoint ? 'has a pickup point' : 'has no pickup point');
-  if (c.cod !== undefined) parts.push(c.cod ? 'is cash on delivery' : 'is prepaid');
-  return parts.length ? parts.join(', ') : 'every order';
+  if (c.marketplaces?.length) parts.push(t('marketplace is {names}', { names: c.marketplaces.join(t(' or ')) }));
+  if (c.deliveryMethodContains) parts.push(t('delivery method contains "{text}"', { text: c.deliveryMethodContains }));
+  if (c.hasPickupPoint !== undefined) parts.push(c.hasPickupPoint ? t('has a pickup point') : t('has no pickup point'));
+  if (c.cod !== undefined) parts.push(c.cod ? t('is cash on delivery') : t('is prepaid'));
+  return parts.length ? parts.join(', ') : t('every order');
 }

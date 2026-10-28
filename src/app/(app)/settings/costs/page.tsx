@@ -15,6 +15,7 @@ import {
   sheetCostsAction,
   shopifyCostsAction,
 } from './actions';
+import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -27,7 +28,7 @@ const LUORA_ANALYTICS_SHEET =
   'https://script.google.com/macros/s/AKfycbxM8GUKKRaprp8MVAP7V5fL1JnBA6l-X8DdKUJsW_y7XGIjsfeo4GBAESTrwB73nB3Fnw/exec';
 
 const pct = (v: number | undefined) => (v === undefined ? '' : String(Math.round(v * 10000) / 100));
-const SOURCES: Record<string, string> = { manual: 'entered', import: 'pasted', sheet: 'sheet', shopify: 'Shopify', invoice: 'invoice' };
+const SOURCES: Record<string, string> = { manual: msg('entered'), import: msg('pasted'), sheet: msg('sheet'), shopify: 'Shopify', invoice: msg('invoice') };
 
 export default async function CostsPage({ searchParams }: { searchParams: Promise<{ q?: string; missing?: string; history?: string }> }) {
   const t = await getT();
@@ -55,11 +56,11 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
           title={t('How profit is calculated')}
           description={
             <>
-              Profit = revenue without VAT − marketplace fees − product cost − label and packaging + shipping paid by the buyer − refunds. VAT rates come from{' '}
+              {t('Profit = revenue without VAT − marketplace fees − product cost − label and packaging + shipping paid by the buyer − refunds. VAT rates come from')}{' '}
               <Link href="/settings/accounting" className="underline">
                 {t('Accounting')}
               </Link>{' '}
-              (Polish rate {pct(vat)}%, OSS rates for other EU countries).
+              {t('(Polish rate {rate}%, OSS rates for other EU countries).', { rate: pct(vat) })}
             </>
           }
         />
@@ -132,15 +133,15 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
         <CardBody className="space-y-3">
           <div className="flex flex-wrap gap-4 text-sm">
             <span>
-              <span className="font-semibold">{withCost}</span> of {allRows.length} products have a cost
+              <span className="font-semibold">{withCost}</span> {t('of {n} products have a cost', { n: allRows.length })}
             </span>
             <span>
-              <span className="font-semibold">{revenue > 0 ? Math.round((covered / revenue) * 100) : 0}%</span> of the last 90 days&apos; revenue is covered
+              <span className="font-semibold">{revenue > 0 ? Math.round((covered / revenue) * 100) : 0}%</span> {t("of the last 90 days' revenue is covered")}
             </span>
           </div>
           {allRows.length === 0 && (
             <Alert tone="blue">
-              No products yet. Products come from Shopify: use “Import listings for stock sync” on the Shopify account in{' '}
+              {t('No products yet. Products come from Shopify: use “Import listings for stock sync” on the Shopify account in')}{' '}
               <Link href="/settings/integrations" className="underline">
                 {t('Integrations')}
               </Link>
@@ -158,7 +159,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
           </form>
         </CardBody>
         {rows.length === 0 ? (
-          allRows.length > 0 && <EmptyState title={missing ? 'Every product has a cost' : 'No product matches'} />
+          allRows.length > 0 && <EmptyState title={missing ? t('Every product has a cost') : t('No product matches')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -200,7 +201,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                       <td className={cn(td, 'text-right whitespace-nowrap')}>
                         {r.units90 > 0 ? (
                           <>
-                            {r.units90} pcs
+                            {t('{n} pcs', { n: r.units90 })}
                             <span className="block text-xs text-slate-500">{formatMoney(r.revenue90)}</span>
                           </>
                         ) : (
@@ -214,16 +215,16 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                             <span className="font-medium">{formatMoney(Number(r.cost.unitCost))}</span>
                             {share !== null && (
                               <Badge tone={share > 0.7 ? 'red' : share > 0.55 ? 'amber' : 'green'} className="ml-1.5">
-                                {Math.round(share * 100)}% of price
+                                {t('{pct}% of price', { pct: Math.round(share * 100) })}
                               </Badge>
                             )}
                             <span className="block text-xs text-slate-500">
-                              {r.cost.effectiveFrom === '2000-01-01' ? 'always' : `from ${r.cost.effectiveFrom}`} · {SOURCES[r.cost.source] ?? r.cost.source}
+                              {r.cost.effectiveFrom === '2000-01-01' ? t('always') : t('from {date}', { date: r.cost.effectiveFrom })} · {SOURCES[r.cost.source] ? t(SOURCES[r.cost.source]) : r.cost.source}
                               {r.entries > 1 && (
                                 <>
                                   {' · '}
                                   <Link href={`${link({ history: r.product.id })}#${r.product.id}`} className="underline">
-                                    {r.entries} entries
+                                    {t.plural(r.entries, '{n} entry', '{n} entries')}
                                   </Link>
                                 </>
                               )}
@@ -290,7 +291,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
         <CardBody>
           <ActionForm action={invoiceCostsAction} className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
             <div className="space-y-2">
-              <Textarea name="lines" rows={9} required placeholder={'8809562191438;3;6.25\n8809151133610;3;5.37\nOr whole rows copied from the invoice table'} />
+              <Textarea name="lines" rows={9} required placeholder={'8809562191438;3;6.25\n8809151133610;3;5.37\n' + t('Or whole rows copied from the invoice table')} />
               <p className="text-xs text-slate-500">
                 {t('One product per line: barcode, SKU or name, then quantity and unit price. A whole table row works too (the barcode column is found; the amount column is ignored).')}
               </p>

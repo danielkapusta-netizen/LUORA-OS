@@ -44,7 +44,7 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
         <ArrowLeft className="size-4" /> {t('Integrations')}
       </Link>
       <Card>
-        <CardHeader title={account ? account.name : `New ${CARRIER_LABELS[type]} account`} />
+        <CardHeader title={account ? account.name : t('New {carrier} account', { carrier: CARRIER_LABELS[type] })} />
         <CardBody>
           <ActionForm action={saveCarrierAction.bind(null, account?.id ?? null)} className="space-y-5">
             <input type="hidden" name="type" value={type} />
@@ -58,7 +58,7 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
                 <p className="text-xs text-slate-500">{t('Generate the API token and find the organization ID in InPost Manager Paczek → My account → API.')}</p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label={t('API token')}>
-                    <Input name="apiToken" type="password" autoComplete="off" placeholder={stored.includes('apiToken') ? '•••••••• saved – leave blank to keep' : ''} />
+                    <Input name="apiToken" type="password" autoComplete="off" placeholder={stored.includes('apiToken') ? t('•••••••• saved – leave blank to keep') : ''} />
                   </Field>
                   <Field label={t('Organization ID')}>
                     <Input name="organizationId" defaultValue={typeof pub.organizationId === 'string' ? pub.organizationId : ''} required />
@@ -154,7 +154,7 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
             />
             <Checkbox name="enabled" label={t('Enabled')} defaultChecked={account?.enabled ?? true} />
             <div>
-              <SubmitButton>{account ? 'Save' : 'Create account'}</SubmitButton>
+              <SubmitButton>{account ? t('Save') : t('Create account')}</SubmitButton>
             </div>
           </ActionForm>
         </CardBody>

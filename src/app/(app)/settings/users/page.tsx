@@ -31,18 +31,18 @@ export default async function UsersPage() {
                   {u.name} {u.id === me.id && <span className="text-xs text-slate-500">{t('(you)')}</span>}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {u.email} · added {formatDate(u.createdAt, false, t.locale)}
+                  {u.email} · {t('added {date}', { date: formatDate(u.createdAt, false, t.locale) })}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {!admin && <Badge tone={u.role === 'admin' ? 'violet' : 'gray'}>{ROLE_LABEL[u.role]}</Badge>}
+                {!admin && <Badge tone={u.role === 'admin' ? 'violet' : 'gray'}>{t(ROLE_LABEL[u.role])}</Badge>}
                 {admin && (
                   <>
                     <ActionForm action={setRoleAction.bind(null, u.id)} className="flex gap-1.5" showOk={false}>
-                      <Select name="role" defaultValue={u.role} className="h-8 w-32" aria-label={`Role of ${u.name}`}>
+                      <Select name="role" defaultValue={u.role} className="h-8 w-32" aria-label={t('Role of {name}', { name: u.name })}>
                         {ROLES.map((r) => (
                           <option key={r} value={r}>
-                            {ROLE_LABEL[r]}
+                            {t(ROLE_LABEL[r])}
                           </option>
                         ))}
                       </Select>
@@ -58,7 +58,7 @@ export default async function UsersPage() {
                     </ActionForm>
                     {u.id !== me.id && (
                       <ActionForm action={deleteUserAction.bind(null, u.id)} showOk={false}>
-                        <SubmitButton size="sm" variant="danger" confirm={`Delete ${u.name}?`}>
+                        <SubmitButton size="sm" variant="danger" confirm={t('Delete {name}?', { name: u.name })}>
                           {t('Delete')}
                         </SubmitButton>
                       </ActionForm>
@@ -75,8 +75,8 @@ export default async function UsersPage() {
         <dl className="divide-y divide-slate-100 text-sm">
           {ROLES.map((r) => (
             <div key={r} className="grid gap-1 px-4 py-3 sm:grid-cols-[8rem_1fr]">
-              <dt className="font-medium">{ROLE_LABEL[r]}</dt>
-              <dd className="text-slate-600">{ROLE_DESCRIPTION[r]}</dd>
+              <dt className="font-medium">{t(ROLE_LABEL[r])}</dt>
+              <dd className="text-slate-600">{t(ROLE_DESCRIPTION[r])}</dd>
             </div>
           ))}
         </dl>
@@ -99,7 +99,7 @@ export default async function UsersPage() {
                 <Select name="role" defaultValue="logistics">
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {ROLE_LABEL[r]}
+                      {t(ROLE_LABEL[r])}
                     </option>
                   ))}
                 </Select>

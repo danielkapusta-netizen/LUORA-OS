@@ -34,8 +34,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
         <Alert>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
-              {demoCount} demo account(s) from the first setup are still here. Their carriers can&apos;t buy real labels, and shipping rules
-              that point at them are skipped.
+              {t.plural(demoCount, "{n} demo account from the first setup is still here. Its carriers can't buy real labels, and shipping rules that point at it are skipped.", "{n} demo accounts from the first setup are still here. Their carriers can't buy real labels, and shipping rules that point at them are skipped.")}
             </span>
             <ActionForm action={removeDemoDataAction}>
               <SubmitButton size="sm" variant="danger" confirm={t('Delete all demo accounts, their orders, labels and shipping rules?')}>
@@ -47,8 +46,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       )}
       {isMockMode() && (
         <Alert>
-          Demo mode (<code>{t('INTEGRATIONS_MODE=mock')}</code>): orders and labels are generated locally and nothing is sent to Shopify, Allegro,
-          Empik, HEBE or InPost. Set <code>{t('INTEGRATIONS_MODE=live')}</code> to use real accounts.
+          {t('Demo mode (INTEGRATIONS_MODE=mock): orders and labels are generated locally and nothing is sent to Shopify, Allegro, Empik, HEBE or InPost. Set INTEGRATIONS_MODE=live to use real accounts.')}
         </Alert>
       )}
 
@@ -93,11 +91,11 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                       <span className="font-medium">{a.name}</span>
                       <MarketplaceBadge marketplace={a.type} />
                       {!a.enabled && <Badge>{t('Disabled')}</Badge>}
-                      {a.stockSyncEnabled && <Badge tone={a.stockDryRun ? 'amber' : 'green'}>{a.stockDryRun ? 'Stock: dry run' : 'Stock sync on'}</Badge>}
+                      {a.stockSyncEnabled && <Badge tone={a.stockDryRun ? 'amber' : 'green'}>{a.stockDryRun ? t('Stock: dry run') : t('Stock sync on')}</Badge>}
                       {a.type === 'allegro' && !isMockMode() && (allegroConnected ? <Badge tone="green">{t('Connected')}</Badge> : <Badge tone="red">{t('Not connected')}</Badge>)}
                       {a.type === 'vonhalsky' && !isMockMode() && (vonHalskyConnected ? <Badge tone="green">{t('Connected')}</Badge> : <Badge tone="red">{t('Not connected')}</Badge>)}
                     </div>
-                    <p className="text-xs text-slate-500">Last sync {timeAgo(a.lastSyncedAt, t)}</p>
+                    <p className="text-xs text-slate-500">{t('Last sync {when}', { when: timeAgo(a.lastSyncedAt, t) })}</p>
                     {a.lastError && <p className="text-xs text-red-700">{t('Error:')} {a.lastError}</p>}
                     {a.type === 'shopify' && (
                       <p className="text-xs text-slate-500">
@@ -108,12 +106,12 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                   <div className="flex flex-wrap items-start gap-2">
                     {a.type === 'allegro' && admin && !isMockMode() && (
                       <a className={buttonClass(allegroConnected ? 'secondary' : 'primary', 'sm')} href={`/api/oauth/allegro/start?accountId=${a.id}`}>
-                        {allegroConnected ? 'Reconnect Allegro' : 'Connect Allegro'}
+                        {allegroConnected ? t('Reconnect Allegro') : t('Connect Allegro')}
                       </a>
                     )}
                     {a.type === 'vonhalsky' && admin && !isMockMode() && (
                       <a className={buttonClass(vonHalskyConnected ? 'secondary' : 'primary', 'sm')} href={`/api/oauth/vonhalsky/start?accountId=${a.id}`}>
-                        {vonHalskyConnected ? 'Reconnect Von Halsky' : 'Connect Von Halsky'}
+                        {vonHalskyConnected ? t('Reconnect Von Halsky') : t('Connect Von Halsky')}
                       </a>
                     )}
                     <ActionForm action={syncAccountAction.bind(null, a.id)}>
@@ -169,12 +167,12 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                     {!c.enabled && <Badge>{t('Disabled')}</Badge>}
                     {!c.sender && <Badge tone="red">{t('No sender address')}</Badge>}
                     {!c.configured && (
-                      <Badge tone="red">{c.type === 'allegro_shipping' ? 'Allegro account not connected' : 'No API credentials'}</Badge>
+                      <Badge tone="red">{c.type === 'allegro_shipping' ? t('Allegro account not connected') : t('No API credentials')}</Badge>
                     )}
                   </div>
                   <p className="text-xs text-slate-500">
                     {t('Labels:')} {(c.settings.labelFormat ?? 'pdf').toUpperCase()} {c.settings.labelSize ?? 'A6'}
-                    {c.sender ? ` · from ${c.sender.city}` : ''}
+                    {c.sender ? ` · ${t('from {city}', { city: c.sender.city })}` : ''}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-start gap-2">

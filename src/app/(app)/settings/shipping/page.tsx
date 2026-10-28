@@ -89,7 +89,7 @@ async function RuleForm({ rule, carriers, presets }: { rule?: ShippingRule; carr
       </div>
       <Checkbox name="enabled" label={t('Enabled')} defaultChecked={rule?.enabled ?? true} />
       <div>
-        <SubmitButton variant={rule ? 'secondary' : 'primary'}>{rule ? 'Save rule' : 'Add rule'}</SubmitButton>
+        <SubmitButton variant={rule ? 'secondary' : 'primary'}>{rule ? t('Save rule') : t('Add rule')}</SubmitButton>
       </div>
     </ActionForm>
   );
@@ -136,7 +136,7 @@ export default async function ShippingSettingsPage() {
   const user = await requireUser();
   const { rules, carriers, presets } = await loadRoutingData();
   const admin = user.role === 'admin';
-  const carrierName = (id: string) => carriers.find((c) => c.id === id)?.name ?? 'deleted carrier';
+  const carrierName = (id: string) => carriers.find((c) => c.id === id)?.name ?? t('deleted carrier');
 
   return (
     <div className="space-y-5">
@@ -166,7 +166,7 @@ export default async function ShippingSettingsPage() {
                     {!r.enabled && <Badge tone="gray">{t('disabled')}</Badge>}
                     {!carriers.find((c) => c.id === r.carrierAccountId)?.configured && <Badge tone="red">{t('carrier not configured, rule skipped')}</Badge>}
                     <span className="text-slate-500">
-                      if {describeConditions(r.conditions)} → {carrierName(r.carrierAccountId)}, {SERVICE_LABELS[r.service] ?? r.service}
+                      {t('if {conditions}', { conditions: describeConditions(r.conditions, t) })} → {carrierName(r.carrierAccountId)}, {SERVICE_LABELS[r.service] ? t(SERVICE_LABELS[r.service]) : r.service}
                     </span>
                   </summary>
                   {admin && (

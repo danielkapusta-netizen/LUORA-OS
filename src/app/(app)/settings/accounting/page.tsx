@@ -4,6 +4,7 @@ import { Card, CardBody, CardHeader, Checkbox, Field, Input } from '@/components
 import { requireAdmin } from '@/server/auth';
 import { loadAccounting } from '@/server/services/invoicing';
 import { saveAccountingAction, testAccountingAction } from '../../accounting/actions';
+import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -12,8 +13,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const MODES = [
-  { value: 'manual', label: 'Manual', hint: 'Nothing is issued until you press “Create invoice” on the Accounting page or on the order.' },
-  { value: 'auto', label: 'Automatic', hint: 'The invoice is issued as soon as a requested order becomes Shipped (packed + tracking sent).' },
+  { value: 'manual', label: msg('Manual'), hint: msg('Nothing is issued until you press “Create invoice” on the Accounting page or on the order.') },
+  { value: 'auto', label: msg('Automatic'), hint: msg('The invoice is issued as soon as a requested order becomes Shipped (packed + tracking sent).') },
 ] as const;
 
 const percent = (v: number | undefined) => (v === undefined ? '' : String(Math.round(v * 10000) / 100));
@@ -47,14 +48,14 @@ export default async function AccountingSettingsPage() {
             <fieldset className="space-y-3">
               <legend className="mb-1 text-sm font-semibold">{t('Connection')}</legend>
               <p className="text-xs text-slate-500">
-                In ifirma open Konfiguracja → API, generate the <span className="font-medium">{t('faktura')}</span> key and paste it here with your ifirma login.
+                {t('In ifirma open Konfiguracja → API, generate the “faktura” key and paste it here with your ifirma login.')}
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label={t('ifirma login')}>
                   <Input name="login" defaultValue={login ?? ''} autoComplete="off" />
                 </Field>
                 <Field label={t('API key “faktura”')}>
-                  <Input name="invoiceKey" type="password" autoComplete="off" placeholder={hasKey ? '•••••••• saved – leave blank to keep' : 'e.g. EAB0D8ACF3308F3B'} />
+                  <Input name="invoiceKey" type="password" autoComplete="off" placeholder={hasKey ? t('•••••••• saved – leave blank to keep') : t('e.g. EAB0D8ACF3308F3B')} />
                 </Field>
               </div>
               <Checkbox name="enabled" label={t('Invoicing is on')} defaultChecked={enabled} />
@@ -71,8 +72,8 @@ export default async function AccountingSettingsPage() {
                   >
                     <input type="radio" name="mode" value={m.value} defaultChecked={(s.autoOnShipped ? 'auto' : 'manual') === m.value} className="mt-0.5 size-4 text-brand-600" />
                     <span>
-                      <span className="block text-sm font-medium text-slate-900">{m.label}</span>
-                      <span className="block text-xs text-slate-500">{m.hint}</span>
+                      <span className="block text-sm font-medium text-slate-900">{t(m.label)}</span>
+                      <span className="block text-xs text-slate-500">{t(m.hint)}</span>
                     </span>
                   </label>
                 ))}
