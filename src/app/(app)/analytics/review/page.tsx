@@ -67,7 +67,7 @@ export default async function BusinessReviewPage({
       <ViewFilters view={view} path="/analytics/review" extra={current} />
 
       <section>
-        <SectionTitle title={`Business review · ${review.periodLabel}`} />
+        <SectionTitle title={`${t('Business review')} · ${review.periodLabel}`} />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           {review.summary.map((s) => (
             <Card key={s.label} className="px-4 py-3">
@@ -191,7 +191,7 @@ export default async function BusinessReviewPage({
             <div className="flex justify-end gap-2 border-t border-slate-100 px-4 py-2 text-sm">
               {page > 1 && <Link href={link({ page: String(page - 1) })}>{t('← Newer')}</Link>}
               <span className="text-slate-500">
-                Page {page} of {pages}
+                {t('Page {page} of {pages}', { page, pages })}
               </span>
               {page < pages && <Link href={link({ page: String(page + 1) })}>{t('Older →')}</Link>}
             </div>

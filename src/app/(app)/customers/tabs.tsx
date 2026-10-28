@@ -3,15 +3,18 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/client';
+import { msg } from '@/lib/i18n/msg';
 
 const TABS = [
-  { href: '/customers', label: 'Customers', exact: true },
-  { href: '/customers/segments', label: 'Segments' },
-  { href: '/customers/duplicates', label: 'Possible duplicates' },
+  { href: '/customers', label: msg('Customers'), exact: true },
+  { href: '/customers/segments', label: msg('Segments') },
+  { href: '/customers/duplicates', label: msg('Possible duplicates') },
 ];
 
 export function CustomerTabs() {
   const pathname = usePathname();
+  const t = useT();
   return (
     <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
       {TABS.map((item) => {
@@ -26,7 +29,7 @@ export function CustomerTabs() {
               active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
-            {item.label}
+            {t(item.label)}
           </Link>
         );
       })}

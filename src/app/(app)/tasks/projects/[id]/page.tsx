@@ -70,7 +70,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
             {project.description && <p className="whitespace-pre-wrap text-sm text-slate-600">{project.description}</p>}
             <p className="text-xs text-slate-500">
               {owner ? `Owner: ${owner.name}` : 'No owner'}
-              {nextDue && ` · next due ${shortDay(nextDue, now)}`}
+              {nextDue && ` · next due ${shortDay(nextDue, now, t)}`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

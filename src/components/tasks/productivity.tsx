@@ -43,7 +43,7 @@ export async function ProductivityCard({ data, now = warsawToday() }: { data: Pr
         <div>
           <div className="flex h-28 items-end gap-2" role="img" aria-label={`Tasks finished per day over the last seven days: ${data.perDay.map((d) => d.count).join(', ')}`}>
             {data.perDay.map((d) => (
-              <div key={d.day} className="flex h-full flex-1 flex-col justify-end" title={`${dayLabel(d.day, now)}: ${d.count} finished`}>
+              <div key={d.day} className="flex h-full flex-1 flex-col justify-end" title={`${dayLabel(d.day, now, t)}: ${d.count} finished`}>
                 <div
                   className={cn('w-full rounded-sm', d.count === 0 ? 'bg-slate-200' : d.day === now ? 'bg-brand-600' : 'bg-slate-900')}
                   style={{ height: `${d.count === 0 ? 4 : Math.max(10, (d.count / max) * 100)}%` }}
@@ -54,7 +54,7 @@ export async function ProductivityCard({ data, now = warsawToday() }: { data: Pr
           <div className="mt-1.5 flex gap-2 text-[11px] text-slate-400">
             {data.perDay.map((d) => (
               <span key={d.day} className={cn('flex-1 text-center', d.day === now && 'font-medium text-slate-700')}>
-                {dayParts(d.day).weekday.slice(0, 1)}
+                {dayParts(d.day, t).weekday.slice(0, 1)}
               </span>
             ))}
           </div>

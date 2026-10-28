@@ -42,7 +42,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <Link href={here({ month: addMonths(month, -1), day: undefined })} aria-label={t('Previous month')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
             <ChevronLeft className="size-4" />
           </Link>
-          <h2 className="min-w-40 text-center text-xl font-semibold tracking-tight text-slate-900">{monthTitle(month)}</h2>
+          <h2 className="min-w-40 text-center text-xl font-semibold tracking-tight text-slate-900">{monthTitle(month, t)}</h2>
           <Link href={here({ month: addMonths(month, 1), day: undefined })} aria-label={t('Next month')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
             <ChevronRight className="size-4" />
           </Link>
@@ -58,8 +58,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <MonthGrid weeks={weeks} today={now} selected={selected} tasksByDay={tasksByDay} dayHref={(d) => here({ day: d })} />
         <aside aria-label={t('The picked day')} className="space-y-3">
           <h2 className="text-base font-semibold text-slate-900">
-            {selected ? dayLabel(selected, now) : 'Pick a day'}
-            {selected && ['Today', 'Tomorrow', 'Yesterday'].includes(dayLabel(selected, now)) && <span className="ml-2 text-sm font-normal text-slate-500">{shortDay(selected, now)}</span>}
+            {selected ? dayLabel(selected, now, t) : 'Pick a day'}
+            {selected && ['Today', 'Tomorrow', 'Yesterday'].includes(dayLabel(selected, now, t)) && <span className="ml-2 text-sm font-normal text-slate-500">{shortDay(selected, now, t)}</span>}
           </h2>
           {selected === null ? (
             <Card>

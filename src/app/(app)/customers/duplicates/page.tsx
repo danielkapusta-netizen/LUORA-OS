@@ -48,15 +48,15 @@ export default async function DuplicatesPage() {
                               {MARKETPLACE_LABELS[m] ?? m}
                             </span>
                           ))}{' '}
-                          · {c.ordersCount} order(s) · {formatValue(c.revenue, 'pln', false, t.locale)}
-                          {c.lastOrderAt && ` · last ${formatDate(c.lastOrderAt, false, t.locale)}`}
+                          · {t.plural(c.ordersCount, '{n} order', '{n} orders')} · {formatValue(c.revenue, 'pln', false, t.locale)}
+                          {c.lastOrderAt && ` · ${t('last {date}', { date: formatDate(c.lastOrderAt, false, t.locale) })}`}
                           {c.city && ` · ${c.city}`}
                         </span>
                       </p>
                     ))}
                   </div>
                   <form action={mergeAction.bind(null, keep.id, rest.map((c) => c.id))}>
-                    <SubmitButton variant="secondary" size="sm" confirm={`Merge into ${keep.displayName}? This can't be undone.`}>
+                    <SubmitButton variant="secondary" size="sm" confirm={t("Merge into {name}? This can't be undone.", { name: keep.displayName })}>
                       {t('Merge into one')}
                     </SubmitButton>
                   </form>

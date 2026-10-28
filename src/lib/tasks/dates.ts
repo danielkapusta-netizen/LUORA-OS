@@ -1,6 +1,9 @@
 // Dates of the Tasks module. A "day" is a plain YYYY-MM-DD string in Warsaw time, and a time of day is HH:MM.
 // Arithmetic runs in UTC on those strings, so daylight saving never moves a day.
 
+import { intlTag } from '@/lib/i18n/locales';
+import type { T } from '@/lib/i18n/translate';
+
 const DAY_MS = 86_400_000;
 export const TIME_ZONE = 'Europe/Warsaw';
 
@@ -79,29 +82,43 @@ export function monthGrid(day: string): { day: string; inMonth: boolean }[][] {
   return weeks;
 }
 
-export function dayParts(day: string): { num: string; weekday: string; month: string; year: number } {
+// Names of weekdays and months come from the English tables, or from Intl in Polish when a translator is passed.
+const polish = (day: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(intlTag('pl'), { ...options, timeZone: 'UTC' }).format(toDate(day)).replace(/\.$/, '');
+
+export function dayParts(day: string, t?: T): { num: string; weekday: string; month: string; year: number } {
   const date = toDate(day);
-  return { num: String(date.getUTCDate()), weekday: WEEKDAYS[weekdayIndex(day)], month: MONTHS[date.getUTCMonth()], year: date.getUTCFullYear() };
+  const pl = t?.locale === 'pl';
+  return {
+    num: String(date.getUTCDate()),
+    weekday: pl ? polish(day, { weekday: 'short' }) : WEEKDAYS[weekdayIndex(day)],
+    month: pl ? polish(day, { month: 'short' }) : MONTHS[date.getUTCMonth()],
+    year: date.getUTCFullYear(),
+  };
 }
 
 /** "October 2026" */
-export function monthTitle(day: string): string {
+export function monthTitle(day: string, t?: T): string {
+  if (t?.locale === 'pl') {
+    const name = polish(day, { month: 'long' });
+    return `${name.charAt(0).toUpperCase()}${name.slice(1)} ${day.slice(0, 4)}`;
+  }
   return `${MONTH_NAMES[toDate(day).getUTCMonth()]} ${day.slice(0, 4)}`;
 }
 
 /** "14 Oct" (with the year when it is not this year's). */
-export function shortDay(day: string, now: string = today()): string {
-  const p = dayParts(day);
+export function shortDay(day: string, now: string = today(), t?: T): string {
+  const p = dayParts(day, t);
   return `${p.num} ${p.month}${day.slice(0, 4) === now.slice(0, 4) ? '' : ` ${p.year}`}`;
 }
 
 /** "Today", "Tomorrow", "Yesterday", otherwise "Tue, 14 Oct". */
-export function dayLabel(day: string, now: string = today()): string {
+export function dayLabel(day: string, now: string = today(), t?: T): string {
   const diff = daysBetween(now, day);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff === -1) return 'Yesterday';
-  return `${dayParts(day).weekday}, ${shortDay(day, now)}`;
+  const say = (text: string) => (t ? t(text) : text);
+  if (diff === 0) return say('Today');
+  if (diff === 1) return say('Tomorrow');
+  if (diff === -1) return say('Yesterday');
+  return `${dayParts(day, t).weekday}, ${shortDay(day, now, t)}`;
 }
 
 /** "10:30 – 12:30", or just the start. */

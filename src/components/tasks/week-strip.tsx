@@ -44,7 +44,7 @@ export async function WeekStrip({
       </div>
       <ol className="grid grid-cols-7 gap-1 xl:grid-cols-1 xl:gap-0">
         {days.map((day) => {
-          const p = dayParts(day);
+          const p = dayParts(day, t);
           const isToday = day === today;
           const isSelected = day === selected;
           const open = counts[day]?.open ?? 0;

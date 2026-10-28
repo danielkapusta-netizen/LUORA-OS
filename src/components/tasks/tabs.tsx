@@ -3,16 +3,19 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/client';
+import { msg } from '@/lib/i18n/msg';
 
 const TABS = [
-  { href: '/tasks', label: 'Overview' },
-  { href: '/tasks/board', label: 'Board' },
-  { href: '/tasks/calendar', label: 'Calendar' },
-  { href: '/tasks/projects', label: 'Projects' },
+  { href: '/tasks', label: msg('Overview') },
+  { href: '/tasks/board', label: msg('Board') },
+  { href: '/tasks/calendar', label: msg('Calendar') },
+  { href: '/tasks/projects', label: msg('Projects') },
 ];
 
 export function TaskTabs() {
   const pathname = usePathname();
+  const t = useT();
   // The person filter follows you from tab to tab.
   const who = useSearchParams().get('who');
   return (
@@ -29,7 +32,7 @@ export function TaskTabs() {
               active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
-            {tab.label}
+            {t(tab.label)}
           </Link>
         );
       })}

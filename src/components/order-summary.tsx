@@ -50,7 +50,7 @@ export interface SummaryItem {
  * Products with photo and quantity; prices only when a currency is given.
  * `highlightQuantity` marks lines with more than one piece in yellow, so packers don't miss them.
  */
-export function OrderItemsList({
+export async function OrderItemsList({
   items,
   currency,
   highlightQuantity,
@@ -61,6 +61,7 @@ export function OrderItemsList({
   highlightQuantity?: boolean;
   className?: string;
 }) {
+  const t = await getT();
   return (
     <ul className={cn('space-y-2.5', className)}>
       {items.map((i) => (
@@ -78,10 +79,10 @@ export function OrderItemsList({
             <p className="mt-0.5 text-xs text-slate-400">
               {highlightQuantity && i.quantity > 1 ? (
                 <span className="mr-1 inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-sm font-semibold text-amber-800 ring-1 ring-amber-300">
-                  Qty {i.quantity}
+                  {t('Qty {n}', { n: i.quantity })}
                 </span>
               ) : (
-                <>Qty {i.quantity} </>
+                <>{t('Qty {n}', { n: i.quantity })} </>
               )}
               {i.sku ? `· ${i.sku}` : ''}
             </p>

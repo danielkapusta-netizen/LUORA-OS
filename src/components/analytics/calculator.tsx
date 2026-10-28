@@ -117,7 +117,7 @@ export function Calculator({
               </Field>
               <Field
                 label={t('Fees, % (optional)')}
-                hint={rate.measured ? `Your measured rate: ${(rate.rate * 100).toFixed(1)}% over ${rate.sampleLines} lines.` : `No sales yet; ${(rate.rate * 100).toFixed(0)}% assumed.`}
+                hint={rate.measured ? t('Your measured rate: {pct}% over {lines} lines.', { pct: (rate.rate * 100).toFixed(1), lines: rate.sampleLines }) : t('No sales yet; {pct}% assumed.', { pct: (rate.rate * 100).toFixed(0) })}
               >
                 <Input
                   inputMode="decimal"
@@ -134,7 +134,7 @@ export function Calculator({
               disabled={pending || result.isIncomplete}
               onClick={() => start(async () => void (await save(candidate)))}
             >
-              {pending ? 'Saving…' : 'Save for comparison'}
+              {pending ? t('Saving…') : t('Save for comparison')}
             </button>
             <button type="button" className={buttonClass('secondary')} onClick={() => setCandidate(emptyCandidate(crypto.randomUUID()))}>
               {t('New')}
@@ -156,10 +156,10 @@ export function Calculator({
             <div className="space-y-4 rounded-2xl border border-black/5 bg-white p-5">
               <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 {[
-                  ['Margin', formatValue(result.marginPct, 'percent')],
-                  ['Profit / unit', `${result.profitPerUnitPLN.toFixed(2)} zł`],
-                  ['Break-even price', result.breakEvenPricePLN === null ? '—' : `${result.breakEvenPricePLN.toFixed(2)} zł`],
-                  ['Most you can pay', result.maxPayableCostPLN === null ? '—' : `${result.maxPayableCostPLN.toFixed(2)} zł`],
+                  [t('Margin'), formatValue(result.marginPct, 'percent', false, t.locale)],
+                  [t('Profit / unit'), `${result.profitPerUnitPLN.toFixed(2)} zł`],
+                  [t('Break-even price'), result.breakEvenPricePLN === null ? '—' : `${result.breakEvenPricePLN.toFixed(2)} zł`],
+                  [t('Most you can pay'), result.maxPayableCostPLN === null ? '—' : `${result.maxPayableCostPLN.toFixed(2)} zł`],
                 ].map(([k, v]) => (
                   <div key={k}>
                     <dt className="text-xs text-slate-500">{k}</dt>
@@ -174,7 +174,7 @@ export function Calculator({
               )}
               {benchmark && (
                 <p className="text-sm text-slate-600">
-                  Better than {benchmark.beats} of the {benchmark.comparedWith} products you sell (median margin {benchmark.medianMarginPct.toFixed(1)}%).
+                  {t('Better than {beats} of the {total} products you sell (median margin {median}%).', { beats: benchmark.beats, total: benchmark.comparedWith, median: benchmark.medianMarginPct.toFixed(1) })}
                 </p>
               )}
               {result.waterfall && (
@@ -204,8 +204,8 @@ export function Calculator({
           <table className="w-full text-sm">
             <thead className="border-b border-slate-100 bg-slate-50/60">
               <tr>
-                {['Product', 'Marketplace', 'Landed cost', 'Price', 'Margin', 'Verdict', ''].map((h) => (
-                  <th key={h} className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                {[t('Product'), t('Marketplace'), t('Landed cost'), t('Price'), t('Margin'), t('Verdict'), ''].map((h, idx) => (
+                  <th key={idx} className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                     {h}
                   </th>
                 ))}

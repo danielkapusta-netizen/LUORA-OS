@@ -12,6 +12,8 @@ import { orderProfit } from '@/server/analytics/dataset';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { ViewFilters } from '../filters';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
+import { intlTag } from '@/lib/i18n/locales';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -52,9 +54,9 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
         <Pills
           label={t('Margin')}
           options={[
-            { value: 'any', label: 'Any margin' },
-            { value: 'healthy', label: '15% or more' },
-            { value: 'thin', label: 'Under 15%' },
+            { value: 'any', label: msg('Any margin') },
+            { value: 'healthy', label: msg('15% or more') },
+            { value: 'thin', label: msg('Under 15%') },
             { value: 'loss', label: 'Loss' },
           ]}
           active={margin}
@@ -65,7 +67,8 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
           <Input name="q" defaultValue={params.q ?? ''} placeholder={t('Order, customer or product')} className="h-8 w-64" aria-label={t('Search orders')} />
         </form>
         <span className="text-sm text-slate-600">
-          {orders.length} orders · {formatValue(revenue, 'pln', false, t.locale)} revenue{showProfit && <> · {formatValue(profit, 'pln', false, t.locale)} profit</>}
+          {t.plural(orders.length, '{n} order', '{n} orders')} · {t('{amount} revenue', { amount: formatValue(revenue, 'pln', false, t.locale) })}
+          {showProfit && <> · {t('{amount} profit', { amount: formatValue(profit, 'pln', false, t.locale) })}</>}
         </span>
       </div>
       <Card className="overflow-x-auto">
@@ -95,20 +98,20 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                     <td className="py-3 pr-0 pl-4 align-top">
                       <Link
                         href={`${link({ open: open ? undefined : o.id })}#o-${o.id}`}
-                        aria-label={open ? 'Hide details' : 'Show details'}
+                        aria-label={open ? t('Hide details') : t('Show details')}
                         className="flex size-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-800"
                       >
                         <Icon className="size-3.5" />
                       </Link>
                     </td>
-                    <td className={cn(td, 'whitespace-nowrap')}>{o.date?.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
+                    <td className={cn(td, 'whitespace-nowrap')}>{o.date?.toLocaleDateString(intlTag(t.locale), { day: 'numeric', month: 'short', year: '2-digit' })}</td>
                     <td className={td}>
                       <Link href={`/orders/${o.id}`} className="font-medium hover:underline">
                         {first.orderNumber}
                       </Link>
                       <span className="flex items-center gap-1.5 text-xs text-slate-500">
                         <span className="inline-block size-2 rounded-sm" style={{ background: MARKETPLACE_COLORS[o.source] }} aria-hidden />
-                        {channelName(o.source)} · {o.units} pcs
+                        {channelName(o.source)} · {t('{n} pcs', { n: o.units })}
                         {o.items.some((i) => i.feesEstimated) && <Badge tone="amber">{t('fee estimated')}</Badge>}
                       </span>
                     </td>
@@ -150,7 +153,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
           <div className="flex justify-end gap-3 border-t border-slate-100 px-4 py-2 text-sm">
             {page > 1 && <Link href={link({ page: String(page - 1), open: undefined })}>{t('← Newer')}</Link>}
             <span className="text-slate-500">
-              Page {page} of {pages}
+              {t('Page {page} of {pages}', { page, pages })}
             </span>
             {page < pages && <Link href={link({ page: String(page + 1), open: undefined })}>{t('Older →')}</Link>}
           </div>

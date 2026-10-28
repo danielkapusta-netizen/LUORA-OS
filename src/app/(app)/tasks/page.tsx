@@ -116,7 +116,7 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
               <Link href={here({ day: addDays(day, -1) })} aria-label={t('Previous day')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
                 <ChevronLeft className="size-4" />
               </Link>
-              <h2 className="text-xl font-semibold tracking-tight text-slate-900">{day === now ? 'Tasks for today' : `Tasks for ${dayLabel(day, now)}`}</h2>
+              <h2 className="text-xl font-semibold tracking-tight text-slate-900">{day === now ? 'Tasks for today' : `Tasks for ${dayLabel(day, now, t)}`}</h2>
               <Link href={here({ day: addDays(day, 1) })} aria-label={t('Next day')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
                 <ChevronRight className="size-4" />
               </Link>
@@ -160,7 +160,7 @@ export default async function TasksOverviewPage({ searchParams }: { searchParams
           )}
 
           <section aria-label={t('Planned for the day')} className="space-y-2.5">
-            {groups.overdue.length > 0 && <h3 className="text-sm font-semibold text-slate-700">{day === now ? 'Today' : dayLabel(day, now)}</h3>}
+            {groups.overdue.length > 0 && <h3 className="text-sm font-semibold text-slate-700">{day === now ? 'Today' : dayLabel(day, now, t)}</h3>}
             {groups.planned.length === 0 ? (
               <Card>
                 <EmptyState title={day === now ? 'Nothing planned for today' : 'Nothing planned for this day'}>

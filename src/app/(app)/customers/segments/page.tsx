@@ -44,20 +44,20 @@ export default async function SegmentsPage() {
       <section>
         <SectionTitle
           title={t('Segments')}
-          description={`By how recently, how often and how much each customer bought. ${Math.round(stats.repeatRate * 100)}% of customers came back for a second order${stats.medianDaysToSecond !== null ? `, typically after ${stats.medianDaysToSecond} days` : ''}.`}
+          description={`${t('By how recently, how often and how much each customer bought.')} ${stats.medianDaysToSecond !== null ? t('{pct}% of customers came back for a second order, typically after {days} days.', { pct: Math.round(stats.repeatRate * 100), days: stats.medianDaysToSecond }) : t('{pct}% of customers came back for a second order.', { pct: Math.round(stats.repeatRate * 100) })}`}
         />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {groups.map((g) => (
             <Link key={g.key} href={`/customers?segment=${g.key}`} className="rounded-2xl border border-black/5 bg-white p-4 hover:border-brand-500">
               <div className="flex items-center justify-between">
-                <Badge tone={SEGMENTS[g.key].tone}>{SEGMENTS[g.key].label}</Badge>
+                <Badge tone={SEGMENTS[g.key].tone}>{t(SEGMENTS[g.key].label)}</Badge>
                 <span className="text-xl font-semibold tabular-nums">{g.members.length}</span>
               </div>
-              <p className="mt-2 text-xs text-slate-500">{SEGMENTS[g.key].description}</p>
+              <p className="mt-2 text-xs text-slate-500">{t(SEGMENTS[g.key].description)}</p>
               <p className="mt-2 text-sm tabular-nums text-slate-700">
-                {formatValue(g.revenue, 'pln', false, t.locale)} · {totalRevenue > 0 ? Math.round((g.revenue / totalRevenue) * 100) : 0}% of revenue
+                {formatValue(g.revenue, 'pln', false, t.locale)} · {t('{pct}% of revenue', { pct: totalRevenue > 0 ? Math.round((g.revenue / totalRevenue) * 100) : 0 })}
               </p>
-              <p className="mt-1 text-xs text-slate-600">{SEGMENTS[g.key].action}</p>
+              <p className="mt-1 text-xs text-slate-600">{t(SEGMENTS[g.key].action)}</p>
             </Link>
           ))}
         </div>
@@ -105,8 +105,8 @@ export default async function SegmentsPage() {
                         {o.customer.displayName}
                       </Link>
                     </td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{o.usualGapDays} days</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{o.daysSince} days ago</td>
+                    <td className={cn(td, 'text-right tabular-nums')}>{t.plural(o.usualGapDays, '{n} day', '{n} days')}</td>
+                    <td className={cn(td, 'text-right tabular-nums')}>{t('{n} days ago', { n: o.daysSince })}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.customer.revenue, 'pln', false, t.locale)}</td>
                   </tr>
                 ))}
@@ -133,8 +133,9 @@ export default async function SegmentsPage() {
           />
           <CardBody className="space-y-4">
             <Alert tone="blue">
-              The Shopify app needs the <code>{t('read_customers')}</code> and <code>{t('write_customers')}</code> scopes. {shopifyCustomers} customer(s) can be synced;{' '}
-              {pending.length} would change with the settings below{settings.dryRun ? ' (dry run: nothing is sent yet)' : ''}.
+              {t('The Shopify app needs the read_customers and write_customers scopes.')} {t.plural(shopifyCustomers, '{n} customer can be synced;', '{n} customers can be synced;')}{' '}
+              {t('{n} would change with the settings below', { n: pending.length })}
+              {settings.dryRun ? ` ${t('(dry run: nothing is sent yet)')}` : ''}.
             </Alert>
             <ActionForm action={saveCrmSettingsAction} className="space-y-4">
               <fieldset>
@@ -148,7 +149,7 @@ export default async function SegmentsPage() {
                       defaultChecked={settings.syncSegments.includes(key)}
                       label={
                         <>
-                          {SEGMENTS[key].label} <code className="text-xs text-slate-500">{segmentTag(key)}</code>
+                          {t(SEGMENTS[key].label)} <code className="text-xs text-slate-500">{segmentTag(key)}</code>
                         </>
                       }
                     />

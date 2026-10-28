@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -21,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const STATUS = { green: 'bg-emerald-500', yellow: 'bg-amber-400', red: 'bg-red-500' } as const;
-const STATUS_LABEL = { green: 'healthy', yellow: 'thin', red: 'unhealthy' } as const;
+const STATUS_LABEL = { green: msg('healthy'), yellow: msg('thin'), red: msg('unhealthy') } as const;
 
 type Params = ViewParams & { window?: string; dimension?: string; q?: string; open?: string };
 
@@ -44,12 +45,12 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <RangeControl path="/analytics/pricing" current={{ ...current, open: params.open }} presets={PRICING_PERIODS} active={window} param="window" custom={custom} label={t('Window')} help="Both days are included. Sales in these days set each product's average price and margin." />
+        <RangeControl path="/analytics/pricing" current={{ ...current, open: params.open }} presets={PRICING_PERIODS} active={window} param="window" custom={custom} label={t('Window')} help={t("Both days are included. Sales in these days set each product's average price and margin.")} />
         <Pills
           label={t('Group by')}
           options={[
-            { value: 'product', label: 'Products' },
-            { value: 'brand', label: 'Brands' },
+            { value: 'product', label: msg('Products') },
+            { value: 'brand', label: msg('Brands') },
           ]}
           active={dimension}
           href={(v) => link({ dimension: v, open: undefined })}
@@ -62,11 +63,11 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         {[
-          ['Portfolio margin', formatValue(s.avgMarginPct, 'percent', false, t.locale), 'last 30 days'],
-          ...(view.showProfit ? [['Profit on the table', formatValue(s.onTheTablePLN, 'pln', false, t.locale), 'a month, from recommended prices']] : []),
-          ['Healthy', String(s.aboveFifteen), 'margin above 15%'],
-          ['Thin', String(s.tenToFifteen), 'margin 10–15%'],
-          ['Unhealthy', String(s.belowTenPct), 'margin below 10%'],
+          [t('Portfolio margin'), formatValue(s.avgMarginPct, 'percent', false, t.locale), t('last 30 days')],
+          ...(view.showProfit ? [[t('Profit on the table'), formatValue(s.onTheTablePLN, 'pln', false, t.locale), t('a month, from recommended prices')]] : []),
+          [t('Healthy'), String(s.aboveFifteen), t('margin above 15%')],
+          [t('Thin'), String(s.tenToFifteen), t('margin 10–15%')],
+          [t('Unhealthy'), String(s.belowTenPct), t('margin below 10%')],
         ].map(([label, value, caption]) => (
           <Card key={label} className="px-4 py-3">
             <p className="text-xs font-medium text-slate-500">{label}</p>
@@ -102,7 +103,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                     <td className="py-3 pr-0 pl-4 align-top">
                       <Link
                         href={`${link({ open: open ? undefined : r.key })}#row-${r.key}`}
-                        aria-label={open ? 'Hide details' : 'Show details'}
+                        aria-label={open ? t('Hide details') : t('Show details')}
                         className="flex size-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-800"
                       >
                         <Icon className="size-3.5" />
@@ -114,8 +115,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                         {r.label}
                       </span>
                       <span className="block text-xs text-slate-500">
-                        {STATUS_LABEL[r.status]} · {r.ordersInWindow} sale(s){r.costUnknown && ' · cost missing'}
-                        {r.risk && ' · margin falling'}
+                        {t(STATUS_LABEL[r.status])} · {t.plural(r.ordersInWindow, '{n} sale', '{n} sales')}
+                        {r.costUnknown && ` · ${t('cost missing')}`}
+                        {r.risk && ` · ${t('margin falling')}`}
                       </span>
                     </td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.currentPricePLN, 'pln', false, t.locale)}</td>
@@ -191,10 +193,10 @@ async function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit:
             <p className="font-semibold">{t('Price')}</p>
             <dl className="grid grid-cols-2 gap-2">
               {[
-                ['Current', row.currentPricePLN],
-                ['Average', row.averagePricePLN],
-                ['Lowest', row.stability.minPricePLN],
-                ['Highest', row.stability.maxPricePLN],
+                [t('Current'), row.currentPricePLN],
+                [t('Average'), row.averagePricePLN],
+                [t('Lowest'), row.stability.minPricePLN],
+                [t('Highest'), row.stability.maxPricePLN],
               ].map(([k, v]) => (
                 <div key={k as string}>
                   <dt className="text-xs text-slate-500">{k}</dt>
@@ -203,7 +205,7 @@ async function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit:
               ))}
             </dl>
             <p className="text-xs text-slate-500">
-              {row.stability.distinctPrices} different price(s) · average discount {row.stability.avgDiscountPct.toFixed(1)}%
+              {t.plural(row.stability.distinctPrices, '{n} different price', '{n} different prices')} · {t('average discount {pct}%', { pct: row.stability.avgDiscountPct.toFixed(1) })}
             </p>
             <p className="pt-2 font-semibold">{t('Per order')}</p>
             <dl className="grid grid-cols-2 gap-2">
@@ -217,7 +219,7 @@ async function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit:
               </div>
               <div>
                 <dt className="text-xs text-slate-500">{t('Unit cost')}</dt>
-                <dd className="tabular-nums">{row.unitCostPLN === null ? 'missing' : formatValue(row.unitCostPLN, 'pln', false, t.locale)}</dd>
+                <dd className="tabular-nums">{row.unitCostPLN === null ? t('missing') : formatValue(row.unitCostPLN, 'pln', false, t.locale)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-500">{t('Fee rate')}</dt>
@@ -233,7 +235,7 @@ async function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit:
               {row.targets.map((item) => (
                 <li key={item.label} className="flex justify-between gap-3">
                   <span className={item.achieved ? 'text-emerald-700' : 'text-slate-600'}>{item.label}</span>
-                  <span className="tabular-nums">{item.requiredPricePLN === null ? 'not reachable' : formatValue(item.requiredPricePLN, 'pln', false, t.locale)}</span>
+                  <span className="tabular-nums">{item.requiredPricePLN === null ? t('not reachable') : formatValue(item.requiredPricePLN, 'pln', false, t.locale)}</span>
                 </li>
               ))}
             </ul>
@@ -242,12 +244,12 @@ async function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit:
         <Card>
           <CardBody className="space-y-2 text-sm">
             <p className="flex items-center gap-2 font-semibold">
-              Recommendation <Badge tone={rec.kind === 'raise' ? 'amber' : rec.kind === 'fix-costs' ? 'red' : 'green'}>{rec.kind === 'raise' ? 'raise price' : rec.kind === 'fix-costs' ? 'fix costs' : 'hold'}</Badge>
+              {t('Recommendation')} <Badge tone={rec.kind === 'raise' ? 'amber' : rec.kind === 'fix-costs' ? 'red' : 'green'}>{rec.kind === 'raise' ? t('raise price') : rec.kind === 'fix-costs' ? t('fix costs') : t('hold')}</Badge>
             </p>
             {rec.recommendedPricePLN !== null && (
               <p>
-                {formatValue(rec.recommendedPricePLN, 'pln', false, t.locale)} → margin {formatValue(rec.expectedMarginPct, 'percent', false, t.locale)}
-                {showProfit && rec.expectedMonthlyUpliftPLN !== null && <>, about +{formatValue(rec.expectedMonthlyUpliftPLN, 'pln', false, t.locale)} a month</>}
+                {formatValue(rec.recommendedPricePLN, 'pln', false, t.locale)} → {t('margin {value}', { value: formatValue(rec.expectedMarginPct, 'percent', false, t.locale) })}
+                {showProfit && rec.expectedMonthlyUpliftPLN !== null && <>, {t('about +{amount} a month', { amount: formatValue(rec.expectedMonthlyUpliftPLN, 'pln', false, t.locale) })}</>}
               </p>
             )}
             <ul className="list-disc space-y-0.5 pl-5 text-xs text-slate-600">
@@ -255,7 +257,7 @@ async function PricingDetail({ row, showProfit }: { row: PricingRow; showProfit:
                 <li key={r}>{r}</li>
               ))}
             </ul>
-            <p className="text-xs text-slate-500">Confidence {rec.confidencePct}%</p>
+            <p className="text-xs text-slate-500">{t('Confidence {pct}%', { pct: rec.confidencePct })}</p>
           </CardBody>
         </Card>
       </div>

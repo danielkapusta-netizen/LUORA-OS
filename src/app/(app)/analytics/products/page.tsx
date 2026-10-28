@@ -12,6 +12,7 @@ import { requireUser } from '@/server/auth';
 import { analyticsView, type AnalyticsView, type ViewParams } from '@/server/analytics/view';
 import { ViewFilters } from '../filters';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -19,17 +20,18 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const DIMENSIONS = [
-  { value: 'product', label: 'Products' },
-  { value: 'brand', label: 'Brands' },
-  { value: 'category', label: 'Categories' },
+  { value: 'product', label: msg('Products') },
+  { value: 'brand', label: msg('Brands') },
+  { value: 'category', label: msg('Categories') },
 ];
 const SORTS = [
-  { value: 'revenue', label: 'Revenue' },
-  { value: 'profit', label: 'Profit' },
-  { value: 'margin', label: 'Margin %' },
-  { value: 'orders', label: 'Orders' },
+  { value: 'revenue', label: msg('Revenue') },
+  { value: 'profit', label: msg('Profit') },
+  { value: 'margin', label: msg('Margin %') },
+  { value: 'orders', label: msg('Orders') },
 ];
 const GRADE = { excellent: 'green', good: 'blue', watch: 'amber', poor: 'red' } as const;
+const GRADE_LABEL = { excellent: msg('excellent'), good: msg('good'), watch: msg('watch'), poor: msg('poor') } as const;
 
 type Params = ViewParams & { dimension?: string; sort?: string; q?: string; open?: string };
 
@@ -87,7 +89,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     <td className="py-3 pr-0 pl-4 align-top">
                       <Link
                         href={`${link({ open: open ? undefined : r.key })}#row-${r.key}`}
-                        aria-label={open ? 'Hide details' : 'Show details'}
+                        aria-label={open ? t('Hide details') : t('Show details')}
                         className="flex size-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-800"
                       >
                         <Icon className="size-3.5" />
@@ -96,7 +98,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     <td className={td}>
                       <span className="font-medium text-slate-900">{r.label}</span>
                       <span className="block text-xs text-slate-500">
-                        {r.memberCount > 1 && `${r.memberCount} products · `}last sold {formatDate(r.lastSold, t.locale)}
+                        {r.memberCount > 1 && `${t('{n} products', { n: r.memberCount })} · `}{t('last sold {date}', { date: formatDate(r.lastSold, t.locale) })}
                         {r.costUnknown && (
                           <Badge tone="amber" className="ml-1.5">
                             {t('cost missing')}
@@ -135,12 +137,12 @@ async function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: An
   const insights = view.snapshot.insights.filter((i) => i.entity && row.productKeys.includes(i.entity.key));
   const members = dimension === 'product' ? [] : view.snapshot.products.filter((p) => row.productKeys.includes(p.productKey));
   const figures = [
-    ['Average basket', formatValue(row.avgOrderValuePLN, 'pln', false, t.locale)],
-    ['Unit price', formatValue(row.avgUnitPricePLN, 'pln', false, t.locale)],
-    ...(view.showProfit ? [['Profit per order', formatValue(row.orders ? row.marginPLN / row.orders : 0, 'pln', false, t.locale)]] : []),
-    ['Share of revenue', `${Math.round(row.revenueShare * 100)}%`],
-    ['First sale', formatDate(row.firstSold, t.locale)],
-    ['Last sale', formatDate(row.lastSold, t.locale)],
+    [t('Average basket'), formatValue(row.avgOrderValuePLN, 'pln', false, t.locale)],
+    [t('Unit price'), formatValue(row.avgUnitPricePLN, 'pln', false, t.locale)],
+    ...(view.showProfit ? [[t('Profit per order'), formatValue(row.orders ? row.marginPLN / row.orders : 0, 'pln', false, t.locale)]] : []),
+    [t('Share of revenue'), `${Math.round(row.revenueShare * 100)}%`],
+    [t('First sale'), formatDate(row.firstSold, t.locale)],
+    [t('Last sale'), formatDate(row.lastSold, t.locale)],
   ];
   return (
     <div className="space-y-4 pt-2">
@@ -149,7 +151,7 @@ async function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: An
           <CardBody className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-3xl font-semibold tabular-nums">{health.score}</span>
-              <Badge tone={GRADE[health.grade]}>{health.grade}</Badge>
+              <Badge tone={GRADE[health.grade]}>{t(GRADE_LABEL[health.grade])}</Badge>
             </div>
             <p className="text-sm text-slate-600">{health.summary}</p>
             <ul className="space-y-1 text-xs">
@@ -216,7 +218,7 @@ async function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: An
       </div>
       {members.length > 0 && (
         <div className="text-sm">
-          <p className="mb-1 font-medium">Products in this {dimension}</p>
+          <p className="mb-1 font-medium">{dimension === 'brand' ? t('Products in this brand') : t('Products in this category')}</p>
           <ul className="grid grid-cols-1 gap-1 md:grid-cols-2">
             {members.map((p) => (
               <li key={p.productKey} className="flex justify-between gap-3 text-slate-600">

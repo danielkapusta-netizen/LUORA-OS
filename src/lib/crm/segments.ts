@@ -1,5 +1,6 @@
 // Customer segments, cohorts and repeat-purchase figures. Pure functions over plain customer and
 // order data, so the rules are unit-tested and shared by the pages and the Shopify tag sync.
+import { msg } from '@/lib/i18n/msg';
 
 export interface CustomerFacts {
   id: string;
@@ -12,14 +13,14 @@ export interface CustomerFacts {
 export type SegmentKey = 'vip' | 'loyal' | 'promising' | 'new' | 'one_time' | 'at_risk' | 'cant_lose' | 'lost';
 
 export const SEGMENTS: Record<SegmentKey, { label: string; description: string; tone: 'green' | 'blue' | 'amber' | 'red' | 'violet' | 'gray' | 'orange'; action: string }> = {
-  vip: { label: 'VIP', description: '3+ orders, bought recently, top spenders.', tone: 'violet', action: 'Thank them, give early access, ask for reviews.' },
-  loyal: { label: 'Loyal', description: '3+ orders and still buying.', tone: 'green', action: 'Recommend the next product in their routine.' },
-  promising: { label: 'Promising', description: 'A second order, recently.', tone: 'blue', action: 'Nudge towards a third order with a routine bundle.' },
-  new: { label: 'New', description: 'First order in the last 30 days.', tone: 'blue', action: 'Welcome them; suggest what pairs with what they bought.' },
-  one_time: { label: 'One-time', description: 'One order, 1–4 months ago.', tone: 'gray', action: 'A reminder or a sample to win the second order.' },
-  at_risk: { label: 'At risk', description: 'Bought 2+ times, but not for 4+ months.', tone: 'amber', action: 'Win back before they go: a personal offer.' },
-  cant_lose: { label: "Can't lose", description: 'Top spenders with 3+ orders who stopped buying.', tone: 'red', action: 'Reach out personally; find out what changed.' },
-  lost: { label: 'Lost', description: 'One order, over 4 months ago.', tone: 'gray', action: 'Low priority; include in broad campaigns only.' },
+  vip: { label: msg('VIP'), description: msg('3+ orders, bought recently, top spenders.'), tone: 'violet', action: msg('Thank them, give early access, ask for reviews.') },
+  loyal: { label: msg('Loyal'), description: msg('3+ orders and still buying.'), tone: 'green', action: msg('Recommend the next product in their routine.') },
+  promising: { label: msg('Promising'), description: msg('A second order, recently.'), tone: 'blue', action: msg('Nudge towards a third order with a routine bundle.') },
+  new: { label: msg('New'), description: msg('First order in the last 30 days.'), tone: 'blue', action: msg('Welcome them; suggest what pairs with what they bought.') },
+  one_time: { label: msg('One-time'), description: msg('One order, 1–4 months ago.'), tone: 'gray', action: msg('A reminder or a sample to win the second order.') },
+  at_risk: { label: msg('At risk'), description: msg('Bought 2+ times, but not for 4+ months.'), tone: 'amber', action: msg('Win back before they go: a personal offer.') },
+  cant_lose: { label: msg("Can't lose"), description: msg('Top spenders with 3+ orders who stopped buying.'), tone: 'red', action: msg('Reach out personally; find out what changed.') },
+  lost: { label: msg('Lost'), description: msg('One order, over 4 months ago.'), tone: 'gray', action: msg('Low priority; include in broad campaigns only.') },
 };
 
 export const SEGMENT_ORDER: SegmentKey[] = ['vip', 'loyal', 'promising', 'new', 'one_time', 'at_risk', 'cant_lose', 'lost'];

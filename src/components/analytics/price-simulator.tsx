@@ -33,7 +33,7 @@ export function PriceSimulator({
   return (
     <div className="space-y-3">
       <label className="block text-xs font-medium text-slate-600">
-        Gross price, zł
+        {t('Gross price, zł')}
         <div className="mt-1 flex items-center gap-3">
           <input
             type="range"
@@ -57,10 +57,10 @@ export function PriceSimulator({
         <div>
           <dt className="text-xs text-slate-500">{t('Margin')}</dt>
           <dd className={cn('font-semibold tabular-nums', margin < 0 && 'text-red-700')}>
-            {formatValue(margin, 'percent')}{' '}
+            {formatValue(margin, 'percent', false, t.locale)}{' '}
             <span className="text-xs font-normal text-slate-500">
               ({margin - averageMarginPct >= 0 ? '+' : ''}
-              {(margin - averageMarginPct).toFixed(1)} pp)
+              {(margin - averageMarginPct).toFixed(1)} {t('pp')})
             </span>
           </dd>
         </div>
@@ -81,7 +81,7 @@ export function PriceSimulator({
         )}
       </dl>
       <p className="text-xs text-slate-500">
-        Assumes {monthlyUnits} units a month, {(commissionRate * 100).toFixed(1)}% fees and a {formatValue(unitCost, 'pln')} landed cost; shipping and packaging are left out.
+        {t('Assumes {units} units a month, {fees}% fees and a {cost} landed cost; shipping and packaging are left out.', { units: monthlyUnits, fees: (commissionRate * 100).toFixed(1), cost: formatValue(unitCost, 'pln', false, t.locale) })}
       </p>
     </div>
   );

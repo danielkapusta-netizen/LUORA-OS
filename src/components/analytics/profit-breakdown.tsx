@@ -14,19 +14,19 @@ export async function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; 
   const estimated = lines.some((l) => l.feesEstimated);
   const missingCost = lines.some((l) => !l.costKnown);
   const rows: [string, number, string?][] = [
-    ['Paid for the goods', gross],
-    ['VAT', net - gross],
-    ['Marketplace fees', -total('fees'), estimated ? 'estimated' : undefined],
-    ['Product cost', -total('cost'), missingCost ? 'missing for some lines' : undefined],
-    ['Shipping paid by the buyer', total('shipping')],
-    ['Labels, packaging, delivery', -total('delivery')],
-    ['Refunds', -total('refunds')],
+    [t('Paid for the goods'), gross],
+    [t('VAT'), net - gross],
+    [t('Marketplace fees'), -total('fees'), estimated ? t('estimated') : undefined],
+    [t('Product cost'), -total('cost'), missingCost ? t('missing for some lines') : undefined],
+    [t('Shipping paid by the buyer'), total('shipping')],
+    [t('Labels, packaging, delivery'), -total('delivery')],
+    [t('Refunds'), -total('refunds')],
   ];
   return (
     <div className={cn('space-y-1.5 text-sm', compact && 'text-xs')}>
       <dl className="space-y-1">
         {rows
-          .filter(([label, v]) => Math.abs(v) >= 0.005 || label === 'Product cost')
+          .filter(([label, v]) => Math.abs(v) >= 0.005 || label === t('Product cost'))
           .map(([label, v, note]) => (
             <div key={label} className="flex items-baseline justify-between gap-3">
               <dt className="text-slate-600">
@@ -38,13 +38,13 @@ export async function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; 
         <div className="flex items-baseline justify-between gap-3 border-t border-slate-200 pt-1 font-semibold">
           <dt>{t('Profit')}</dt>
           <dd className={cn('tabular-nums', profit < 0 ? 'text-red-700' : 'text-emerald-700')}>
-            {profit.toFixed(2)} zł <span className="text-xs font-normal text-slate-500">({gross > 0 ? ((profit / gross) * 100).toFixed(1) : '0'}% margin)</span>
+            {profit.toFixed(2)} zł <span className="text-xs font-normal text-slate-500">({t('{pct}% margin', { pct: gross > 0 ? ((profit / gross) * 100).toFixed(1) : '0' })})</span>
           </dd>
         </div>
       </dl>
       {lines[0].currency !== 'PLN' && (
         <p className="text-xs text-slate-500">
-          Converted from {lines[0].currency} at {lines[0].fxRate.toFixed(4)} (NBP, {lines[0].day}); VAT {(lines[0].vatRate * 100).toFixed(0)}%.
+          {t('Converted from {currency} at {rate} (NBP, {day}); VAT {vat}%.', { currency: lines[0].currency, rate: lines[0].fxRate.toFixed(4), day: lines[0].day, vat: (lines[0].vatRate * 100).toFixed(0) })}
         </p>
       )}
     </div>

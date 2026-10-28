@@ -13,6 +13,7 @@ import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { ViewFilters } from '../filters';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -20,12 +21,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const OVERLAYS: { key: OverlayKey; label: string }[] = [
-  { key: 'previous', label: 'Previous period' },
-  { key: 'lastYear', label: 'Last year' },
-  { key: 'movingAverage', label: 'Moving average' },
-  { key: 'forecast', label: 'Projection' },
+  { key: 'previous', label: msg('Previous period') },
+  { key: 'lastYear', label: msg('Last year') },
+  { key: 'movingAverage', label: msg('Moving average') },
+  { key: 'forecast', label: msg('Projection') },
 ];
-const GRAINS: Record<Granularity, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly', quarter: 'Quarterly', year: 'Yearly' };
+const GRAINS: Record<Granularity, string> = { day: msg('Daily'), week: msg('Weekly'), month: msg('Monthly'), quarter: msg('Quarterly'), year: msg('Yearly') };
 
 type Params = ViewParams & { metric?: string; grain?: string; show?: string };
 
@@ -77,7 +78,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
                     <Delta value={series.changePct} unit={definition.format === 'percent' ? 'pp' : '%'} higherIsBetter={definition.higherIsBetter} />
                     <span className="text-xs text-slate-400">{period.comparisonLabel}</span>
                     {series.projectedTotal !== null && shown.has('forecast') && (
-                      <span className="text-xs text-slate-500">· projected {formatValue(series.projectedTotal, definition.format, false, t.locale)}</span>
+                      <span className="text-xs text-slate-500">· {t('projected {value}', { value: formatValue(series.projectedTotal, definition.format, false, t.locale) })}</span>
                     )}
                   </div>
                   <p className="mt-1 max-w-xl text-xs text-slate-500">{definition.description}</p>
@@ -94,11 +95,11 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
                         aria-pressed={on}
                         className={cn('rounded-full border px-3 py-1 text-xs font-medium', on ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
                       >
-                        {o.label}
+                        {t(o.label)}
                       </Link>
                     ) : (
                       <span key={o.key} className="rounded-full border border-dashed border-slate-200 px-3 py-1 text-xs text-slate-400" title={t('Not enough history')}>
-                        {o.label}
+                        {t(o.label)}
                       </span>
                     );
                   })}

@@ -3,22 +3,25 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { msg } from '@/lib/i18n/msg';
+import { useT } from '@/lib/i18n/client';
 
 const TABS = [
-  { href: '/analytics', label: 'Operations', exact: true },
-  { href: '/analytics/actions', label: 'Action centre' },
-  { href: '/analytics/review', label: 'Business review' },
-  { href: '/analytics/products', label: 'Products' },
-  { href: '/analytics/pricing', label: 'Pricing' },
-  { href: '/analytics/trends', label: 'Trends' },
-  { href: '/analytics/orders', label: 'Orders P&L' },
-  { href: '/analytics/calculator', label: 'Calculator' },
+  { href: '/analytics', label: msg('Operations'), exact: true },
+  { href: '/analytics/actions', label: msg('Action centre') },
+  { href: '/analytics/review', label: msg('Business review') },
+  { href: '/analytics/products', label: msg('Products') },
+  { href: '/analytics/pricing', label: msg('Pricing') },
+  { href: '/analytics/trends', label: msg('Trends') },
+  { href: '/analytics/orders', label: msg('Orders P&L') },
+  { href: '/analytics/calculator', label: msg('Calculator') },
 ];
 
 /** Keeps the chosen period and marketplace when moving between tabs. */
 const KEEP = ['period', 'marketplace', 'from', 'to'];
 
 export function AnalyticsTabs() {
+  const t = useT();
   const pathname = usePathname();
   const search = useSearchParams();
   const kept = new URLSearchParams();
@@ -40,7 +43,7 @@ export function AnalyticsTabs() {
               active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
-            {item.label}
+            {t(item.label)}
           </Link>
         );
       })}

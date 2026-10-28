@@ -63,7 +63,7 @@ export async function ProjectCardView({ card, size = 'compact', today }: { card:
               <span className="font-medium text-slate-800">{open}</span> open
               {overdue > 0 && <span className="font-medium text-red-700"> · {overdue} overdue</span>}
             </p>
-            {nextDue && <p>Next due {shortDay(nextDue, today)}</p>}
+            {nextDue && <p>Next due {shortDay(nextDue, today, t)}</p>}
           </div>
           <AvatarStack people={members} max={4} />
         </div>

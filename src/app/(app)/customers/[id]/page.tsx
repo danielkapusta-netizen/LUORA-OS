@@ -15,13 +15,14 @@ import { listUsers } from '@/server/services/settings';
 import { STATUS_LABELS } from '@/server/services/workflow';
 import { addNoteAction, addTaskAction, saveTagsAction, toggleTaskAction } from '../actions';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
   return { title: t('Customer') };
 }
 
-const IDENTITY_LABELS: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro buyer', empik: 'Empik customer', vonhalsky: 'Von Halsky', hebe: 'HEBE customer', email: 'E-mail' };
+const IDENTITY_LABELS: Record<string, string> = { shopify: 'Shopify', allegro: msg('Allegro buyer'), empik: msg('Empik customer'), vonhalsky: 'Von Halsky', hebe: msg('HEBE customer'), email: msg('E-mail') };
 const DAY = 86_400_000;
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -47,26 +48,26 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           {t('← All customers')}
         </Link>
         <h2 className="text-xl font-semibold text-slate-900">{c.displayName}</h2>
-        {scored && <Badge tone={SEGMENTS[scored.segment].tone}>{SEGMENTS[scored.segment].label}</Badge>}
+        {scored && <Badge tone={SEGMENTS[scored.segment].tone}>{t(SEGMENTS[scored.segment].label)}</Badge>}
         {c.marketingConsent && <Badge tone="green">{t('e-mail marketing: yes')}</Badge>}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         {[
-          ['Lifetime revenue', formatValue(c.revenue, 'pln', false, t.locale)],
-          ...(showProfit ? [['Lifetime profit', formatValue(c.profit, 'pln', false, t.locale)]] : []),
-          ['Orders', String(c.ordersCount)],
-          ['Average basket', c.ordersCount ? formatValue(c.revenue / c.ordersCount, 'pln', false, t.locale) : '—'],
-          ['Usually orders every', usualGap ? `${Math.round(usualGap)} days` : '—'],
-          ['Next order expected', nextExpected ? `${formatDate(nextExpected, false, t.locale)}${overdue ? ' (overdue)' : ''}` : '—'],
+          [t('Lifetime revenue'), formatValue(c.revenue, 'pln', false, t.locale)],
+          ...(showProfit ? [[t('Lifetime profit'), formatValue(c.profit, 'pln', false, t.locale)]] : []),
+          [t('Orders'), String(c.ordersCount)],
+          [t('Average basket'), c.ordersCount ? formatValue(c.revenue / c.ordersCount, 'pln', false, t.locale) : '—'],
+          [t('Usually orders every'), usualGap ? t.plural(Math.round(usualGap), '{n} day', '{n} days') : '—'],
+          [t('Next order expected'), nextExpected ? `${formatDate(nextExpected, false, t.locale)}${overdue ? ` (${t('overdue')})` : ''}` : '—'],
         ].map(([label, value]) => (
           <Card key={label} className="px-4 py-3">
             <p className="text-xs font-medium text-slate-500">{label}</p>
-            <p className={cn('mt-1 text-lg font-semibold tabular-nums', label === 'Next order expected' && overdue && 'text-amber-700')}>{value}</p>
+            <p className={cn('mt-1 text-lg font-semibold tabular-nums', label === t('Next order expected') && overdue && 'text-amber-700')}>{value}</p>
           </Card>
         ))}
       </div>
-      {scored && <p className="text-sm text-slate-600">{SEGMENTS[scored.segment].description} {t('Next step:')} {SEGMENTS[scored.segment].action}</p>}
+      {scored && <p className="text-sm text-slate-600">{t(SEGMENTS[scored.segment].description)} {t('Next step:')} {t(SEGMENTS[scored.segment].action)}</p>}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_380px]">
         <div className="space-y-5">
@@ -117,7 +118,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                     <li key={p.name} className="flex justify-between gap-3">
                       <span className="truncate">{p.name}</span>
                       <span className="shrink-0 tabular-nums text-slate-500">
-                        {p.units} pcs · {formatValue(p.gross, 'pln', false, t.locale)}
+                        {t('{n} pcs', { n: p.units })} · {formatValue(p.gross, 'pln', false, t.locale)}
                       </span>
                     </li>
                   ))}
@@ -168,14 +169,14 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                 <ul className="text-slate-700">
                   {identities.map((i) => (
                     <li key={i.id}>
-                      {IDENTITY_LABELS[i.kind] ?? i.kind}: <span className="font-mono text-xs">{i.value}</span>
+                      {t(IDENTITY_LABELS[i.kind] ?? i.kind)}: <span className="font-mono text-xs">{i.value}</span>
                     </li>
                   ))}
                 </ul>
               </div>
               <p className="text-xs text-slate-500">
-                Customer since {c.firstOrderAt ? formatDate(c.firstOrderAt, false, t.locale) : '—'}
-                {c.marketplaces.some((m) => m === 'allegro' || m === 'empik' || m === 'hebe') && ' · Allegro, Empik and HEBE buyer data may only be used to fulfil their orders, not for your own marketing.'}
+                {t('Customer since {date}', { date: c.firstOrderAt ? formatDate(c.firstOrderAt, false, t.locale) : '—' })}
+                {c.marketplaces.some((m) => m === 'allegro' || m === 'empik' || m === 'hebe') && ` · ${t('Allegro, Empik and HEBE buyer data may only be used to fulfil their orders, not for your own marketing.')}`}
               </p>
             </CardBody>
           </Card>
@@ -199,7 +200,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                 {tasks.map((task) => (
                   <li key={task.id} className="flex items-start gap-2 text-sm">
                     <form action={toggleTaskAction.bind(null, task.id, task.status !== 'done', path)}>
-                      <button aria-label={task.status === 'done' ? 'Mark as not done' : 'Mark as done'} className="mt-0.5 text-slate-400 hover:text-brand-600">
+                      <button aria-label={task.status === 'done' ? t('Mark as not done') : t('Mark as done')} className="mt-0.5 text-slate-400 hover:text-brand-600">
                         {task.status === 'done' ? <CheckCircle2 className="size-4 text-emerald-600" /> : <Circle className="size-4" />}
                       </button>
                     </form>
@@ -208,7 +209,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                         {task.title}
                       </Link>
                       <span className="block text-xs text-slate-500">
-                        {task.dueDate ? `due ${shortDay(task.dueDate)}` : 'no due date'}
+                        {task.dueDate ? t('due {date}', { date: shortDay(task.dueDate, undefined, t) }) : t('no due date')}
                         {task.assignees.length > 0 && ` · ${task.assignees.map((a) => a.name).join(', ')}`}
                       </span>
                     </span>

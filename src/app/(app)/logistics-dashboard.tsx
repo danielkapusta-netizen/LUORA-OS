@@ -83,7 +83,7 @@ export async function LogisticsDashboard({ user }: { user: SessionUser }) {
                         {task.title}
                       </Link>
                       <span className={cn('shrink-0 text-xs text-slate-500', state === 'overdue' && 'font-medium text-red-700', state === 'today' && 'font-medium text-brand-700')}>
-                        {task.dueDate ? dayLabel(task.dueDate, todayKey) : ''}
+                        {task.dueDate ? dayLabel(task.dueDate, todayKey, t) : ''}
                       </span>
                     </li>
                   );
