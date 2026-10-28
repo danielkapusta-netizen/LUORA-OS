@@ -132,7 +132,7 @@ export function OrdersTable({
               </option>
               {statuses.map((s) => (
                 <option key={s.value} value={s.value}>
-                  {s.label}
+                  {t(s.label)}
                 </option>
               ))}
             </Select>

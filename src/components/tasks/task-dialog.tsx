@@ -109,7 +109,7 @@ function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
 
 /** The "New task +" button and its form. `defaults` fill in what the page you are on already knows. */
 export function NewTaskDialog({
-  label = 'New task',
+  label,
   variant = 'primary',
   size = 'md',
   buttonClassName,
@@ -117,7 +117,7 @@ export function NewTaskDialog({
 }: Props & { label?: string; variant?: 'primary' | 'secondary' | 'ghost'; size?: 'sm' | 'md'; buttonClassName?: string }) {
   const t = useT();
   return (
-    <Modal label={label} title={t('New task')} variant={variant} size={size} buttonClassName={buttonClassName} icon={<Plus className="size-4" aria-hidden />}>
+    <Modal label={label ?? t('New task')} title={t('New task')} variant={variant} size={size} buttonClassName={buttonClassName} icon={<Plus className="size-4" aria-hidden />}>
       <TaskForm {...props} />
     </Modal>
   );

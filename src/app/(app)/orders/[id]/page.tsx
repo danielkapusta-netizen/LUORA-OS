@@ -338,7 +338,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                     <Select name="status" defaultValue={statusTargets[0]}>
                       {statusTargets.map((s) => (
                         <option key={s} value={s}>
-                          {STATUS_LABELS[s]}
+                          {t(STATUS_LABELS[s])}
                         </option>
                       ))}
                     </Select>

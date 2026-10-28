@@ -97,7 +97,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
                         {MARKETPLACE_LABELS[o.marketplace] ?? o.marketplace}
                       </span>
                     </td>
-                    <td className={td}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] ?? o.status}</td>
+                    <td className={td}>{STATUS_LABELS[o.status as keyof typeof STATUS_LABELS] ? t(STATUS_LABELS[o.status as keyof typeof STATUS_LABELS]) : o.status}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{o.items}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>
                       {o.totalAmount} {o.currency}
