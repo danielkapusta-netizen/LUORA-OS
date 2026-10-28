@@ -10,12 +10,13 @@ import { labelReadyCount, ordersToShipByCourier, statusCounts } from '@/server/s
 import { listTasks } from '@/server/services/tasks';
 import { MyTasksHeading, TASK_LIMIT, tasksCardTone } from '@/components/tasks/my-tasks-heading';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
 const TILES = [
-  { status: 'new', label: 'New' },
-  { status: 'processing', label: 'Processing' },
-  { status: 'label_created', label: 'Label created' },
-  { status: 'on_hold', label: 'On hold' },
+  { status: 'new', label: msg('New') },
+  { status: 'processing', label: msg('Processing') },
+  { status: 'label_created', label: msg('Label created') },
+  { status: 'on_hold', label: msg('On hold') },
 ] as const;
 
 /** The Dashboard for roles without analytics: orders to do, tasks, and who is carrying the parcels. No money anywhere. */
@@ -33,7 +34,7 @@ export async function LogisticsDashboard({ user }: { user: SessionUser }) {
       <section aria-label={t('Open orders')} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {TILES.map((o) => (
           <Link key={o.status} href={`/orders?status=${o.status}`} className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
-            <p className="text-xs font-medium text-slate-500">{o.label}</p>
+            <p className="text-xs font-medium text-slate-500">{t(o.label)}</p>
             <p className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{o.status === 'label_created' ? labelReady : (counts[o.status] ?? 0)}</p>
           </Link>
         ))}

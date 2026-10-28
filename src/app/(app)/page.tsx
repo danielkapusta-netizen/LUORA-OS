@@ -23,6 +23,8 @@ import { dueState } from '@/lib/tasks/model';
 import { overdueCustomers, repeatStats } from '@/lib/crm/segments';
 import { LogisticsDashboard } from './logistics-dashboard';
 import { getT } from '@/lib/i18n/server';
+import { comparisonText } from '@/lib/analytics/period';
+import { msg } from '@/lib/i18n/msg';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -30,10 +32,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const OPEN = [
-  { status: 'new', label: 'New' },
-  { status: 'processing', label: 'Processing' },
-  { status: 'label_created', label: 'Label created' },
-  { status: 'on_hold', label: 'On hold' },
+  { status: 'new', label: msg('New') },
+  { status: 'processing', label: msg('Processing') },
+  { status: 'label_created', label: msg('Label created') },
+  { status: 'on_hold', label: msg('On hold') },
 ] as const;
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<ViewParams & { rank?: string; pulse?: string }> }) {
@@ -64,14 +66,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <div className="space-y-8">
       <PageHeader
         title={t('Dashboard')}
-        description={`${period.key === 'all' ? 'Every order on record' : `${formatDate(period.from, t.locale)} – ${formatDate(period.to, t.locale)}`}, compared ${period.comparisonLabel}. Cancelled orders left out.`}
+        description={`${period.key === 'all' ? t('Every order on record') : `${formatDate(period.from, t.locale)} – ${formatDate(period.to, t.locale)}`}, ${t('compared {label}', { label: comparisonText(period, t) })}. ${t('Cancelled orders left out.')}`}
         actions={<PeriodControl path="/" current={current} periodKey={view.periodKey} from={view.params.from} to={view.params.to} />}
       />
 
       <section aria-label={t('Open orders')} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {OPEN.map((o) => (
           <Link key={o.status} href={`/orders?status=${o.status}`} className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
-            <p className="text-xs font-medium text-slate-500">{o.label}</p>
+            <p className="text-xs font-medium text-slate-500">{t(o.label)}</p>
             <p className="mt-0.5 text-xl font-semibold tabular-nums text-slate-900">{o.status === 'label_created' ? labelReady : (counts[o.status] ?? 0)}</p>
           </Link>
         ))}
@@ -108,7 +110,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <p className="text-xs font-medium text-slate-500">{t('Customers who came back')}</p>
             <p className="mt-1 text-xl font-semibold tabular-nums">{Math.round(repeat.repeatRate * 100)}%</p>
             <p className="text-xs text-slate-500">
-              {repeat.repeatCustomers} of {repeat.customers} customers ordered again
+              {t('{n} of {total} customers ordered again', { n: repeat.repeatCustomers, total: repeat.customers })}
             </p>
           </Link>
           <Link href="/customers/segments" className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
@@ -122,11 +124,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       {data.lineItems.length === 0 ? (
         <Card>
           <EmptyState title={t('No sales to analyse yet')}>
-            Orders appear here once they sync. For your history, use “Import past orders” on each account in{' '}
+            {t('Orders appear here once they sync. For your history, use “Import past orders” on each account in')}{' '}
             <Link href="/settings/integrations" className="underline">
               {t('Settings → Integrations')}
             </Link>
-            , and add product costs in{' '}
+            {t(', and add product costs in')}{' '}
             <Link href="/settings/costs" className="underline">
               {t('Costs & margins')}
             </Link>
@@ -148,11 +150,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <section>
             <SectionTitle
               title={t('Summary')}
-              description={`${snapshot.totals.orders} orders from ${snapshot.totals.customers} customers. ${showProfit ? 'Profit is after VAT, fees, product cost, shipping and refunds.' : 'Margin is after VAT, fees, product cost, shipping and refunds.'}`}
+              description={`${t('{orders} from {customers}.', { orders: t.plural(snapshot.totals.orders, '{n} order', '{n} orders'), customers: t.plural(snapshot.totals.customers, '{n} customer', '{n} customers') })} ${showProfit ? t('Profit is after VAT, fees, product cost, shipping and refunds.') : t('Margin is after VAT, fees, product cost, shipping and refunds.')}`}
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {snapshot.kpis.map((kpi) => (
-                <KpiCard key={kpi.key} kpi={kpi} comparisonLabel={period.comparisonLabel} granularity={period.granularity} />
+                <KpiCard key={kpi.key} kpi={kpi} comparisonLabel={comparisonText(period, t)} granularity={period.granularity} />
               ))}
             </div>
           </section>
@@ -200,7 +202,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         </Link>
                         <span className="block text-xs text-slate-500">
                           {p.brand}
-                          {p.costUnknown && ' · cost missing'}
+                          {p.costUnknown && ` · ${t('cost missing')}`}
                         </span>
                       </td>
                       <td className={cn(td, 'text-right tabular-nums')}>{p.units}</td>
@@ -233,20 +235,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               title={t('What needs a decision')}
               actions={
                 <Link href={hrefWith('/analytics/actions', view.params, {})} className={buttonClass('secondary', 'sm')}>
-                  All {snapshot.insights.length} findings
+                  {t('All {n} findings', { n: snapshot.insights.length })}
                 </Link>
               }
             />
             <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
               <div className="space-y-3">
                 <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <ShieldAlert className="size-4 text-red-600" aria-hidden /> {showProfit ? 'Risks to your profit' : 'Risks to your margin'}
+                  <ShieldAlert className="size-4 text-red-600" aria-hidden /> {showProfit ? t('Risks to your profit') : t('Risks to your margin')}
                 </h3>
                 {risks.length ? (
                   risks.map((i) => <InsightCard key={i.id} insight={i} productHref={productHref} />)
                 ) : (
                   <Card>
-                    <EmptyState title={showProfit ? 'No profit risks detected' : 'No margin risks detected'}>
+                    <EmptyState title={showProfit ? t('No profit risks detected') : t('No margin risks detected')}>
                       <CheckCircle2 className="mx-auto size-5 text-emerald-600" aria-hidden />
                     </EmptyState>
                   </Card>
@@ -270,13 +272,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <section>
             <SectionTitle
               title={t('Business pulse')}
-              description={`By ${period.granularity}; quiet ${period.granularity}s show as zero.`}
+              description={period.granularity === 'month' ? t('By month; quiet months show as zero.') : period.granularity === 'week' ? t('By week; quiet weeks show as zero.') : t('By day; quiet days show as zero.')}
               actions={
                 <Pills
                   label={t('Pulse metric')}
                   options={[
-                    { value: 'money', label: showProfit ? 'Revenue & profit' : 'Revenue' },
-                    { value: 'orders', label: 'Orders' },
+                    { value: 'money', label: showProfit ? t('Revenue & profit') : t('Revenue') },
+                    { value: 'orders', label: t('Orders') },
                   ]}
                   active={pulse}
                   href={(v) => link({ pulse: v })}

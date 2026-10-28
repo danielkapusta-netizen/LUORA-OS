@@ -5,7 +5,7 @@ import { MetricChart, WeekdayBars } from '@/components/analytics/charts';
 import { formatValue } from '@/components/analytics/format';
 import { Card, CardBody, EmptyState } from '@/components/ui';
 import { availableGranularities, buildAnalyticsSeries, METRIC_DEFINITIONS, METRIC_ORDER, type AnalyticsMetric, type OverlayKey } from '@/lib/analytics/analytics';
-import { isWithin } from '@/lib/analytics/period';
+import { comparisonText, isWithin } from '@/lib/analytics/period';
 import { buildWeekdayPattern } from '@/lib/analytics/trends';
 import type { Granularity } from '@/lib/analytics/types';
 import { cn } from '@/lib/utils';
@@ -76,7 +76,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
                   <p className="text-3xl font-semibold tabular-nums">{formatValue(series.total, definition.format, false, t.locale)}</p>
                   <div className="flex items-center gap-2">
                     <Delta value={series.changePct} unit={definition.format === 'percent' ? 'pp' : '%'} higherIsBetter={definition.higherIsBetter} />
-                    <span className="text-xs text-slate-400">{period.comparisonLabel}</span>
+                    <span className="text-xs text-slate-400">{comparisonText(period, t)}</span>
                     {series.projectedTotal !== null && shown.has('forecast') && (
                       <span className="text-xs text-slate-500">· {t('projected {value}', { value: formatValue(series.projectedTotal, definition.format, false, t.locale) })}</span>
                     )}

@@ -3,6 +3,7 @@ import { PeriodControl } from '@/components/analytics/period-control';
 import { formatDate } from '@/lib/analytics/format';
 import type { AnalyticsView } from '@/server/analytics/view';
 import { getT } from '@/lib/i18n/server';
+import { comparisonText } from '@/lib/analytics/period';
 import { msg } from '@/lib/i18n/msg';
 
 const MARKETPLACES = [
@@ -27,7 +28,7 @@ export async function ViewFilters({ view, path, extra = {} }: { view: AnalyticsV
       </div>
       <p className="text-xs text-slate-500">
         {period.key === 'all' ? t('All time') : `${formatDate(period.from, t.locale)} – ${formatDate(period.to, t.locale)}`}
-        {period.previous && `, ${t('compared {label}', { label: period.comparisonLabel })}`}
+        {period.previous && `, ${t('compared {label}', { label: comparisonText(period, t) })}`}
       </p>
     </div>
   );
