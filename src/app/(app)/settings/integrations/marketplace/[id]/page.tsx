@@ -29,6 +29,7 @@ import {
   syncFeesAction,
 } from '../../../actions';
 import { loadAllegroOptionsAction } from '../../../../inventory/publish/actions';
+import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -36,10 +37,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('Marketplace account') };
 }
 
-function Secret({ name, label, stored, hint }: { name: string; label: string; stored: boolean; hint?: string }) {
+async function Secret({ name, label, stored, hint }: { name: string; label: string; stored: boolean; hint?: string }) {
+  const t = await getT();
   return (
     <Field label={label} hint={hint}>
-      <Input name={name} type="password" autoComplete="off" placeholder={stored ? '•••••••• saved – leave blank to keep' : ''} />
+      <Input name={name} type="password" autoComplete="off" placeholder={stored ? t('•••••••• saved – leave blank to keep') : ''} />
     </Field>
   );
 }
@@ -86,13 +88,14 @@ async function OfferPricing({ s }: { s: MarketplaceSettings }) {
 }
 
 /** A list read from Allegro to pick from; before it is loaded the saved id can still be seen and kept. */
-function AllegroChoice({ name, label, selected, items, optional, hint }: { name: string; label: string; selected?: string; items?: { id: string; name: string }[]; optional?: boolean; hint?: string }) {
+async function AllegroChoice({ name, label, selected, items, optional, hint }: { name: string; label: string; selected?: string; items?: { id: string; name: string }[]; optional?: boolean; hint?: string }) {
+  const t = await getT();
   const known = items?.some((i) => i.id === selected);
   return (
-    <Field label={label} hint={items ? hint : 'Press “Load choices from Allegro” below first'}>
+    <Field label={label} hint={items ? hint : t('Press “Load choices from Allegro” below first')}>
       <Select name={name} defaultValue={selected ?? ''}>
-        <option value="">{optional ? 'None' : 'Choose…'}</option>
-        {selected && !known && <option value={selected}>{selected} (saved)</option>}
+        <option value="">{optional ? t('None') : t('Choose…')}</option>
+        {selected && !known && <option value={selected}>{selected} {t('(saved)')}</option>}
         {(items ?? []).map((i) => (
           <option key={i.id} value={i.id}>
             {i.name}
@@ -149,7 +152,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
         <ArrowLeft className="size-4" /> {t('Integrations')}
       </Link>
       <Card>
-        <CardHeader title={account ? `${account.name}` : `New ${MARKETPLACE_LABELS[type]} account`} />
+        <CardHeader title={account ? `${account.name}` : t('New {platform} account', { platform: MARKETPLACE_LABELS[type] })} />
         <CardBody>
           <ActionForm action={saveMarketplaceAction.bind(null, account?.id ?? null)} className="space-y-5">
             <input type="hidden" name="type" value={type} />
@@ -195,9 +198,9 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
               <fieldset className="space-y-3">
                 <legend className="mb-1 text-sm font-semibold">{t('Allegro connection')}</legend>
                 <p className="text-xs text-slate-500">
-                  Register an app at apps.developer.allegro.pl (or the sandbox) with redirect URI{' '}
-                  <code className="select-all">{`${env().APP_URL}${ALLEGRO_REDIRECT_PATH}`}</code>, save its Client ID and secret here, then press
-                  “Connect Allegro” on the Integrations page.
+                  {t('Register an app at apps.developer.allegro.pl (or the sandbox) with redirect URI')}{' '}
+                  <code className="select-all">{`${env().APP_URL}${ALLEGRO_REDIRECT_PATH}`}</code>
+                  {t(', save its Client ID and secret here, then press “Connect Allegro” on the Integrations page.')}
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Secret name="clientId" label={t('Client ID')} stored={stored.includes('clientId')} />
@@ -259,8 +262,8 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                 <legend className="mb-1 text-sm font-semibold">{t('InPost Von Halsky connection')}</legend>
                 <p className="text-xs text-slate-500">
                   {t('In the InPost Merchant Portal open Integrations → API, press “Create App” and tick exactly these permissions: Categories (read), Offers (read), Offers (write), Orders (read), Orders (write). Copy the organisation id, the Client ID and the Client secret here (the secret is shown only once). Create the app with the “Authorization Code” method and register this exact Redirect URL:')}{' '}
-                  <code className="select-all">{`${env().APP_URL}${VON_HALSKY_REDIRECT_PATH}`}</code>. Save here, then press “Connect Von Halsky” on the
-                  Integrations page and approve access at InPost.
+                  <code className="select-all">{`${env().APP_URL}${VON_HALSKY_REDIRECT_PATH}`}</code>
+                  {t('. Save here, then press “Connect Von Halsky” on the Integrations page and approve access at InPost.')}
                 </p>
                 <Field label={t('Organisation ID')} hint={t('The brand/store created for this integration (a UUID).')}>
                   <Input name="organizationId" defaultValue={str('organizationId')} placeholder="00000000-0000-0000-0000-000000000000" required />
@@ -305,7 +308,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
 
             {mirakl && (
               <fieldset className="space-y-3">
-                <legend className="mb-1 text-sm font-semibold">{label} Marketplace connection</legend>
+                <legend className="mb-1 text-sm font-semibold">{t('{platform} Marketplace connection', { platform: label })}</legend>
                 {type === 'empik' ? (
                   <p className="text-xs text-slate-500">{t('Empik runs on Mirakl. Generate an API key in the seller panel (My account → API key).')}</p>
                 ) : (
@@ -328,12 +331,12 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   </Field>
                   {(
                     [
-                      ['carrierCodeInpostLocker', `${label} carrier for InPost Paczkomat labels`, lockerCarrier, documented?.inpostLocker],
-                      ['carrierCodeInpostCourier', `${label} carrier for InPost courier labels`, courierCarrier, documented?.inpostCourier],
+                      ['carrierCodeInpostLocker', t('{platform} carrier for InPost Paczkomat labels', { platform: label }), lockerCarrier, documented?.inpostLocker],
+                      ['carrierCodeInpostCourier', t('{platform} carrier for InPost courier labels', { platform: label }), courierCarrier, documented?.inpostCourier],
                     ] as const
                   ).map(([name, fieldLabel, selected, fallback]) =>
                     carrierList.length ? (
-                      <Field key={name} label={fieldLabel} hint={`From ${label}'s carrier list (SH21)`}>
+                      <Field key={name} label={fieldLabel} hint={t("From {platform}'s carrier list (SH21)", { platform: label })}>
                         <Select name={name} defaultValue={selected ?? ''}>
                           <option value="">{t('Pick automatically')}</option>
                           {carrierList.map((c) => (
@@ -347,7 +350,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                       <Field
                         key={name}
                         label={fieldLabel}
-                        hint={fallback ? `${label}'s carrier code; leave blank for ${fallback}` : `${label}'s carrier code; leave blank to pick it from ${label}'s carrier list`}
+                        hint={fallback ? t("{platform}'s carrier code; leave blank for {fallback}", { platform: label, fallback }) : t("{platform}'s carrier code; leave blank to pick it from {platform}'s carrier list", { platform: label })}
                       >
                         <Input name={name} defaultValue={selected ?? ''} placeholder={fallback} />
                       </Field>
@@ -357,14 +360,13 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                 <Checkbox name="autoAccept" label={t('Accept new orders automatically when stock covers them')} defaultChecked={s.autoAccept ?? false} />
                 <p className="pt-2 text-sm font-semibold">{t('Offers created from Shopify')}</p>
                 <OfferPricing s={s} />
-                <Field label={t('Offer state code')} hint={`${label}'s code for “new” (11 on most Mirakl shops)`}>
+                <Field label={t('Offer state code')} hint={t('{platform}\'s code for “new” (11 on most Mirakl shops)', { platform: label })}>
                   <Input name="empikOfferState" defaultValue={s.empikOfferState ?? '11'} />
                 </Field>
-                <p className="pt-2 text-sm font-semibold">Extra offer fields required by {label}</p>
+                <p className="pt-2 text-sm font-semibold">{t('Extra offer fields required by {platform}', { platform: label })}</p>
                 {offerFields.length === 0 ? (
                   <p className="text-xs text-slate-500">
-                    None loaded yet. Save the connection, then press “Load {label} offer fields” below the form. Fields {label} asks for on every offer (for example the
-                    responsible person) appear here, and each can be read from a Shopify product metafield.
+                    {t('None loaded yet. Save the connection, then press “Load {platform} offer fields” below the form. Fields {platform} asks for on every offer (for example the responsible person) appear here, and each can be read from a Shopify product metafield.', { platform: label })}
                   </p>
                 ) : (
                   <div className="space-y-3">
@@ -382,7 +384,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                             <Field label={t('Shopify product metafield')} hint={t('namespace.key of a product metafield. Name several, separated by commas, to join their values (e.g. a name and an address)')}>
                               <Input name={`offerFieldMetafield:${f.code}`} defaultValue={source?.metafield ?? ''} placeholder={t('custom.responsible_person, custom.responsible_person_address')} />
                             </Field>
-                            <Field label={t('Fixed value when the product has none')} hint={f.defaultValue ? `${label} fills in “${f.defaultValue}” if this is empty` : undefined}>
+                            <Field label={t('Fixed value when the product has none')} hint={f.defaultValue ? t('{platform} fills in “{value}” if this is empty', { platform: label, value: f.defaultValue }) : undefined}>
                               {f.acceptedValues ? (
                                 <Select name={`offerFieldFallback:${f.code}`} defaultValue={source?.fallback ?? ''}>
                                   <option value="">{t('None')}</option>
@@ -412,7 +414,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
               <Checkbox name="stockDryRun" label={t('Dry run: log stock changes but don\'t send them')} defaultChecked={account?.stockDryRun ?? true} />
             </fieldset>
 
-            <SubmitButton>{account ? 'Save' : 'Create account'}</SubmitButton>
+            <SubmitButton>{account ? t('Save') : t('Create account')}</SubmitButton>
           </ActionForm>
         </CardBody>
       </Card>
@@ -423,17 +425,17 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
         <div className="mt-5 flex flex-wrap gap-2">
           {mirakl && (
             <ActionForm action={refreshMiraklCarriersAction.bind(null, account.id)}>
-              <SubmitButton variant="secondary">Refresh {label} carrier list</SubmitButton>
+              <SubmitButton variant="secondary">{t('Refresh {platform} carrier list', { platform: label })}</SubmitButton>
               {carrierError && (
                 <p className="mt-1 text-sm text-red-700">
-                  Could not load {label} {t('carriers:')} {carrierError}
+                  {t('Could not load {platform} carriers:', { platform: label })} {carrierError}
                 </p>
               )}
             </ActionForm>
           )}
           {mirakl && (
             <ActionForm action={refreshMiraklOfferFieldsAction.bind(null, account.id)}>
-              <SubmitButton variant="secondary">Load {label} offer fields</SubmitButton>
+              <SubmitButton variant="secondary">{t('Load {platform} offer fields', { platform: label })}</SubmitButton>
             </ActionForm>
           )}
           {type === 'allegro' && (
@@ -443,7 +445,7 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
           )}
           {(type === 'allegro' || mirakl) && (
             <Link href={`/inventory/publish/${account.id}`} className={buttonClass('secondary')}>
-              Publish products to {label}
+              {t('Publish products to {platform}', { platform: label })}
             </Link>
           )}
           <ActionForm action={importListingsAction.bind(null, account.id)}>
@@ -461,10 +463,10 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
 }
 
 const HISTORY_STATE = {
-  idle: { label: 'Not imported', tone: 'gray' },
-  running: { label: 'Importing…', tone: 'blue' },
-  done: { label: 'Imported', tone: 'green' },
-  error: { label: 'Stopped', tone: 'red' },
+  idle: { label: msg('Not imported'), tone: 'gray' },
+  running: { label: msg('Importing…'), tone: 'blue' },
+  done: { label: msg('Imported'), tone: 'green' },
+  error: { label: msg('Stopped'), tone: 'red' },
 } as const;
 
 /** The one-off import of past orders and, for Allegro, the billing fee feed. */
@@ -479,14 +481,14 @@ async function HistoryAndFees({ account }: { account: MarketplaceAccount }) {
       />
       <CardBody className="space-y-4">
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <Badge tone={state.tone}>{state.label}</Badge>
-          <span>{account.historyImported} past order(s) imported</span>
-          {account.historyUpdatedAt && <span className="text-xs text-slate-500">last step {formatDate(account.historyUpdatedAt, true, t.locale)}</span>}
+          <Badge tone={state.tone}>{t(state.label)}</Badge>
+          <span>{t.plural(account.historyImported, '{n} past order imported', '{n} past orders imported')}</span>
+          {account.historyUpdatedAt && <span className="text-xs text-slate-500">{t('last step {date}', { date: formatDate(account.historyUpdatedAt, true, t.locale) })}</span>}
         </div>
         {account.historyError && <p className="text-sm text-red-700">{account.historyError}</p>}
         {account.type === 'shopify' && (
           <p className="text-xs text-slate-500">
-            Shopify only returns orders older than 60 days when the app has the <code>{t('read_all_orders')}</code> scope (ask for it in the Shopify Dev Dashboard).
+            {t('Shopify only returns orders older than 60 days when the app has the read_all_orders scope (ask for it in the Shopify Dev Dashboard).')}
           </p>
         )}
         <div className="flex flex-wrap gap-2">
@@ -499,7 +501,7 @@ async function HistoryAndFees({ account }: { account: MarketplaceAccount }) {
               {account.historyState === 'error' && account.historyCursor ? (
                 <SubmitButton>{t('Resume import')}</SubmitButton>
               ) : (
-                <SubmitButton>{account.historyState === 'done' ? 'Import again' : 'Import past orders'}</SubmitButton>
+                <SubmitButton>{account.historyState === 'done' ? t('Import again') : t('Import past orders')}</SubmitButton>
               )}
             </ActionForm>
           )}
@@ -520,10 +522,10 @@ async function HistoryAndFees({ account }: { account: MarketplaceAccount }) {
             <p className="text-sm">
               {account.feesSyncedAt ? (
                 <>
-                  Read up to {account.feesCursor ? formatDate(new Date(account.feesCursor), true, t.locale) : '–'} · last run {formatDate(account.feesSyncedAt, true, t.locale)}
+                  {t('Read up to {date}', { date: account.feesCursor ? formatDate(new Date(account.feesCursor), true, t.locale) : '–' })} · {t('last run {date}', { date: formatDate(account.feesSyncedAt, true, t.locale) })}
                 </>
               ) : (
-                'Not read yet.'
+                t('Not read yet.')
               )}
             </p>
             {account.feesError && <p className="text-sm text-red-700">{account.feesError}</p>}
