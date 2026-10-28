@@ -142,7 +142,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   <td className={cn(td, 'text-right tabular-nums')}>{c.ordersCount ? formatValue(c.revenue / c.ordersCount, 'pln', false, t.locale) : '—'}</td>
                   <td className={cn(td, 'whitespace-nowrap')}>
                     {c.lastOrderAt?.toLocaleDateString(intlTag(t.locale), { day: 'numeric', month: 'short', year: 'numeric' }) ?? '—'}
-                    {scored?.daysSince !== null && scored?.daysSince !== undefined && <span className="block text-xs text-slate-500">{t('{n} days ago', { n: scored.daysSince })}</span>}
+                    {scored?.daysSince !== null && scored?.daysSince !== undefined && <span className="block text-xs text-slate-500">{t.plural(scored.daysSince, '{n} day ago', '{n} days ago')}</span>}
                   </td>
                 </tr>
               ))}

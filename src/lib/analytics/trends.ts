@@ -3,6 +3,7 @@
  * series — no React, no formatting.
  */
 
+import { msg } from '@/lib/i18n/msg'
 import { ratio, sum } from './parse'
 import type { Channel, DailyPoint, LineItem, Order } from './types'
 
@@ -47,7 +48,7 @@ export interface WeekdayPattern {
   avgRevenuePLN: number
 }
 
-const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const WEEKDAY_LABELS = [msg('Mon'), msg('Tue'), msg('Wed'), msg('Thu'), msg('Fri'), msg('Sat'), msg('Sun')]
 
 /**
  * Trading rhythm by weekday, averaged per occurrence so a range containing two

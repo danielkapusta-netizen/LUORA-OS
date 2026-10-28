@@ -106,7 +106,7 @@ export default async function SegmentsPage() {
                       </Link>
                     </td>
                     <td className={cn(td, 'text-right tabular-nums')}>{t.plural(o.usualGapDays, '{n} day', '{n} days')}</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{t('{n} days ago', { n: o.daysSince })}</td>
+                    <td className={cn(td, 'text-right tabular-nums')}>{t.plural(o.daysSince, '{n} day ago', '{n} days ago')}</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.customer.revenue, 'pln', false, t.locale)}</td>
                   </tr>
                 ))}

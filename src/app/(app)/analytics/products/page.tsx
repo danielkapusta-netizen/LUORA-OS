@@ -98,7 +98,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     <td className={td}>
                       <span className="font-medium text-slate-900">{r.label}</span>
                       <span className="block text-xs text-slate-500">
-                        {r.memberCount > 1 && `${t('{n} products', { n: r.memberCount })} · `}{t('last sold {date}', { date: formatDate(r.lastSold, t.locale) })}
+                        {r.memberCount > 1 && `${t.plural(r.memberCount, '{n} product', '{n} products')} · `}{t('last sold {date}', { date: formatDate(r.lastSold, t.locale) })}
                         {r.costUnknown && (
                           <Badge tone="amber" className="ml-1.5">
                             {t('cost missing')}

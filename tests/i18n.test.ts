@@ -27,3 +27,24 @@ describe('createT', () => {
     expect(t.plural(5, '{n} order', '{n} orders')).toBe('5 orders');
   });
 });
+
+describe('Polish plurals', () => {
+  const t = createT('pl');
+  const orders = (n: number) => t.plural(n, '{n} order', '{n} orders');
+
+  it('picks one / few / many by the Polish rules', () => {
+    expect(orders(1)).toBe('1 zamówienie');
+    expect(orders(2)).toBe('2 zamówienia');
+    expect(orders(4)).toBe('4 zamówienia');
+    expect(orders(5)).toBe('5 zamówień');
+    expect(orders(0)).toBe('0 zamówień');
+    expect(orders(12)).toBe('12 zamówień');
+    expect(orders(22)).toBe('22 zamówienia');
+    expect(orders(25)).toBe('25 zamówień');
+  });
+
+  it('translates fixed strings and fills placeholders', () => {
+    expect(t('Orders')).toBe('Zamówienia');
+    expect(t('Delete {name}?', { name: 'Ola' })).toBe('Usunąć Ola?');
+  });
+});

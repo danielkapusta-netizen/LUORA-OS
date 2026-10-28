@@ -2,12 +2,13 @@
 // Arithmetic runs in UTC on those strings, so daylight saving never moves a day.
 
 import { intlTag } from '@/lib/i18n/locales';
+import { msg } from '@/lib/i18n/msg';
 import type { T } from '@/lib/i18n/translate';
 
 const DAY_MS = 86_400_000;
 export const TIME_ZONE = 'Europe/Warsaw';
 
-export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
+export const WEEKDAYS = [msg('Mon'), msg('Tue'), msg('Wed'), msg('Thu'), msg('Fri'), msg('Sat'), msg('Sun')] as const;
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 

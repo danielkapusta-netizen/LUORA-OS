@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SRC = join(ROOT, 'src');
 
-export type Found = { text: string; file: string; line: number; plural?: boolean };
+export type Found = { text: string; file: string; line: number; plural?: boolean; pluralOther?: boolean };
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -76,6 +76,12 @@ function skipArg(src: string, start: number): number {
   return src.length;
 }
 
+/** True when the match sits on a comment line (doc examples such as `t('…')` in a JSDoc block). */
+function inComment(src: string, index: number): boolean {
+  const start = src.lastIndexOf('\n', index) + 1;
+  return /^\s*(\*|\/\/|\/\*)/.test(src.slice(start, index + 1));
+}
+
 const lineOf = (src: string, index: number) => src.slice(0, index).split('\n').length;
 
 export function extract(): Found[] {
@@ -85,10 +91,12 @@ export function extract(): Found[] {
     const rel = relative(ROOT, file);
 
     for (const m of src.matchAll(/(?<![\w.$])(?:t|msg)\(/g)) {
+      if (inComment(src, m.index)) continue;
       const lit = readLiteral(src, m.index + m[0].length);
       if (lit) found.push({ text: lit.value, file: rel, line: lineOf(src, m.index) });
     }
     for (const m of src.matchAll(/(?<![\w$])t\.plural\(/g)) {
+      if (inComment(src, m.index)) continue;
       const afterCount = skipArg(src, m.index + m[0].length);
       if (src[afterCount] !== ',') continue;
       const one = readLiteral(src, afterCount + 1);
@@ -97,7 +105,7 @@ export function extract(): Found[] {
       const comma = skipArg(src, one.end);
       if (src[comma] === ',') {
         const other = readLiteral(src, comma + 1);
-        if (other) found.push({ text: other.value, file: rel, line: lineOf(src, m.index) });
+        if (other) found.push({ text: other.value, file: rel, line: lineOf(src, m.index), pluralOther: true });
       }
     }
   }
@@ -107,17 +115,17 @@ export function extract(): Found[] {
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 
 export async function check() {
-  const { PL, PL_PLURALS } = await import('../src/lib/i18n/pl/index');
+  const { PL, PL_PLURALS, SAME } = await import('../src/lib/i18n/pl/index');
   const found = extract();
-  const missing = found.filter((f) => !f.plural && !(f.text in PL) && !(f.text in PL_PLURALS));
+  const missing = found.filter((f) => !f.plural && !f.pluralOther && !(f.text in PL) && !SAME.has(f.text));
   const missingPlural = found.filter((f) => f.plural && !(f.text in PL_PLURALS));
   const used = new Set(found.map((f) => f.text));
-  const unused = Object.keys(PL).filter((k) => !used.has(k));
+  const unused = [...Object.keys(PL), ...Object.keys(PL_PLURALS), ...SAME].filter((k) => !used.has(k));
   const badPlaceholders = Object.entries(PL).filter(([en, pl]) => placeholders(en) !== placeholders(pl));
   return { found, missing, missingPlural, unused, badPlaceholders };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+async function main() {
   const { found, missing, missingPlural, unused, badPlaceholders } = await check();
   const show = (title: string, rows: string[]) => {
     if (rows.length) console.log(`\n${title} (${rows.length})\n${rows.map((r) => `  ${r}`).join('\n')}`);
@@ -129,3 +137,5 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   console.log(`\n${new Set(found.map((f) => f.text)).size} distinct strings in use.`);
   process.exit(missing.length || missingPlural.length || badPlaceholders.length ? 1 : 0);
 }
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) void main();
