@@ -65,8 +65,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
           href={`/customers/${order.customerId}`}
           className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900 hover:border-violet-300"
         >
-          <span className="font-semibold">Returning customer · {ordinal(returning.orderNumber, t.locale)} order</span>
-          <span className="text-xs">first ordered {formatDate(returning.firstOrderAt, false, t.locale)} →</span>
+          <span className="font-semibold">{t('Returning customer · {ordinal} order', { ordinal: ordinal(returning.orderNumber, t.locale) })}</span>
+          <span className="text-xs">{t('first ordered {date}', { date: formatDate(returning.firstOrderAt, false, t.locale) })} →</span>
         </Link>
       )}
 
@@ -80,7 +80,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
       </div>
       <OrderItemsList items={items} currency={order.currency} className="mt-3" highlightQuantity />
       <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
-        <span className="text-sm text-slate-500">Total{order.codAmount ? ' (cash on delivery)' : ''}</span>
+        <span className="text-sm text-slate-500">{order.codAmount ? t('Total (cash on delivery)') : t('Total')}</span>
         <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
       </div>
 
@@ -119,7 +119,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
             </ActionForm>
           )}
           {!order.readyToShip && order.status !== 'cancelled' && (
-            <p className="text-center text-xs text-amber-700">Waiting for the marketplace ({order.marketplaceStatus}) before shipping.</p>
+            <p className="text-center text-xs text-amber-700">{t('Waiting for the marketplace ({status}) before shipping.', { status: order.marketplaceStatus })}</p>
           )}
           {live?.state === 'pending' && (
             <div className="flex items-center justify-between gap-2">
@@ -147,14 +147,14 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
           )}
           {live?.state === 'created' && (
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500">{live.packedAt ? 'Packed – moves to Shipped' : 'Tick when packed; the order stays where it is until then'}</span>
+              <span className="text-xs text-slate-500">{live.packedAt ? t('Packed – moves to Shipped') : t('Tick when packed; the order stays where it is until then')}</span>
               <PackedToggle shipmentId={live.id} packed={Boolean(live.packedAt)} />
             </div>
           )}
           {live?.error && <p className="text-xs text-red-700">{live.error}</p>}
           {live?.state === 'created' &&
             (live.trackingPushedAt ? (
-              <p className="text-center text-xs text-emerald-700">Tracking sent to {account.name}</p>
+              <p className="text-center text-xs text-emerald-700">{t('Tracking sent to {account}', { account: account.name })}</p>
             ) : live.trackingPushError ? (
               <div className="space-y-1.5">
                 <p className="text-xs text-red-700">{t('Tracking not sent:')} {live.trackingPushError}</p>
@@ -165,7 +165,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
                 </ActionForm>
               </div>
             ) : (
-              <p className="text-center text-xs text-slate-500">Sending tracking to {account.name}…</p>
+              <p className="text-center text-xs text-slate-500">{t('Sending tracking to {account}…', { account: account.name })}</p>
             ))}
           {failed && <p className="text-xs text-red-700">{t('Last label failed:')} {failed.error}</p>}
           {canShip && !route && <p className="text-center text-xs text-slate-500">{t('No shipping rule matches; choose a carrier in the full order view.')}</p>}
@@ -193,7 +193,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
           <span className="font-medium">{order.externalNumber}</span>
           <span className="text-slate-500"> · {formatDate(order.placedAt, true, t.locale)}</span>
         </InfoRow>
-        <InfoRow icon={MapPin} label={order.pickupPointId ? 'Pickup point' : 'Ship to'}>
+        <InfoRow icon={MapPin} label={order.pickupPointId ? t('Pickup point') : t('Ship to')}>
           {order.pickupPointId && <span className="font-medium">{order.pickupPointId} · </span>}
           {a.street}, {a.postalCode} {a.city}
         </InfoRow>
@@ -210,8 +210,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
             ) : (
               <p className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="text-emerald-700">
-                  Invoice {invoice.number ?? invoice.externalId}
-                  {invoice.uploadedAt ? ` sent to ${account.name}` : ''}
+                  {t('Invoice {number}', { number: invoice.number ?? invoice.externalId ?? '' })}
+                  {invoice.uploadedAt ? ` ${t('sent to {account}', { account: account.name })}` : ''}
                 </span>
                 {invoice.r2Key && (
                   <a href={`/api/invoices/${invoice.id}`} target="_blank" rel="noreferrer" className="font-medium text-brand-700 underline underline-offset-2">
@@ -230,7 +230,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
             </p>
             {invoice?.state === 'issued' ? (
               <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-emerald-700">Invoice {invoice.number ?? invoice.externalId}{invoice.uploadedAt ? ` sent to ${account.name}` : ''}</span>
+                <span className="text-emerald-700">{t('Invoice {number}', { number: invoice.number ?? invoice.externalId ?? '' })}{invoice.uploadedAt ? ` ${t('sent to {account}', { account: account.name })}` : ''}</span>
                 {invoice.r2Key && (
                   <a href={`/api/invoices/${invoice.id}`} target="_blank" rel="noreferrer" className="font-medium text-brand-700 underline underline-offset-2">
                     PDF
@@ -243,7 +243,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
               <p className="mt-1 text-xs text-slate-500">{t('Invoice being issued…')}</p>
             ) : invoice ? (
               <p className="mt-1 text-xs text-red-700">
-                {invoice.state === 'manual' ? 'Issue by hand: ' : 'Not issued: '}
+                {invoice.state === 'manual' ? t('Issue by hand:') : t('Not issued:')}{' '}
                 {invoice.error}{' '}
                 <Link href="/accounting?tab=attention" className="underline">
                   {t('Accounting')}
@@ -264,7 +264,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
       <Link href={`/orders/${order.id}`} className="mt-2 block text-center text-sm font-medium text-brand-700 underline underline-offset-4">
         {t('Open full order')}
       </Link>
-      <p className="mt-3 text-center text-[11px] text-slate-400">Updated {formatDate(order.updatedAt, true, t.locale)}</p>
+      <p className="mt-3 text-center text-[11px] text-slate-400">{t('Updated {date}', { date: formatDate(order.updatedAt, true, t.locale) })}</p>
     </Card>
   );
 }
