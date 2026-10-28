@@ -51,8 +51,8 @@ async function NoteItem({ note, orderId, orderNumber, viewer, taskDialog }: { no
         {note.message}
       </p>
       <p className="mt-1 text-xs text-slate-500">
-        {note.userName ?? 'Unknown'} · {formatDate(note.createdAt, true, t.locale)}
-        {note.editedAt && <span title={`Edited ${formatDate(note.editedAt, true, t.locale)}`}> {t('· edited')}</span>}
+        {note.userName ?? t('Unknown')} · {formatDate(note.createdAt, true, t.locale)}
+        {note.editedAt && <span title={t('Edited {date}', { date: formatDate(note.editedAt, true, t.locale) })}> {t('· edited')}</span>}
       </p>
       {note.task && (
         <p className="mt-1.5 text-xs">
@@ -65,7 +65,7 @@ async function NoteItem({ note, orderId, orderNumber, viewer, taskDialog }: { no
       <div className="mt-1.5 -ml-1.5 flex flex-wrap items-center gap-x-0.5">
         <ActionForm action={setNoteImportantAction.bind(null, note.id, !note.pinned)} showOk={false}>
           <button type="submit" className={small}>
-            <Star className={cn('size-3.5', note.pinned && 'fill-amber-400 text-amber-500')} aria-hidden /> {note.pinned ? 'Not important' : 'Important'}
+            <Star className={cn('size-3.5', note.pinned && 'fill-amber-400 text-amber-500')} aria-hidden /> {note.pinned ? t('Not important') : t('Important')}
           </button>
         </ActionForm>
         {!note.task && (
@@ -75,7 +75,7 @@ async function NoteItem({ note, orderId, orderNumber, viewer, taskDialog }: { no
             variant="ghost"
             size="sm"
             buttonClassName="h-7 px-2.5 text-xs font-medium text-slate-600"
-            defaults={{ orderId, noteId: note.id, title: `Order ${orderNumber}: ${noteExcerpt(note.message)}`, description: note.message }}
+            defaults={{ orderId, noteId: note.id, title: `${t('Order {number}', { number: orderNumber })}: ${noteExcerpt(note.message)}`, description: note.message }}
           />
         )}
         {mine && (
@@ -121,11 +121,11 @@ export async function OrderNotes({
   return (
     <div>
       <p className="flex items-center gap-2 text-xs font-medium text-slate-500">
-        <MessageSquareText className="size-4 text-slate-400" aria-hidden /> Notes
+        <MessageSquareText className="size-4 text-slate-400" aria-hidden /> {t('Notes')}
         {notes.length > 0 && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{notes.length}</span>}
       </p>
       <ActionForm action={addNoteAction.bind(null, orderId)} resetOnSuccess showOk={false} className="mt-2 space-y-2">
-        <Textarea name="note" rows={2} maxLength={NOTE_MAX} placeholder={t('Leave an internal note for the team…')} required aria-label={`Note on order ${orderNumber}`} />
+        <Textarea name="note" rows={2} maxLength={NOTE_MAX} placeholder={t('Leave an internal note for the team…')} required aria-label={t('Note on order {number}', { number: orderNumber })} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SubmitButton size="sm" variant="secondary" pendingText={t('Saving…')}>
             {t('Add note')}

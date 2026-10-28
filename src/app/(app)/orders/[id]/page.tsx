@@ -86,12 +86,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">Order {order.externalNumber}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">{t('Order {number}', { number: order.externalNumber })}</h1>
             <StatusBadge status={order.status} />
             <MarketplaceBadge marketplace={order.marketplace} />
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            {account.name} · placed {formatDate(order.placedAt, true, t.locale)} · marketplace status <span className="font-medium">{order.marketplaceStatus}</span>
+            {account.name} · {t('placed {date}', { date: formatDate(order.placedAt, true, t.locale) })} · {t('marketplace status')} <span className="font-medium">{order.marketplaceStatus}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -102,7 +102,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           )}
           <ActionForm action={refreshOrderAction.bind(null, order.id)}>
             <SubmitButton variant="secondary" pendingText={t('Refreshing…')}>
-              Refresh from {account.name}
+              {t('Refresh from {account}', { account: account.name })}
             </SubmitButton>
           </ActionForm>
         </div>
@@ -111,8 +111,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       {!order.readyToShip && order.status !== 'cancelled' && (
         <div className="mb-4">
           <Alert>
-            This order can&apos;t be shipped yet: the marketplace reports <strong>{order.marketplaceStatus}</strong>.
-            {(order.marketplace === 'empik' || order.marketplace === 'hebe') && ` Accept it first, then wait until ${MARKETPLACE_LABELS[order.marketplace]} confirms the payment.`}
+            {t("This order can't be shipped yet: the marketplace reports")} <strong>{order.marketplaceStatus}</strong>.
+            {(order.marketplace === 'empik' || order.marketplace === 'hebe') && ` ${t('Accept it first, then wait until {marketplace} confirms the payment.', { marketplace: MARKETPLACE_LABELS[order.marketplace] })}`}
           </Alert>
         </div>
       )}
@@ -120,7 +120,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="space-y-5 xl:col-span-2">
           <Card>
-            <CardHeader title={t('Shipping label')} description={order.deliveryMethodName ? `Buyer chose: ${order.deliveryMethodName}` : undefined} />
+            <CardHeader title={t('Shipping label')} description={order.deliveryMethodName ? t('Buyer chose: {method}', { method: order.deliveryMethodName }) : undefined} />
             <CardBody className="space-y-4">
               {shipments.map((s) => (
                 <div key={s.id} className={cn('rounded-md border px-3 py-2.5', s.state === 'cancelled' ? 'border-slate-100 opacity-60' : 'border-slate-200')}>
@@ -167,14 +167,14 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   </div>
                   <div className="mt-1.5 space-y-0.5 text-xs text-slate-500">
                     <p>
-                      Parcel {s.parcel.lengthCm}×{s.parcel.widthCm}×{s.parcel.heightCm} cm, {s.parcel.weightKg} kg
-                      {s.options.pickupPointId ? ` · point ${s.options.pickupPointId}` : ''}
-                      {s.options.codAmount ? ` · COD ${formatMoney(s.options.codAmount, order.currency)}` : ''} · {s.labelFormat.toUpperCase()} {s.labelSize} · requested {formatDate(s.createdAt, true, t.locale)}
+                      {t('Parcel')} {s.parcel.lengthCm}×{s.parcel.widthCm}×{s.parcel.heightCm} cm, {s.parcel.weightKg} kg
+                      {s.options.pickupPointId ? ` · ${t('point {id}', { id: s.options.pickupPointId })}` : ''}
+                      {s.options.codAmount ? ` · ${t('COD')} ${formatMoney(s.options.codAmount, order.currency)}` : ''} · {s.labelFormat.toUpperCase()} {s.labelSize} · {t('requested {date}', { date: formatDate(s.createdAt, true, t.locale) })}
                     </p>
                     {s.error && <p className="text-red-700">{s.error}</p>}
                     {s.state === 'created' &&
                       (s.trackingPushedAt ? (
-                        <p className="text-emerald-700">Tracking sent to {account.name} {formatDate(s.trackingPushedAt, true, t.locale)}</p>
+                        <p className="text-emerald-700">{t('Tracking sent to {account}', { account: account.name })} {formatDate(s.trackingPushedAt, true, t.locale)}</p>
                       ) : s.trackingPushError ? (
                         <div className="flex items-center gap-2 text-red-700">
                           <span>{t('Tracking not sent:')} {s.trackingPushError}</span>
@@ -185,7 +185,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                           </ActionForm>
                         </div>
                       ) : (
-                        <p>Sending tracking to {account.name}…</p>
+                        <p>{t('Sending tracking to {account}…', { account: account.name })}</p>
                       ))}
                     {s.deliveryStatus && <p>{t('Carrier status:')} {s.deliveryStatus.replace(/_/g, ' ')}</p>}
                   </div>
@@ -252,7 +252,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   </tr>
                   <tr>
                     <td colSpan={4} className={cn(td, 'text-right font-medium')}>
-                      Total {order.codAmount ? '(cash on delivery)' : ''}
+                      {order.codAmount ? t('Total (cash on delivery)') : t('Total')}
                     </td>
                     <td className={cn(td, 'text-right font-semibold tabular-nums')}>{formatMoney(order.totalAmount, order.currency)}</td>
                   </tr>
@@ -272,7 +272,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 ) : (
                   order.buyer.name
                 )}
-                {order.buyer.login ? ` (${order.buyer.login})` : ''} · {order.buyer.email ?? 'no email'} · {order.buyer.phone ?? 'no phone'}
+                {order.buyer.login ? ` (${order.buyer.login})` : ''} · {order.buyer.email ?? t('no email')} · {order.buyer.phone ?? t('no phone')}
               </p>
               <ActionForm action={updateAddressAction.bind(null, order.id)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label={t('Recipient')}>
@@ -378,7 +378,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   label={t('Add')}
                   variant="secondary"
                   size="sm"
-                  defaults={{ orderId: order.id, title: `Order ${order.externalNumber}: ` }}
+                  defaults={{ orderId: order.id, title: `${t('Order {number}', { number: order.externalNumber })}: ` }}
                 />
               }
             />

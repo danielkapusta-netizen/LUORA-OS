@@ -49,7 +49,7 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
     <ActionForm action={action} className="space-y-3">
       {defaults.ruleName && (
         <p className="text-xs text-slate-500">
-          Suggested by rule <span className="font-medium text-slate-700">{defaults.ruleName}</span>. You can change anything below.
+          {t('Suggested by rule')} <span className="font-medium text-slate-700">{defaults.ruleName}</span>. {t('You can change anything below.')}
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -105,7 +105,7 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
       </Field>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {(['lengthCm', 'widthCm', 'heightCm'] as const).map((k) => (
-          <Field key={k} label={{ lengthCm: 'Length cm', widthCm: 'Width cm', heightCm: 'Height cm' }[k]}>
+          <Field key={k} label={{ lengthCm: t('Length cm'), widthCm: t('Width cm'), heightCm: t('Height cm') }[k]}>
             <Input name={k} inputMode="numeric" value={dims[k]} onChange={(e) => setDims({ ...dims, [k]: e.target.value })} required />
           </Field>
         ))}
@@ -122,13 +122,13 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label={needsPoint ? 'Pickup point (required)' : 'Pickup point'}>
+        <Field label={needsPoint ? t('Pickup point (required)') : t('Pickup point')}>
           <Input name="pickupPointId" defaultValue={order.pickupPointId ?? ''} placeholder={t('e.g. KRA010')} required={needsPoint} />
         </Field>
-        <Field label={`COD (${order.currency})`}>
+        <Field label={t('COD ({currency})', { currency: order.currency })}>
           <Input name="codAmount" inputMode="decimal" defaultValue={order.codAmount ?? ''} placeholder={t('none')} />
         </Field>
-        <Field label={`Insurance (${order.currency})`}>
+        <Field label={t('Insurance ({currency})', { currency: order.currency })}>
           <Input name="insuranceAmount" inputMode="decimal" placeholder={t('none')} />
         </Field>
         <Field label={t('Label')}>
