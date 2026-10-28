@@ -9,8 +9,12 @@ import { listMarketplaceAccounts } from '@/server/services/settings';
 import { createOffersAction, refreshFromShopifyAction } from '../actions';
 import { hasRealSku } from '@/lib/sku';
 import { MARKETPLACE_LABELS } from '@/lib/utils';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Publish offers' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Publish offers') };
+}
 
 const CATALOGUE: Record<CatalogueState, { tone: 'green' | 'amber' | 'red'; label: string }> = {
   found: { tone: 'green', label: 'In catalogue' },
@@ -19,6 +23,7 @@ const CATALOGUE: Record<CatalogueState, { tone: 'green' | 'amber' | 'red'; label
 };
 
 export default async function PublishPage({ params }: { params: Promise<{ accountId: string }> }) {
+  const t = await getT();
   await requireAdmin();
   const { accountId } = await params;
   const account = (await listMarketplaceAccounts()).find((a) => a.id === accountId && (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe'));
@@ -46,11 +51,11 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
-              Back to inventory
+              {t('Back to inventory')}
             </Link>
-            <ActionForm action={refreshFromShopifyAction.bind(null, account.id)} popup="Reading Shopify">
-              <SubmitButton variant="secondary" pendingText="Reading…">
-                Refresh from Shopify
+            <ActionForm action={refreshFromShopifyAction.bind(null, account.id)} popup={t('Reading Shopify')}>
+              <SubmitButton variant="secondary" pendingText={t('Reading…')}>
+                {t('Refresh from Shopify')}
               </SubmitButton>
             </ActionForm>
             <Link className={buttonClass('secondary')} href={settingsHref}>
@@ -59,11 +64,11 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
           </>
         }
       />
-      {error && <p className="mb-4 text-sm text-red-700">Could not read the products: {error}</p>}
+      {error && <p className="mb-4 text-sm text-red-700">{t('Could not read the products:')} {error}</p>}
       {setupProblems.length > 0 && (
         <Card className="mb-5 border-amber-200 bg-amber-50">
           <CardBody className="text-sm text-amber-900">
-            Before offers can be created: {setupProblems.join('; ')}.{' '}
+            {t('Before offers can be created:')} {setupProblems.join('; ')}.{' '}
             <Link href={settingsHref} className="font-medium underline">
               Open {label} settings
             </Link>
@@ -107,13 +112,13 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                       </Badge>
                     )}
                     {r.problems.filter((p) => p !== 'not in the catalogue').length > 0 && <Badge tone="amber">{r.problems.filter((p) => p !== 'not in the catalogue').join(', ')}</Badge>}
-                    {r.problems.length === 0 && <Badge tone="green">Ready</Badge>}
+                    {r.problems.length === 0 && <Badge tone="green">{t('Ready')}</Badge>}
                   </div>
                 </label>
               ))}
             </div>
             <div className="border-t border-slate-100 px-5 py-4">
-              <SubmitButton pendingText="Creating…">Create selected offers</SubmitButton>
+              <SubmitButton pendingText={t('Creating…')}>{t('Create selected offers')}</SubmitButton>
             </div>
           </ActionForm>
         )}

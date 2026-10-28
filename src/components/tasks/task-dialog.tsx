@@ -8,6 +8,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui';
 import { PRIORITY_LABEL, TASK_PRIORITIES, type TaskStatus } from '@/lib/tasks/model';
 import { Modal, useModal } from './modal';
 import { PeoplePicker } from './people-picker';
+import { useT } from '@/lib/i18n/client';
 
 export interface TaskDefaults {
   title?: string;
@@ -33,6 +34,7 @@ interface Props {
 }
 
 function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
+  const t = useT();
   const modal = useModal();
   const [state, action] = useActionState(createTaskAction, null);
   const form = useRef<HTMLFormElement>(null);
@@ -49,16 +51,16 @@ function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
       {defaults.customerId && <input type="hidden" name="customerId" value={defaults.customerId} />}
       {defaults.orderId && <input type="hidden" name="orderId" value={defaults.orderId} />}
       {defaults.noteId && <input type="hidden" name="noteId" value={defaults.noteId} />}
-      <Field label="Title">
-        <Input name="title" required maxLength={200} defaultValue={defaults.title} placeholder="e.g. Photograph the new serum" autoFocus />
+      <Field label={t('Title')}>
+        <Input name="title" required maxLength={200} defaultValue={defaults.title} placeholder={t('e.g. Photograph the new serum')} autoFocus />
       </Field>
-      <Field label="Description">
-        <Textarea name="description" rows={3} maxLength={5000} defaultValue={defaults.description} placeholder="Anything the person doing it should know" />
+      <Field label={t('Description')}>
+        <Textarea name="description" rows={3} maxLength={5000} defaultValue={defaults.description} placeholder={t('Anything the person doing it should know')} />
       </Field>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Project">
+        <Field label={t('Project')}>
           <Select name="projectId" defaultValue={defaults.projectId ?? ''}>
-            <option value="">No project</option>
+            <option value="">{t('No project')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -66,7 +68,7 @@ function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
             ))}
           </Select>
         </Field>
-        <Field label="Priority">
+        <Field label={t('Priority')}>
           <Select name="priority" defaultValue="normal">
             {TASK_PRIORITIES.map((p) => (
               <option key={p} value={p}>
@@ -77,29 +79,29 @@ function TaskForm({ people, projects, tags, meId, defaults = {} }: Props) {
         </Field>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="Day">
+        <Field label={t('Day')}>
           <Input name="dueDate" type="date" defaultValue={defaults.dueDate} />
         </Field>
-        <Field label="From">
+        <Field label={t('From')}>
           <Input name="startTime" type="time" />
         </Field>
-        <Field label="Until">
+        <Field label={t('Until')}>
           <Input name="endTime" type="time" />
         </Field>
       </div>
       <div className="space-y-1">
-        <span className="text-xs font-medium text-slate-600">Who is it for?</span>
+        <span className="text-xs font-medium text-slate-600">{t('Who is it for?')}</span>
         <PeoplePicker people={people} selected={defaults.assigneeIds ?? [meId]} />
       </div>
-      <Field label="Tags" hint={tags.length ? `Separate with commas. In use: ${tags.slice(0, 8).map((t) => `#${t}`).join(' ')}` : 'Separate with commas'}>
-        <Input name="tags" placeholder="posters, ideas" />
+      <Field label={t('Tags')} hint={tags.length ? `Separate with commas. In use: ${tags.slice(0, 8).map((tag) => `#${tag}`).join(' ')}` : 'Separate with commas'}>
+        <Input name="tags" placeholder={t('posters, ideas')} />
       </Field>
       {state?.error && <p className="text-sm text-red-700">{state.error}</p>}
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
         <button type="button" onClick={() => modal?.close()} className="h-10 rounded-full px-5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-          Cancel
+          {t('Cancel')}
         </button>
-        <SubmitButton pendingText="Creating…">Create task</SubmitButton>
+        <SubmitButton pendingText={t('Creating…')}>{t('Create task')}</SubmitButton>
       </div>
     </form>
   );
@@ -113,8 +115,9 @@ export function NewTaskDialog({
   buttonClassName,
   ...props
 }: Props & { label?: string; variant?: 'primary' | 'secondary' | 'ghost'; size?: 'sm' | 'md'; buttonClassName?: string }) {
+  const t = useT();
   return (
-    <Modal label={label} title="New task" variant={variant} size={size} buttonClassName={buttonClassName} icon={<Plus className="size-4" aria-hidden />}>
+    <Modal label={label} title={t('New task')} variant={variant} size={size} buttonClassName={buttonClassName} icon={<Plus className="size-4" aria-hidden />}>
       <TaskForm {...props} />
     </Modal>
   );

@@ -12,8 +12,12 @@ import type { Product } from '@/server/db/schema';
 import { isPricePlatform, MAX_PRICES_PER_PUSH, PRICE_PLATFORM_LABEL, PRICE_PLATFORMS, pricingView, type PricedListing, type PricePlatform, type PricingRow } from '@/server/services/pricing';
 import { pushPricesAction, refreshPricesAction } from './actions';
 import { PriceCell } from './price-cell';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Pricing' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Pricing') };
+}
 
 const SORTS = { name: 'Name', high: 'Highest price', low: 'Lowest price', changed: 'Recently changed' } as const;
 type Sort = keyof typeof SORTS;
@@ -50,15 +54,16 @@ function byNumber(value: (row: PricingRow) => number, direction: 1 | -1) {
   };
 }
 
-function ListingStatus({ listing, platform }: { listing: PricedListing; platform: PricePlatform }) {
+async function ListingStatus({ listing, platform }: { listing: PricedListing; platform: PricePlatform }) {
+  const t = await getT();
   return (
     <p className="mt-1 text-xs text-slate-500">
       {listing.priceError ? (
-        <span className="text-red-700">Not sent: {listing.priceError}</span>
+        <span className="text-red-700">{t('Not sent:')} {listing.priceError}</span>
       ) : (
         <>
           On {PRICE_PLATFORM_LABEL[platform]}: <span className="font-medium text-slate-700 tabular-nums">{formatPrice(listing.price, listing.currency)}</span>
-          {listing.priceUpdatedAt && <> · changed {timeAgo(listing.priceUpdatedAt)}</>}
+          {listing.priceUpdatedAt && <> · changed {timeAgo(listing.priceUpdatedAt, t)}</>}
         </>
       )}
       {!listing.active && (
@@ -68,7 +73,7 @@ function ListingStatus({ listing, platform }: { listing: PricedListing; platform
       )}
       {platform === 'vonhalsky' && listing.priceManual && (
         <Badge tone="blue" className="ml-2">
-          <span title="Set here, so “Update prices of Luora offers” no longer follows Shopify for this offer">Set by hand</span>
+          <span title={t('Set here, so “Update prices of Luora offers” no longer follows Shopify for this offer')}>{t('Set by hand')}</span>
         </Badge>
       )}
     </p>
@@ -76,6 +81,7 @@ function ListingStatus({ listing, platform }: { listing: PricedListing; platform
 }
 
 export default async function PricingPage({ searchParams }: { searchParams: Promise<Params> }) {
+  const t = await getT();
   const viewer = await requireCapability('pricing');
   const params = await searchParams;
   const platform: PricePlatform = isPricePlatform(params.platform) ? params.platform : 'shopify';
@@ -107,12 +113,12 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <PageHeader
-        title="Pricing"
-        description="Every product's selling price on each platform, gross and in złoty. Type a new price and press Update: it goes to the platform straight away."
+        title={t('Pricing')}
+        description={t('Every product\'s selling price on each platform, gross and in złoty. Type a new price and press Update: it goes to the platform straight away.')}
         actions={
           view.accounts.length > 0 && (
-            <ActionForm action={refreshPricesAction.bind(null, platform)} popup="Reading prices">
-              <SubmitButton variant="secondary" pendingText="Starting…">
+            <ActionForm action={refreshPricesAction.bind(null, platform)} popup={t('Reading prices')}>
+              <SubmitButton variant="secondary" pendingText={t('Starting…')}>
                 <RefreshCw className="size-4" /> Read prices from {label}
               </SubmitButton>
             </ActionForm>
@@ -120,7 +126,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
         }
       />
 
-      <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200" aria-label="Platform">
+      <nav className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200" aria-label={t('Platform')}>
         {PRICE_PLATFORMS.map((p) => (
           <Link
             key={p}
@@ -143,7 +149,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
               <>
                 Add and connect one in{' '}
                 <Link className="text-brand-700 underline" href="/settings/integrations">
-                  Settings → Integrations
+                  {t('Settings → Integrations')}
                 </Link>
                 .
               </>
@@ -159,7 +165,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
               <Alert tone="amber">
                 {view.unlinked} {label} offer{view.unlinked === 1 ? ' is' : 's are'} not linked to a Shopify product, so {view.unlinked === 1 ? 'its' : 'their'} price can’t be changed here.{' '}
                 <Link className="font-medium underline" href="/inventory">
-                  Link them in Inventory
+                  {t('Link them in Inventory')}
                 </Link>
                 .
               </Alert>
@@ -172,7 +178,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                 {platform !== 'shopify' && <input type="hidden" name="platform" value={platform} />}
                 {sort !== 'name' && <input type="hidden" name="sort" value={sort} />}
                 {showAll && <input type="hidden" name="all" value="1" />}
-                <Input name="q" defaultValue={params.q} placeholder="Search name, SKU, EAN" className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
+                <Input name="q" defaultValue={params.q} placeholder={t('Search name, SKU, EAN')} className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
               </form>
               <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
                 {(Object.keys(SORTS) as Sort[]).map((s) => (
@@ -192,7 +198,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                 {view.rows.length ? null : 'Open Inventory and press “Import listings” to load your products from Shopify.'}
               </EmptyState>
             ) : (
-              <ActionForm action={pushPricesAction.bind(null, platform)} popup="Price update" showOk={false}>
+              <ActionForm action={pushPricesAction.bind(null, platform)} popup={t('Price update')} showOk={false}>
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/60 px-5 py-2.5 text-sm text-slate-600">
                   <span>
                     {listed.length} product{listed.length === 1 ? '' : 's'} on {label}
@@ -206,17 +212,17 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                       </>
                     )}
                   </span>
-                  <SubmitButton size="sm" pendingText="Sending…">
-                    Update every changed price on this page
+                  <SubmitButton size="sm" pendingText={t('Sending…')}>
+                    {t('Update every changed price on this page')}
                   </SubmitButton>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm max-md:block">
                     <thead className="text-left text-xs text-slate-500 max-md:hidden">
                       <tr>
-                        <th className="px-5 py-2 font-medium">Product</th>
+                        <th className="px-5 py-2 font-medium">{t('Product')}</th>
                         <th className="px-4 py-2 font-medium">Price on {label} (gross)</th>
-                        {platform !== 'shopify' && <th className="px-4 py-2 font-medium">Shopify price</th>}
+                        {platform !== 'shopify' && <th className="px-4 py-2 font-medium">{t('Shopify price')}</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 max-md:block">
@@ -228,7 +234,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                               <div className="min-w-0">
                                 <p className="font-medium leading-snug">{product.name}</p>
                                 <p className="mt-0.5 text-xs">
-                                  {hasRealSku(product.sku) ? <span className="font-mono text-slate-500">{product.sku}</span> : <Badge tone="amber">No SKU</Badge>}
+                                  {hasRealSku(product.sku) ? <span className="font-mono text-slate-500">{product.sku}</span> : <Badge tone="amber">{t('No SKU')}</Badge>}
                                   {product.ean && <span className="ml-2 font-mono text-slate-400">{product.ean}</span>}
                                 </p>
                               </div>
@@ -256,7 +262,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                           </td>
                           {platform !== 'shopify' && (
                             <td className="px-4 py-3 whitespace-nowrap max-md:px-0 max-md:py-1 max-md:text-sm max-md:text-slate-500">
-                              <span className="md:hidden">Shopify: </span>
+                              <span className="md:hidden">{t('Shopify:')} </span>
                               <span className="font-medium tabular-nums">{formatPrice(shopifyPrice)}</span>
                               {listings[0]?.price && shopifyPrice && <ShopifyGap shopify={shopifyPrice} here={listings[0].price} />}
                             </td>
@@ -272,20 +278,20 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
             <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
               {page > 1 ? (
                 <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page - 1) })}>
-                  Previous
+                  {t('Previous')}
                 </Link>
               ) : (
-                <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>Previous</span>
+                <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Previous')}</span>
               )}
               <span>
                 Page {page} of {pages}
               </span>
               {page < pages ? (
                 <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page + 1) })}>
-                  Next
+                  {t('Next')}
                 </Link>
               ) : (
-                <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>Next</span>
+                <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Next')}</span>
               )}
             </div>
           </Card>

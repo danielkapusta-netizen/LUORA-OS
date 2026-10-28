@@ -7,21 +7,25 @@ import { formatDate, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { duplicateSuggestions } from '@/server/services/customers';
 import { mergeAction } from '../actions';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Possible duplicate customers' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Possible duplicate customers') };
+}
 
 export default async function DuplicatesPage() {
+  const t = await getT();
   await requireUser();
   const groups = await duplicateSuggestions();
   return (
     <>
       <p className="mb-4 max-w-3xl text-sm text-slate-500">
-        Allegro and Empik hide buyers&apos; real e-mail, so the same person buying on two marketplaces shows up twice. These look like one person: the same phone
-        number, or the same name at the same postcode. Merging keeps the older customer and moves orders, notes and tasks to it.
+        {t('Allegro and Empik hide buyers\' real e-mail, so the same person buying on two marketplaces shows up twice. These look like one person: the same phone number, or the same name at the same postcode. Merging keeps the older customer and moves orders, notes and tasks to it.')}
       </p>
       {groups.length === 0 ? (
         <Card>
-          <EmptyState title="No likely duplicates" />
+          <EmptyState title={t('No likely duplicates')} />
         </Card>
       ) : (
         <div className="space-y-3">
@@ -44,8 +48,8 @@ export default async function DuplicatesPage() {
                               {MARKETPLACE_LABELS[m] ?? m}
                             </span>
                           ))}{' '}
-                          · {c.ordersCount} order(s) · {formatValue(c.revenue, 'pln')}
-                          {c.lastOrderAt && ` · last ${formatDate(c.lastOrderAt, false)}`}
+                          · {c.ordersCount} order(s) · {formatValue(c.revenue, 'pln', false, t.locale)}
+                          {c.lastOrderAt && ` · last ${formatDate(c.lastOrderAt, false, t.locale)}`}
                           {c.city && ` · ${c.city}`}
                         </span>
                       </p>
@@ -53,7 +57,7 @@ export default async function DuplicatesPage() {
                   </div>
                   <form action={mergeAction.bind(null, keep.id, rest.map((c) => c.id))}>
                     <SubmitButton variant="secondary" size="sm" confirm={`Merge into ${keep.displayName}? This can't be undone.`}>
-                      Merge into one
+                      {t('Merge into one')}
                     </SubmitButton>
                   </form>
                 </CardBody>

@@ -6,6 +6,7 @@
  * numeric conventions with a `zł` suffix — unambiguous for an international
  * founder, still native to the market.
  */
+import { intlTag, type Locale } from '@/lib/i18n/locales'
 
 const decimal = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 })
 const decimalPrecise = new Intl.NumberFormat('en-GB', {
@@ -59,30 +60,30 @@ export function formatSignedPLN(value: number): string {
 }
 
 /** `17 Jul 2026` */
-export function formatDate(value: Date | string | null): string {
+export function formatDate(value: Date | string | null, locale: Locale = 'en'): string {
   if (!value) return '—'
   const date = typeof value === 'string' ? new Date(value) : value
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  return date.toLocaleDateString(intlTag(locale), { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 /** `17 Jul` — for axis ticks and compact ranges. */
-export function formatDateShort(value: Date | string | null): string {
+export function formatDateShort(value: Date | string | null, locale: Locale = 'en'): string {
   if (!value) return '—'
   const date = typeof value === 'string' ? new Date(value) : value
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  return date.toLocaleDateString(intlTag(locale), { day: 'numeric', month: 'short' })
 }
 
 /** `Aug 26` — month buckets on a chart axis, where the day is meaningless. */
-export function formatMonthShort(value: string): string {
+export function formatMonthShort(value: string, locale: Locale = 'en'): string {
   const parsed = new Date(`${value}T00:00:00Z`)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+  return parsed.toLocaleDateString(intlTag(locale), { month: 'short', year: '2-digit', timeZone: 'UTC' })
 }
 
 /** `8 – 17 Jul 2026`, collapsing repeated month and year. */
-export function formatDateRange(from: Date | string | null, to: Date | string | null): string {
+export function formatDateRange(from: Date | string | null, to: Date | string | null, locale: Locale = 'en'): string {
   if (!from || !to) return '—'
   const start = typeof from === 'string' ? new Date(from) : from
   const end = typeof to === 'string' ? new Date(to) : to
@@ -92,9 +93,9 @@ export function formatDateRange(from: Date | string | null, to: Date | string | 
     start.getUTCFullYear() === end.getUTCFullYear() && start.getUTCMonth() === end.getUTCMonth()
 
   if (sameMonth) {
-    return `${start.getUTCDate()} – ${formatDate(end)}`
+    return `${start.getUTCDate()} – ${formatDate(end, locale)}`
   }
-  return `${formatDateShort(start)} – ${formatDate(end)}`
+  return `${formatDateShort(start, locale)} – ${formatDate(end, locale)}`
 }
 
 /** How stale the data is, phrased for a human. */

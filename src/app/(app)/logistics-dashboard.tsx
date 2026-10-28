@@ -9,6 +9,7 @@ import type { SessionUser } from '@/server/auth';
 import { labelReadyCount, ordersToShipByCourier, statusCounts } from '@/server/services/orders';
 import { listTasks } from '@/server/services/tasks';
 import { MyTasksHeading, TASK_LIMIT, tasksCardTone } from '@/components/tasks/my-tasks-heading';
+import { getT } from '@/lib/i18n/server';
 
 const TILES = [
   { status: 'new', label: 'New' },
@@ -19,16 +20,17 @@ const TILES = [
 
 /** The Dashboard for roles without analytics: orders to do, tasks, and who is carrying the parcels. No money anywhere. */
 export async function LogisticsDashboard({ user }: { user: SessionUser }) {
+  const t = await getT();
   const [counts, labelReady, couriers, tasks] = await Promise.all([statusCounts(), labelReadyCount(), ordersToShipByCourier(), listTasks({ assignee: user.id, status: 'open', limit: TASK_LIMIT })]);
   const todayKey = warsawToday();
-  const due = tasks.filter((t) => ['overdue', 'today'].includes(dueState(t, todayKey)));
+  const due = tasks.filter((item) => ['overdue', 'today'].includes(dueState(item, todayKey)));
   const brief = buildLogisticsBrief({ counts, couriers, tasksDue: due.length, tasksOpen: tasks.length }, user.name.split(' ')[0], warsawHour());
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Dashboard" description="What is waiting to be sent, and your tasks." />
+      <PageHeader title={t('Dashboard')} description={t('What is waiting to be sent, and your tasks.')} />
 
-      <section aria-label="Open orders" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label={t('Open orders')} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {TILES.map((o) => (
           <Link key={o.status} href={`/orders?status=${o.status}`} className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
             <p className="text-xs font-medium text-slate-500">{o.label}</p>
@@ -41,18 +43,18 @@ export async function LogisticsDashboard({ user }: { user: SessionUser }) {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="overflow-x-auto">
-          <CardHeader title="Parcels by courier" description="Orders still to be sent, by the delivery method the buyer chose." />
+          <CardHeader title={t('Parcels by courier')} description={t('Orders still to be sent, by the delivery method the buyer chose.')} />
           {couriers.length === 0 ? (
             <CardBody>
-              <p className="text-sm text-slate-500">Nothing is waiting to be sent.</p>
+              <p className="text-sm text-slate-500">{t('Nothing is waiting to be sent.')}</p>
             </CardBody>
           ) : (
             <table className="w-full">
               <thead className="border-b border-slate-100 bg-slate-50/60">
                 <tr>
-                  <th className={th}>Courier</th>
-                  <th className={cn(th, 'text-right')}>Orders</th>
-                  <th className={cn(th, 'text-right')}>With label</th>
+                  <th className={th}>{t('Courier')}</th>
+                  <th className={cn(th, 'text-right')}>{t('Orders')}</th>
+                  <th className={cn(th, 'text-right')}>{t('With label')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -88,7 +90,7 @@ export async function LogisticsDashboard({ user }: { user: SessionUser }) {
                 })}
               </ul>
             ) : (
-              <p className="text-sm text-slate-500">Nothing assigned to you.</p>
+              <p className="text-sm text-slate-500">{t('Nothing assigned to you.')}</p>
             )}
           </CardBody>
         </Card>

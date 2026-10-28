@@ -12,8 +12,12 @@ import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { ViewFilters } from '../filters';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Analytics · Trends' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Analytics · Trends') };
+}
 
 const OVERLAYS: { key: OverlayKey; label: string }[] = [
   { key: 'previous', label: 'Previous period' },
@@ -26,6 +30,7 @@ const GRAINS: Record<Granularity, string> = { day: 'Daily', week: 'Weekly', mont
 type Params = ViewParams & { metric?: string; grain?: string; show?: string };
 
 export default async function TrendsPage({ searchParams }: { searchParams: Promise<Params> }) {
+  const t = await getT();
   await requireUser();
   const params = await searchParams;
   const view = await analyticsView(params, 'quarter');
@@ -53,12 +58,12 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
     <div className="space-y-6">
       <ViewFilters view={view} path="/analytics/trends" extra={current} />
       <div className="flex flex-wrap items-center gap-2">
-        <Pills label="Metric" options={metrics.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))} active={metric} href={(v) => link({ metric: v })} />
-        <Pills label="Grain" options={grains.map((g) => ({ value: g, label: GRAINS[g] }))} active={grain} href={(v) => link({ grain: v })} />
+        <Pills label={t('Metric')} options={metrics.map((m) => ({ value: m, label: METRIC_DEFINITIONS[m].label }))} active={metric} href={(v) => link({ metric: v })} />
+        <Pills label={t('Grain')} options={grains.map((g) => ({ value: g, label: GRAINS[g] }))} active={grain} href={(v) => link({ grain: v })} />
       </div>
       {view.snapshot.isEmpty ? (
         <Card>
-          <EmptyState title="No orders in this period" />
+          <EmptyState title={t('No orders in this period')} />
         </Card>
       ) : (
         <>
@@ -67,17 +72,17 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{definition.label}</p>
-                  <p className="text-3xl font-semibold tabular-nums">{formatValue(series.total, definition.format)}</p>
+                  <p className="text-3xl font-semibold tabular-nums">{formatValue(series.total, definition.format, false, t.locale)}</p>
                   <div className="flex items-center gap-2">
                     <Delta value={series.changePct} unit={definition.format === 'percent' ? 'pp' : '%'} higherIsBetter={definition.higherIsBetter} />
                     <span className="text-xs text-slate-400">{period.comparisonLabel}</span>
                     {series.projectedTotal !== null && shown.has('forecast') && (
-                      <span className="text-xs text-slate-500">· projected {formatValue(series.projectedTotal, definition.format)}</span>
+                      <span className="text-xs text-slate-500">· projected {formatValue(series.projectedTotal, definition.format, false, t.locale)}</span>
                     )}
                   </div>
                   <p className="mt-1 max-w-xl text-xs text-slate-500">{definition.description}</p>
                 </div>
-                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Overlays">
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('Overlays')}>
                   {OVERLAYS.map((o) => {
                     // A previous window before trading began would show a false collapse.
                     const available = series.available[o.key] && (o.key !== 'previous' || period.previousCoverage === 'full');
@@ -92,7 +97,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
                         {o.label}
                       </Link>
                     ) : (
-                      <span key={o.key} className="rounded-full border border-dashed border-slate-200 px-3 py-1 text-xs text-slate-400" title="Not enough history">
+                      <span key={o.key} className="rounded-full border border-dashed border-slate-200 px-3 py-1 text-xs text-slate-400" title={t('Not enough history')}>
                         {o.label}
                       </span>
                     );
@@ -114,7 +119,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
             </CardBody>
           </Card>
           <section>
-            <SectionTitle title="Weekday rhythm" description="Average revenue per weekday in this period, so a range with two Mondays and one Sunday compares fairly." />
+            <SectionTitle title={t('Weekday rhythm')} description={t('Average revenue per weekday in this period, so a range with two Mondays and one Sunday compares fairly.')} />
             <Card>
               <CardBody>
                 <WeekdayBars data={weekdays.map((w) => ({ label: w.label, value: Math.round(w.avgRevenuePLN) }))} />

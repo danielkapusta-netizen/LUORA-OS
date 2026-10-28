@@ -10,6 +10,9 @@ import type { ChannelPerformance, HealthScore, Insight, Kpi } from '@/lib/analyt
 import { cn } from '@/lib/utils';
 import { Sparkline } from './charts';
 import { formatBucket, formatValue, MARKETPLACE_COLORS, SERIES } from './format';
+import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
+import { intlTag } from '@/lib/i18n/locales';
 
 /** Builds a link to the current page with some query parameters changed (undefined removes one). */
 export function hrefWith(path: string, current: Record<string, string | undefined>, next: Record<string, string | undefined>): string {
@@ -20,7 +23,8 @@ export function hrefWith(path: string, current: Record<string, string | undefine
 }
 
 /** A row of link "pills"; the active one is filled. Used for periods, metrics and dimensions. */
-export function Pills({ options, active, href, label }: { options: { value: string; label: string }[]; active: string; href: (value: string) => string; label: string }) {
+export async function Pills({ options, active, href, label }: { options: { value: string; label: string }[]; active: string; href: (value: string) => string; label: string }) {
+  const t = await getT();
   return (
     <nav aria-label={label} className="inline-flex flex-wrap gap-1 rounded-full border border-slate-200 bg-white p-1">
       {options.map((o) => (
@@ -33,7 +37,7 @@ export function Pills({ options, active, href, label }: { options: { value: stri
             o.value === active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
           )}
         >
-          {o.label}
+          {t(o.label)}
         </Link>
       ))}
     </nav>
@@ -53,8 +57,9 @@ export function SectionTitle({ title, description, actions }: { title: string; d
 }
 
 /** Change against the comparison period; red only when the change is bad news. */
-export function Delta({ value, unit = '%', higherIsBetter = true }: { value: number | null; unit?: '%' | 'pp'; higherIsBetter?: boolean }) {
-  if (value === null || !Number.isFinite(value)) return <span className="text-xs text-slate-400">no comparison</span>;
+export async function Delta({ value, unit = '%', higherIsBetter = true }: { value: number | null; unit?: '%' | 'pp'; higherIsBetter?: boolean }) {
+  const t = await getT();
+  if (value === null || !Number.isFinite(value)) return <span className="text-xs text-slate-400">{t('no comparison')}</span>;
   const up = value > 0;
   const good = Math.abs(value) < 0.05 ? null : up === higherIsBetter;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
@@ -68,7 +73,8 @@ export function Delta({ value, unit = '%', higherIsBetter = true }: { value: num
   );
 }
 
-export function KpiCard({ kpi, comparisonLabel, granularity = 'day' }: { kpi: Kpi; comparisonLabel: string; granularity?: string }) {
+export async function KpiCard({ kpi, comparisonLabel, granularity = 'day' }: { kpi: Kpi; comparisonLabel: string; granularity?: string }) {
+  const t = await getT();
   const color = kpi.key === 'profit' || kpi.key === 'margin' ? SERIES.profit : SERIES.revenue;
   const change = kpi.isRate ? (kpi.previous === null ? null : kpi.value - kpi.previous) : kpi.changePct;
   return (
@@ -77,15 +83,15 @@ export function KpiCard({ kpi, comparisonLabel, granularity = 'day' }: { kpi: Kp
         <p className="text-xs font-medium uppercase tracking-wide text-slate-500" title={kpi.hint}>
           {kpi.label}
         </p>
-        <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatValue(kpi.value, kpi.format)}</p>
+        <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatValue(kpi.value, kpi.format, false, t.locale)}</p>
         <div className="flex items-center gap-1.5">
           <Delta value={change} unit={kpi.isRate ? 'pp' : '%'} higherIsBetter={kpi.higherIsBetter ?? true} />
           {change !== null && <span className="text-xs text-slate-400">{comparisonLabel}</span>}
         </div>
-        <Sparkline values={kpi.series} color={color} label={`${kpi.label} over the period`} />
+        <Sparkline values={kpi.series} color={color} label={t('{label} over the period', { label: kpi.label })} />
         {kpi.peak && (
           <p className="text-xs text-slate-500">
-            Best {/^\d{4}-\d{2}-\d{2}$/.test(kpi.peak.label) ? formatBucket(kpi.peak.label, granularity) : kpi.peak.label}: {formatValue(kpi.peak.value, kpi.format)}
+            {t('Best {when}: {value}', { when: /^\d{4}-\d{2}-\d{2}$/.test(kpi.peak.label) ? formatBucket(kpi.peak.label, granularity, t.locale) : kpi.peak.label, value: formatValue(kpi.peak.value, kpi.format, false, t.locale) })}
           </p>
         )}
       </CardBody>
@@ -94,12 +100,13 @@ export function KpiCard({ kpi, comparisonLabel, granularity = 'day' }: { kpi: Kp
 }
 
 const SEVERITY = {
-  critical: { tone: 'red', label: 'Critical' },
-  attention: { tone: 'amber', label: 'Attention' },
-  info: { tone: 'blue', label: 'Info' },
+  critical: { tone: 'red', label: msg('Critical') },
+  attention: { tone: 'amber', label: msg('Attention') },
+  info: { tone: 'blue', label: msg('Info') },
 } as const;
 
-export function InsightCard({ insight, productHref }: { insight: Insight; productHref?: (key: string) => string }) {
+export async function InsightCard({ insight, productHref }: { insight: Insight; productHref?: (key: string) => string }) {
+  const t = await getT();
   const Icon = insight.kind === 'risk' ? ShieldAlert : Lightbulb;
   const sev = SEVERITY[insight.severity];
   return (
@@ -110,18 +117,18 @@ export function InsightCard({ insight, productHref }: { insight: Insight; produc
           <h3 className="text-sm font-semibold text-slate-900">{insight.title}</h3>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge tone={sev.tone}>{sev.label}</Badge>
-          <Badge tone={insight.kind === 'risk' ? 'orange' : 'green'}>{insight.kind === 'risk' ? 'Risk' : 'Opportunity'}</Badge>
-          {insight.confidence && <Badge tone="gray">{insight.confidence} confidence</Badge>}
+          <Badge tone={sev.tone}>{t(sev.label)}</Badge>
+          <Badge tone={insight.kind === 'risk' ? 'orange' : 'green'}>{insight.kind === 'risk' ? t('Risk') : t('Opportunity')}</Badge>
+          {insight.confidence && <Badge tone="gray">{t('{level} confidence', { level: t(insight.confidence) })}</Badge>}
           {insight.impactPLN !== null && (
             <span className="text-xs text-slate-500">
-              <span className="font-semibold text-slate-800">{formatValue(insight.impactPLN, 'pln')}</span> {insight.impactLabel}
+              <span className="font-semibold text-slate-800">{formatValue(insight.impactPLN, 'pln', false, t.locale)}</span> {insight.impactLabel}
             </span>
           )}
         </div>
         <p className="text-sm text-slate-600">{insight.why}</p>
         <p className="text-sm text-slate-800">
-          <span className="font-medium">Do: </span>
+          <span className="font-medium">{t('Do:')} </span>
           {insight.action}
         </p>
         {insight.evidence?.length ? (
@@ -133,7 +140,7 @@ export function InsightCard({ insight, productHref }: { insight: Insight; produc
         ) : null}
         {insight.entity?.type === 'product' && productHref && (
           <Link href={productHref(insight.entity.key)} className="text-xs font-medium text-brand-700 hover:underline">
-            Open {insight.entity.label} →
+            {t('Open {name} →', { name: insight.entity.label })}
           </Link>
         )}
       </CardBody>
@@ -142,21 +149,22 @@ export function InsightCard({ insight, productHref }: { insight: Insight; produc
 }
 
 const BANDS = {
-  strong: { label: 'Strong', className: 'text-emerald-700', bar: 'bg-emerald-600' },
-  healthy: { label: 'Healthy', className: 'text-emerald-700', bar: 'bg-emerald-500' },
-  watch: { label: 'Watch', className: 'text-amber-700', bar: 'bg-amber-500' },
-  'at-risk': { label: 'At risk', className: 'text-red-700', bar: 'bg-red-600' },
+  strong: { label: msg('Strong'), className: 'text-emerald-700', bar: 'bg-emerald-600' },
+  healthy: { label: msg('Healthy'), className: 'text-emerald-700', bar: 'bg-emerald-500' },
+  watch: { label: msg('Watch'), className: 'text-amber-700', bar: 'bg-amber-500' },
+  'at-risk': { label: msg('At risk'), className: 'text-red-700', bar: 'bg-red-600' },
 } as const;
 
-export function HealthCard({ health }: { health: HealthScore }) {
+export async function HealthCard({ health }: { health: HealthScore }) {
+  const t = await getT();
   const band = BANDS[health.band];
   return (
     <Card>
       <CardBody className="grid grid-cols-1 gap-6 md:grid-cols-[220px_1fr]">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Business health</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('Business health')}</p>
           <p className="mt-1 text-5xl font-semibold tabular-nums text-slate-900">{Math.round(health.score)}</p>
-          <p className={cn('text-sm font-semibold', band.className)}>{band.label}</p>
+          <p className={cn('text-sm font-semibold', band.className)}>{t(band.label)}</p>
           <p className="mt-2 text-sm text-slate-600">{health.headline}</p>
         </div>
         <ul className="space-y-3">
@@ -164,7 +172,7 @@ export function HealthCard({ health }: { health: HealthScore }) {
             <li key={c.key}>
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="font-medium text-slate-800">
-                  {c.label} <span className="text-xs font-normal text-slate-400">· weight {Math.round(c.weight * 100)}%</span>
+                  {c.label} <span className="text-xs font-normal text-slate-400">· {t('weight {pct}%', { pct: Math.round(c.weight * 100) })}</span>
                 </span>
                 <span className="tabular-nums text-slate-600">{c.value}</span>
               </div>
@@ -180,7 +188,8 @@ export function HealthCard({ health }: { health: HealthScore }) {
   );
 }
 
-export function BriefCard({ brief, atStake }: { brief: ExecutiveBrief; atStake: number }) {
+export async function BriefCard({ brief, atStake }: { brief: ExecutiveBrief; atStake: number }) {
+  const t = await getT();
   return (
     <Card className="border-brand-100 bg-gradient-to-br from-white to-brand-50/50">
       <CardBody className="space-y-2 py-5">
@@ -196,7 +205,8 @@ export function BriefCard({ brief, atStake }: { brief: ExecutiveBrief; atStake: 
         {brief.attentionCount > 0 && (
           <p className="flex items-center gap-1.5 pt-1 text-sm text-slate-600">
             <AlertTriangle className="size-4 text-amber-600" aria-hidden />
-            {brief.attentionCount} finding(s) need a decision{atStake > 0 && <> · about {formatValue(atStake, 'pln')} at stake</>}.
+            {t.plural(brief.attentionCount, '{n} finding needs a decision', '{n} findings need a decision')}
+            {atStake > 0 && <> · {t('about {amount} at stake', { amount: formatValue(atStake, 'pln', false, t.locale) })}</>}.
           </p>
         )}
       </CardBody>
@@ -206,7 +216,8 @@ export function BriefCard({ brief, atStake }: { brief: ExecutiveBrief; atStake: 
 
 const TONES = { positive: 'text-emerald-700', negative: 'text-red-700', neutral: 'text-slate-900', opportunity: 'text-blue-700' } as const;
 
-export function QuestionCard({ answer }: { answer: QuestionAnswer }) {
+export async function QuestionCard({ answer }: { answer: QuestionAnswer }) {
+  const t = await getT();
   return (
     <Card>
       <CardBody className="space-y-1.5">
@@ -217,7 +228,7 @@ export function QuestionCard({ answer }: { answer: QuestionAnswer }) {
         <p className="text-sm text-slate-600">{answer.explanation}</p>
         {answer.recommendation && (
           <p className="text-sm text-slate-800">
-            <span className="font-medium">Do: </span>
+            <span className="font-medium">{t('Do:')} </span>
             {answer.recommendation}
           </p>
         )}
@@ -227,7 +238,8 @@ export function QuestionCard({ answer }: { answer: QuestionAnswer }) {
 }
 
 /** Revenue share and margin per marketplace, as proportional bars with the figures written out. */
-export function ChannelBars({ channels }: { channels: ChannelPerformance[] }) {
+export async function ChannelBars({ channels }: { channels: ChannelPerformance[] }) {
+  const t = await getT();
   return (
     <ul className="space-y-4">
       {channels.map((c) => (
@@ -238,13 +250,13 @@ export function ChannelBars({ channels }: { channels: ChannelPerformance[] }) {
               {channelName(c.source)}
             </span>
             <span className="tabular-nums text-slate-600">
-              {formatValue(c.revenuePLN, 'pln')} · {c.orders} orders · margin {formatValue(c.marginPct, 'percent')} · basket {formatValue(c.avgOrderValuePLN, 'pln')}
+              {formatValue(c.revenuePLN, 'pln', false, t.locale)} · {t.plural(c.orders, '{n} order', '{n} orders')} · {t('margin {value}', { value: formatValue(c.marginPct, 'percent', false, t.locale) })} · {t('basket {value}', { value: formatValue(c.avgOrderValuePLN, 'pln', false, t.locale) })}
             </span>
           </div>
           <div className="mt-1.5 h-2 rounded-full bg-slate-100">
             <div className="h-2 rounded-full" style={{ width: `${Math.max(1, c.revenueShare * 100)}%`, background: MARKETPLACE_COLORS[c.source] }} />
           </div>
-          <p className="mt-0.5 text-xs text-slate-500">{Math.round(c.revenueShare * 100)}% of revenue</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t('{pct}% of revenue', { pct: Math.round(c.revenueShare * 100) })}</p>
         </li>
       ))}
     </ul>
@@ -308,18 +320,19 @@ export function Heatmap({
 }
 
 /** Data-quality footer: how much of the revenue rests on known costs and reported fees. */
-export function CoverageNote({ costCoverage, estimatedFeeLines, totalLines, lastOrder }: { costCoverage: number; estimatedFeeLines: number; totalLines: number; lastOrder: Date | null }) {
+export async function CoverageNote({ costCoverage, estimatedFeeLines, totalLines, lastOrder }: { costCoverage: number; estimatedFeeLines: number; totalLines: number; lastOrder: Date | null }) {
+  const t = await getT();
   return (
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-200 pt-4 text-xs text-slate-500">
       <span className="inline-flex items-center gap-1">
-        <CheckCircle2 className="size-3.5" aria-hidden /> {Math.round(costCoverage * 100)}% of revenue has a known product cost
+        <CheckCircle2 className="size-3.5" aria-hidden /> {t('{pct}% of revenue has a known product cost', { pct: Math.round(costCoverage * 100) })}
       </span>
       <span>
-        {estimatedFeeLines} of {totalLines} lines use an estimated fee (no fee reported yet)
+        {t('{n} of {total} lines use an estimated fee (no fee reported yet)', { n: estimatedFeeLines, total: totalLines })}
       </span>
-      {lastOrder && <span>latest order {lastOrder.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+      {lastOrder && <span>{t('latest order {date}', { date: lastOrder.toLocaleDateString(intlTag(t.locale), { day: 'numeric', month: 'short', year: 'numeric' }) })}</span>}
       <Link href="/settings/costs" className="text-brand-700 hover:underline">
-        Costs & margins →
+        {t('Costs & margins →')}
       </Link>
     </p>
   );

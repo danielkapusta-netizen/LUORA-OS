@@ -34,7 +34,7 @@ export function MonthGrid({
           <div key={w} className="grid grid-cols-7">
             {week.map(({ day, inMonth }) => {
               const items = tasksByDay[day] ?? [];
-              const open = items.filter((t) => t.status !== 'done').length;
+              const open = items.filter((task) => task.status !== 'done').length;
               const isToday = day === today;
               return (
                 <div
@@ -59,19 +59,19 @@ export function MonthGrid({
                     {open > 0 && <span className="text-[11px] tabular-nums text-slate-400">{open} open</span>}
                   </div>
                   <ul className="space-y-1">
-                    {items.slice(0, SHOWN).map((t) => (
-                      <li key={t.id}>
+                    {items.slice(0, SHOWN).map((task) => (
+                      <li key={task.id}>
                         <Link
-                          href={`/tasks/${t.id}`}
-                          title={`${t.title}${timeRange(t.startTime, t.endTime) ? ` (${timeRange(t.startTime, t.endTime)})` : ''}`}
+                          href={`/tasks/${task.id}`}
+                          title={`${task.title}${timeRange(task.startTime, task.endTime) ? ` (${timeRange(task.startTime, task.endTime)})` : ''}`}
                           className={cn(
                             'block truncate rounded-md px-1.5 py-0.5 text-[11px] leading-snug hover:brightness-95',
-                            projectColor(t.project?.color).soft,
-                            t.status === 'done' && 'line-through opacity-50',
+                            projectColor(task.project?.color).soft,
+                            task.status === 'done' && 'line-through opacity-50',
                           )}
                         >
-                          {t.startTime && <span className="mr-1 tabular-nums opacity-70">{t.startTime}</span>}
-                          {t.title}
+                          {task.startTime && <span className="mr-1 tabular-nums opacity-70">{task.startTime}</span>}
+                          {task.title}
                         </Link>
                       </li>
                     ))}

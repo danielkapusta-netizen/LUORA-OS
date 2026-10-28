@@ -17,19 +17,19 @@ export function TaskTabs() {
   const who = useSearchParams().get('who');
   return (
     <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
-      {TABS.map((t, i) => {
+      {TABS.map((tab, i) => {
         // A single task's page sits under /tasks but belongs to the overview.
-        const active = i === 0 ? pathname === '/tasks' || !/^\/tasks\/(board|calendar|projects)/.test(pathname) : pathname.startsWith(t.href);
+        const active = i === 0 ? pathname === '/tasks' || !/^\/tasks\/(board|calendar|projects)/.test(pathname) : pathname.startsWith(tab.href);
         return (
           <Link
-            key={t.href}
-            href={who ? `${t.href}?who=${encodeURIComponent(who)}` : t.href}
+            key={tab.href}
+            href={who ? `${tab.href}?who=${encodeURIComponent(who)}` : tab.href}
             className={cn(
               '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium max-md:px-4 max-md:py-3',
               active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
-            {t.label}
+            {tab.label}
           </Link>
         );
       })}

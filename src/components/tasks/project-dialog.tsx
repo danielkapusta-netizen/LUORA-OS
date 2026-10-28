@@ -8,6 +8,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui';
 import { PROJECT_COLORS, PROJECT_COLOR_KEYS } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
 import { Modal, useModal } from './modal';
+import { useT } from '@/lib/i18n/client';
 
 interface ProjectValues {
   id: string;
@@ -18,6 +19,7 @@ interface ProjectValues {
 }
 
 function ProjectForm({ people, project }: { people: { id: string; name: string }[]; project?: ProjectValues }) {
+  const t = useT();
   const modal = useModal();
   const [state, action] = useActionState(project ? updateProjectAction.bind(null, project.id) : createProjectAction, null);
 
@@ -27,14 +29,14 @@ function ProjectForm({ people, project }: { people: { id: string; name: string }
 
   return (
     <form action={action} className="space-y-4">
-      <Field label="Name">
-        <Input name="name" required maxLength={80} defaultValue={project?.name} placeholder="e.g. Autumn campaign" autoFocus />
+      <Field label={t('Name')}>
+        <Input name="name" required maxLength={80} defaultValue={project?.name} placeholder={t('e.g. Autumn campaign')} autoFocus />
       </Field>
-      <Field label="What is it about?">
-        <Textarea name="description" rows={3} maxLength={5000} defaultValue={project?.description ?? ''} placeholder="A sentence or two for the team" />
+      <Field label={t('What is it about?')}>
+        <Textarea name="description" rows={3} maxLength={5000} defaultValue={project?.description ?? ''} placeholder={t('A sentence or two for the team')} />
       </Field>
       <div className="space-y-1">
-        <span className="text-xs font-medium text-slate-600">Colour</span>
+        <span className="text-xs font-medium text-slate-600">{t('Colour')}</span>
         <div className="flex flex-wrap gap-2.5">
           {PROJECT_COLOR_KEYS.map((key) => (
             <label key={key} className="cursor-pointer">
@@ -47,9 +49,9 @@ function ProjectForm({ people, project }: { people: { id: string; name: string }
           ))}
         </div>
       </div>
-      <Field label="Owner">
+      <Field label={t('Owner')}>
         <Select name="ownerId" defaultValue={project?.ownerId ?? ''}>
-          <option value="">Nobody in particular</option>
+          <option value="">{t('Nobody in particular')}</option>
           {people.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -60,9 +62,9 @@ function ProjectForm({ people, project }: { people: { id: string; name: string }
       {state?.error && <p className="text-sm text-red-700">{state.error}</p>}
       <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
         <button type="button" onClick={() => modal?.close()} className="h-10 rounded-full px-5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-          Cancel
+          {t('Cancel')}
         </button>
-        <SubmitButton pendingText="Saving…">{project ? 'Save project' : 'Create project'}</SubmitButton>
+        <SubmitButton pendingText={t('Saving…')}>{project ? 'Save project' : 'Create project'}</SubmitButton>
       </div>
     </form>
   );

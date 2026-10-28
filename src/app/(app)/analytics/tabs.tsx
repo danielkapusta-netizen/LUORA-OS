@@ -29,18 +29,18 @@ export function AnalyticsTabs() {
   const query = kept.toString();
   return (
     <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
-      {TABS.map((t) => {
-        const active = t.exact ? pathname === t.href : pathname.startsWith(t.href);
+      {TABS.map((item) => {
+        const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
         return (
           <Link
-            key={t.href}
-            href={t.exact || !query ? t.href : `${t.href}?${query}`}
+            key={item.href}
+            href={item.exact || !query ? item.href : `${item.href}?${query}`}
             className={cn(
               '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium max-md:px-4 max-md:py-3',
               active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
-            {t.label}
+            {item.label}
           </Link>
         );
       })}

@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useFormStatus } from 'react-dom';
+import { useT } from '@/lib/i18n/client';
 import type { ActionResult } from '@/lib/action-result';
 import { cn } from '@/lib/utils';
 import { buttonClass } from './ui';
@@ -25,6 +26,7 @@ export function SubmitButton({
   value?: string;
   confirm?: string;
 }) {
+  const t = useT();
   const { pending } = useFormStatus();
   return (
     <button
@@ -37,7 +39,7 @@ export function SubmitButton({
         if (confirm && !window.confirm(confirm)) e.preventDefault();
       }}
     >
-      {pending ? (pendingText ?? 'Working…') : children}
+      {pending ? (pendingText ?? t('Working…')) : children}
     </button>
   );
 }
@@ -61,6 +63,7 @@ export function ActionForm({
   /** Also shows the result as a pop-up in the corner (title = what finished). */
   popup?: string;
 }) {
+  const t = useT();
   const [state, formAction] = useActionState(action, null);
   const ref = useRef<HTMLFormElement>(null);
   const [dismissed, setDismissed] = useState<ActionResult>(null);
@@ -88,9 +91,9 @@ export function ActionForm({
         >
           <div className="flex items-start justify-between gap-3">
             <p className={cn('text-sm font-semibold', shown.error ? 'text-red-700' : 'text-emerald-700')}>
-              {popup} {shown.error ? 'failed' : 'finished'}
+              {shown.error ? t('{what} failed', { what: popup }) : t('{what} finished', { what: popup })}
             </p>
-            <button type="button" className="text-slate-400 hover:text-slate-700" aria-label="Close" onClick={() => setDismissed(state)}>
+            <button type="button" className="text-slate-400 hover:text-slate-700" aria-label={t('Close')} onClick={() => setDismissed(state)}>
               ×
             </button>
           </div>

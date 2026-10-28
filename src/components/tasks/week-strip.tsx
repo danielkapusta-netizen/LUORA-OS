@@ -3,12 +3,13 @@ import Link from 'next/link';
 import { Card } from '@/components/ui';
 import { dayParts } from '@/lib/tasks/dates';
 import { cn } from '@/lib/utils';
+import { getT } from '@/lib/i18n/server';
 
 /**
  * The week with big day numbers, as on the reference design: a column on wide screens, a row of seven on narrow
  * ones. Each day shows how many open tasks are planned; today is marked; a click picks the day.
  */
-export function WeekStrip({
+export async function WeekStrip({
   days,
   selected,
   today,
@@ -27,15 +28,16 @@ export function WeekStrip({
   nextHref: string;
   monthHref: string;
 }) {
+  const t = await getT();
   return (
     <Card className="p-4 xl:px-5">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-900">Calendar</h2>
+        <h2 className="text-base font-semibold text-slate-900">{t('Calendar')}</h2>
         <div className="flex items-center">
-          <Link href={previousHref} aria-label="Previous week" className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
+          <Link href={previousHref} aria-label={t('Previous week')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
             <ChevronLeft className="size-4" />
           </Link>
-          <Link href={nextHref} aria-label="Next week" className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
+          <Link href={nextHref} aria-label={t('Next week')} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100">
             <ChevronRight className="size-4" />
           </Link>
         </div>
@@ -78,7 +80,7 @@ export function WeekStrip({
         })}
       </ol>
       <Link href={monthHref} className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-brand-700 hover:underline">
-        <CalendarDays className="size-3.5" aria-hidden /> Open the month
+        <CalendarDays className="size-3.5" aria-hidden /> {t('Open the month')}
       </Link>
     </Card>
   );

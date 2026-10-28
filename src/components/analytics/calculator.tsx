@@ -7,6 +7,7 @@ import type { Channel, ProductPerformance } from '@/lib/analytics/types';
 import { cn } from '@/lib/utils';
 import { Waterfall } from './charts';
 import { formatValue } from './format';
+import { useT } from '@/lib/i18n/client';
 
 const CHANNELS: { value: Channel; label: string }[] = [
   { value: 'allegro', label: 'Allegro' },
@@ -46,6 +47,7 @@ export function Calculator({
   save: (c: Candidate) => Promise<string>;
   remove: (id: string) => Promise<void>;
 }) {
+  const t = useT();
   const [candidate, setCandidate] = useState<Candidate>(() => emptyCandidate(crypto.randomUUID()));
   const [pending, start] = useTransition();
   const result = evaluateCandidate(candidate, { rates });
@@ -58,16 +60,16 @@ export function Calculator({
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-4 rounded-2xl border border-black/5 bg-white p-5">
-          <Field label="Product" hint="For your own reference in the comparison table.">
-            <Input value={candidate.label} onChange={(e) => setCandidate({ ...candidate, label: e.target.value })} placeholder="e.g. Beauty of Joseon Relief Sun SPF50" />
+          <Field label={t('Product')} hint={t('For your own reference in the comparison table.')}>
+            <Input value={candidate.label} onChange={(e) => setCandidate({ ...candidate, label: e.target.value })} placeholder={t('e.g. Beauty of Joseon Relief Sun SPF50')} />
           </Field>
           <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
-            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">What it costs you</legend>
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('What it costs you')}</legend>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Supplier unit price">
+              <Field label={t('Supplier unit price')}>
                 <Input inputMode="decimal" value={cost.supplierUnitPrice || ''} onChange={(e) => setCost({ supplierUnitPrice: num(e.target.value) })} />
               </Field>
-              <Field label="Currency">
+              <Field label={t('Currency')}>
                 <Select
                   value={cost.currency}
                   onChange={(e) => {
@@ -83,28 +85,28 @@ export function Calculator({
                 </Select>
               </Field>
               {cost.currency !== 'PLN' && (
-                <Field label={`PLN per 1 ${cost.currency}`} hint="Today's NBP rate; change it to your bank's.">
+                <Field label={`PLN per 1 ${cost.currency}`} hint={t('Today\'s NBP rate; change it to your bank\'s.')}>
                   <Input inputMode="decimal" value={cost.fxRateToPLN || ''} onChange={(e) => setCost({ fxRateToPLN: num(e.target.value) })} />
                 </Field>
               )}
-              <Field label="Freight per unit, PLN">
+              <Field label={t('Freight per unit, PLN')}>
                 <Input inputMode="decimal" value={cost.inboundFreightPLN || ''} onChange={(e) => setCost({ inboundFreightPLN: num(e.target.value) })} />
               </Field>
-              <Field label="Duty per unit, PLN">
+              <Field label={t('Duty per unit, PLN')}>
                 <Input inputMode="decimal" value={cost.dutyPLN || ''} onChange={(e) => setCost({ dutyPLN: num(e.target.value) })} />
               </Field>
             </div>
             <p className="text-sm">
-              Landed cost: <span className="font-semibold tabular-nums">{result.landedCostPLN.toFixed(2)} zł</span>
+              {t('Landed cost:')} <span className="font-semibold tabular-nums">{result.landedCostPLN.toFixed(2)} zł</span>
             </p>
           </fieldset>
           <fieldset className="space-y-3 rounded-xl border border-slate-200 p-3">
-            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Where you sell it</legend>
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{t('Where you sell it')}</legend>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Gross selling price, zł">
+              <Field label={t('Gross selling price, zł')}>
                 <Input inputMode="decimal" value={candidate.sellingPricePLN || ''} onChange={(e) => setCandidate({ ...candidate, sellingPricePLN: num(e.target.value) })} />
               </Field>
-              <Field label="Marketplace">
+              <Field label={t('Marketplace')}>
                 <Select value={candidate.channel} onChange={(e) => setCandidate({ ...candidate, channel: e.target.value as Channel })}>
                   {CHANNELS.map((c) => (
                     <option key={c.value} value={c.value}>
@@ -114,7 +116,7 @@ export function Calculator({
                 </Select>
               </Field>
               <Field
-                label="Fees, % (optional)"
+                label={t('Fees, % (optional)')}
                 hint={rate.measured ? `Your measured rate: ${(rate.rate * 100).toFixed(1)}% over ${rate.sampleLines} lines.` : `No sales yet; ${(rate.rate * 100).toFixed(0)}% assumed.`}
               >
                 <Input
@@ -135,7 +137,7 @@ export function Calculator({
               {pending ? 'Saving…' : 'Save for comparison'}
             </button>
             <button type="button" className={buttonClass('secondary')} onClick={() => setCandidate(emptyCandidate(crypto.randomUUID()))}>
-              New
+              {t('New')}
             </button>
           </div>
         </div>
@@ -167,7 +169,7 @@ export function Calculator({
               </dl>
               {result.suggestedPricePLN !== null && (
                 <p className="text-sm text-slate-600">
-                  Suggested price for the target margin: <span className="font-semibold">{result.suggestedPricePLN.toFixed(2)} zł</span>
+                  {t('Suggested price for the target margin:')} <span className="font-semibold">{result.suggestedPricePLN.toFixed(2)} zł</span>
                 </p>
               )}
               {benchmark && (
@@ -185,10 +187,10 @@ export function Calculator({
                 />
               )}
               <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
-                {result.targets.map((t) => (
-                  <li key={t.label} className="flex justify-between gap-2">
-                    <span className={t.achieved ? 'text-emerald-700' : 'text-slate-600'}>{t.label}</span>
-                    <span className="tabular-nums">{t.requiredPricePLN === null ? '—' : `${t.requiredPricePLN.toFixed(2)} zł`}</span>
+                {result.targets.map((target) => (
+                  <li key={target.label} className="flex justify-between gap-2">
+                    <span className={target.achieved ? 'text-emerald-700' : 'text-slate-600'}>{target.label}</span>
+                    <span className="tabular-nums">{target.requiredPricePLN === null ? '—' : `${target.requiredPricePLN.toFixed(2)} zł`}</span>
                   </li>
                 ))}
               </ul>
@@ -226,7 +228,7 @@ export function Calculator({
                     <td className="px-3 py-2">{r.verdict.kind}</td>
                     <td className="px-3 py-2 text-right">
                       <button type="button" className="text-xs text-red-700 hover:underline" onClick={() => start(async () => remove(c.id))}>
-                        Delete
+                        {t('Delete')}
                       </button>
                     </td>
                   </tr>

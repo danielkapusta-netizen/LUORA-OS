@@ -4,15 +4,17 @@ import { buttonClass } from '@/components/ui';
 import { MARKETPLACE_LABELS } from '@/lib/utils';
 import type { Invoice } from '@/server/db/schema';
 import { createInvoiceForOrderAction, retryInvoiceFromShipmentsAction } from './actions';
+import { getT } from '@/lib/i18n/server';
 
 /**
  * The invoice of one order in the Shipments list: a button to create it, then a link to the PDF
  * (like a label). Allegro and Empik invoices are also attached to the order; Shopify's stay a PDF.
  */
-export function InvoiceCell({ orderId, marketplace, invoice, uploads }: { orderId: string; marketplace: string; invoice: Invoice | undefined; uploads: boolean }) {
+export async function InvoiceCell({ orderId, marketplace, invoice, uploads }: { orderId: string; marketplace: string; invoice: Invoice | undefined; uploads: boolean }) {
+  const t = await getT();
   const create = (label: string) => (
     <ActionForm action={createInvoiceForOrderAction.bind(null, orderId)} showOk={false}>
-      <SubmitButton size="sm" variant="secondary" pendingText="Requesting…">
+      <SubmitButton size="sm" variant="secondary" pendingText={t('Requesting…')}>
         <FileText className="size-3.5" /> {label}
       </SubmitButton>
     </ActionForm>
@@ -27,7 +29,7 @@ export function InvoiceCell({ orderId, marketplace, invoice, uploads }: { orderI
 
   if (!invoice) return create('Create invoice');
 
-  if (invoice.state === 'pending') return <span className="text-xs text-slate-500">Issuing the invoice…</span>;
+  if (invoice.state === 'pending') return <span className="text-xs text-slate-500">{t('Issuing the invoice…')}</span>;
 
   if (invoice.state === 'failed' || invoice.state === 'manual') {
     return (
@@ -48,7 +50,7 @@ export function InvoiceCell({ orderId, marketplace, invoice, uploads }: { orderI
     <div className="space-y-1">
       {invoice.r2Key ? (
         <a className={buttonClass('secondary', 'sm')} href={`/api/invoices/${invoice.id}`} target="_blank" rel="noreferrer">
-          <FileText className="size-3.5" /> Invoice PDF
+          <FileText className="size-3.5" /> {t('Invoice PDF')}
         </a>
       ) : (
         <>

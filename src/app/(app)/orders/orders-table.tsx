@@ -11,6 +11,7 @@ import { cn, formatMoney, ordinal } from '@/lib/utils';
 import type { OrderStatus } from '@/server/db/schema';
 import { bulkAssignAction, bulkCreateLabelsAction, bulkStatusAction } from './actions';
 import { useOrderSheet } from './order-sheet';
+import { useT } from '@/lib/i18n/client';
 
 export interface OrderRow {
   id: string;
@@ -49,14 +50,15 @@ function sinceLabel(iso: string): string {
 
 /** A label does not move an order, so the row says it has one: "Label ready" until the parcel is packed. */
 function LabelChip({ row }: { row: OrderRow }) {
+  const t = useT();
   if (!row.shipment?.hasLabel || ['shipped', 'delivered', 'cancelled'].includes(row.status)) return null;
   return row.shipment.packed ? (
-    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20" title="Packed; it moves to Shipped once the tracking has reached the marketplace">
-      Packed
+    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20" title={t('Packed; it moves to Shipped once the tracking has reached the marketplace')}>
+      {t('Packed')}
     </span>
   ) : (
-    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-600/20" title="The label is made. The order stays here until you press Packed">
-      Label ready
+    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-600/20" title={t('The label is made. The order stays here until you press Packed')}>
+      {t('Label ready')}
     </span>
   );
 }
@@ -72,6 +74,7 @@ export function OrdersTable({
   users: { id: string; name: string }[];
   statuses: { value: string; label: string }[];
 }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -96,7 +99,7 @@ export function OrdersTable({
       return next;
     });
 
-  if (rows.length === 0) return <EmptyState title="No orders match these filters">New orders appear here after the next sync.</EmptyState>;
+  if (rows.length === 0) return <EmptyState title={t('No orders match these filters')}>{t('New orders appear here after the next sync.')}</EmptyState>;
 
   return (
     <>
@@ -105,8 +108,8 @@ export function OrdersTable({
           <span className="text-sm font-medium text-brand-700">{checked.size} selected</span>
           <ActionForm action={bulkCreateLabelsAction} showOk={false}>
             <input type="hidden" name="ids" value={ids} />
-            <SubmitButton size="sm" pendingText="Queuing labels…">
-              <Truck className="size-3.5" /> Generate labels
+            <SubmitButton size="sm" pendingText={t('Queuing labels…')}>
+              <Truck className="size-3.5" /> {t('Generate labels')}
             </SubmitButton>
           </ActionForm>
           {labelIds.length > 0 && (
@@ -118,7 +121,7 @@ export function OrdersTable({
             <input type="hidden" name="ids" value={ids} />
             <Select name="status" className="h-8 w-40 text-xs" defaultValue="">
               <option value="" disabled>
-                Set status…
+                {t('Set status…')}
               </option>
               {statuses.map((s) => (
                 <option key={s.value} value={s.value}>
@@ -127,13 +130,13 @@ export function OrdersTable({
               ))}
             </Select>
             <SubmitButton size="sm" variant="secondary">
-              Apply
+              {t('Apply')}
             </SubmitButton>
           </ActionForm>
           <ActionForm action={bulkAssignAction} className="flex items-center gap-1.5">
             <input type="hidden" name="ids" value={ids} />
             <Select name="assigneeId" className="h-8 w-36 text-xs" defaultValue="">
-              <option value="">Unassigned</option>
+              <option value="">{t('Unassigned')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -141,11 +144,11 @@ export function OrdersTable({
               ))}
             </Select>
             <SubmitButton size="sm" variant="secondary">
-              Assign
+              {t('Assign')}
             </SubmitButton>
           </ActionForm>
           <button className="ml-auto text-xs text-brand-700 hover:underline" onClick={() => setChecked(new Set())}>
-            Clear selection
+            {t('Clear selection')}
           </button>
         </div>
       )}
@@ -153,7 +156,7 @@ export function OrdersTable({
       <div className="md:hidden">
         <label className="flex min-h-11 items-center gap-3 border-b border-slate-100 px-4 text-xs font-medium text-slate-500">
           <input type="checkbox" className="size-5 rounded accent-brand-600" checked={allChecked} onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))} />
-          Select all on this page
+          {t('Select all on this page')}
         </label>
         <ul>
           {rows.map((r) => (
@@ -176,7 +179,7 @@ export function OrdersTable({
                   <StatusBadge status={r.status} />
                   <LabelChip row={r} />
                   {r.cod && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">COD</span>}
-                  {r.returning && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">Returning · {ordinal(r.returning.orderNumber)}</span>}
+                  {r.returning && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">Returning · {ordinal(r.returning.orderNumber, t.locale)}</span>}
                   {r.notes && (
                     <span
                       className={cn(
@@ -188,8 +191,8 @@ export function OrdersTable({
                       <MessageSquareText className="size-3" aria-hidden /> {r.notes.count}
                     </span>
                   )}
-                  {!r.readyToShip && r.status !== 'cancelled' && <span className="text-xs text-amber-700">Awaiting marketplace</span>}
-                  {r.shipment?.state === 'failed' && <span className="text-xs text-red-700">Label failed</span>}
+                  {!r.readyToShip && r.status !== 'cancelled' && <span className="text-xs text-amber-700">{t('Awaiting marketplace')}</span>}
+                  {r.shipment?.state === 'failed' && <span className="text-xs text-red-700">{t('Label failed')}</span>}
                 </span>
               </button>
             </li>
@@ -203,19 +206,19 @@ export function OrdersTable({
               <th className={cn(th, 'w-10 pl-5')}>
                 <input
                   type="checkbox"
-                  aria-label="Select all"
+                  aria-label={t('Select all')}
                   className="size-4 rounded accent-brand-600"
                   checked={allChecked}
                   onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))}
                 />
               </th>
-              <th className={th}>Order #</th>
-              <th className={th}>Customer</th>
-              <th className={th}>Source</th>
-              <th className={cn(th, 'hidden 2xl:table-cell')}>Courier</th>
-              <th className={cn(th, 'hidden 2xl:table-cell')}>Date</th>
-              <th className={th}>Status</th>
-              <th className={cn(th, 'pr-5 text-right')}>Total</th>
+              <th className={th}>{t('Order #')}</th>
+              <th className={th}>{t('Customer')}</th>
+              <th className={th}>{t('Source')}</th>
+              <th className={cn(th, 'hidden 2xl:table-cell')}>{t('Courier')}</th>
+              <th className={cn(th, 'hidden 2xl:table-cell')}>{t('Date')}</th>
+              <th className={th}>{t('Status')}</th>
+              <th className={cn(th, 'pr-5 text-right')}>{t('Total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -250,9 +253,9 @@ export function OrdersTable({
                       {r.returning && (
                         <span
                           className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800"
-                          title={`${ordinal(r.returning.orderNumber)} order · first ordered ${sinceLabel(r.returning.since)}`}
+                          title={`${ordinal(r.returning.orderNumber, t.locale)} order · first ordered ${sinceLabel(r.returning.since)}`}
                         >
-                          Returning · {ordinal(r.returning.orderNumber)}
+                          Returning · {ordinal(r.returning.orderNumber, t.locale)}
                         </span>
                       )}
                       <LabelChip row={r} />
@@ -283,8 +286,8 @@ export function OrdersTable({
                   <td className={cn(td, 'hidden whitespace-nowrap text-slate-600 2xl:table-cell')}>{shortDate(r.placedAt)}</td>
                   <td className={td}>
                     <StatusBadge status={r.status} />
-                    {!r.readyToShip && r.status !== 'cancelled' && <div className="mt-1 text-[11px] text-amber-700">Awaiting marketplace</div>}
-                    {r.shipment?.state === 'failed' && <div className="mt-1 text-[11px] text-red-700">Label failed</div>}
+                    {!r.readyToShip && r.status !== 'cancelled' && <div className="mt-1 text-[11px] text-amber-700">{t('Awaiting marketplace')}</div>}
+                    {r.shipment?.state === 'failed' && <div className="mt-1 text-[11px] text-red-700">{t('Label failed')}</div>}
                   </td>
                   <td className={cn(td, 'pr-5 text-right font-medium whitespace-nowrap tabular-nums')}>
                     {formatMoney(r.total, r.currency)}

@@ -1,5 +1,6 @@
 import { avatarStyle, initials } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
+import { getT } from '@/lib/i18n/server';
 
 const SIZE = { sm: 'size-6 text-[10px]', md: 'size-7 text-[11px]', lg: 'size-9 text-xs' } as const;
 
@@ -21,10 +22,11 @@ export function Avatar({ person, size = 'md', className }: { person: Person; siz
 }
 
 /** Overlapping avatars, "+N" for the ones that do not fit, and a dashed circle when nobody is assigned. */
-export function AvatarStack({ people, max = 3, size = 'md' }: { people: Person[]; max?: number; size?: keyof typeof SIZE }) {
+export async function AvatarStack({ people, max = 3, size = 'md' }: { people: Person[]; max?: number; size?: keyof typeof SIZE }) {
+  const t = await getT();
   if (people.length === 0) {
     return (
-      <span title="Nobody is assigned" className={cn('inline-flex shrink-0 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-300', SIZE[size])}>
+      <span title={t('Nobody is assigned')} className={cn('inline-flex shrink-0 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-300', SIZE[size])}>
         –
       </span>
     );

@@ -1,10 +1,12 @@
 import { Badge } from '@/components/ui';
 import type { SalesLine } from '@/server/db/schema';
 import { cn } from '@/lib/utils';
+import { getT } from '@/lib/i18n/server';
 
 /** How an order's revenue becomes profit, from its stored profit lines. */
-export function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; compact?: boolean }) {
-  if (!lines.length) return <p className="text-sm text-slate-500">No profit figures yet (cancelled, or waiting for the exchange rate).</p>;
+export async function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; compact?: boolean }) {
+  const t = await getT();
+  if (!lines.length) return <p className="text-sm text-slate-500">{t('No profit figures yet (cancelled, or waiting for the exchange rate).')}</p>;
   const total = (k: keyof SalesLine) => lines.reduce((sum, l) => sum + Number(l[k] ?? 0), 0);
   const gross = total('gross');
   const net = total('net');
@@ -34,7 +36,7 @@ export function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; compac
             </div>
           ))}
         <div className="flex items-baseline justify-between gap-3 border-t border-slate-200 pt-1 font-semibold">
-          <dt>Profit</dt>
+          <dt>{t('Profit')}</dt>
           <dd className={cn('tabular-nums', profit < 0 ? 'text-red-700' : 'text-emerald-700')}>
             {profit.toFixed(2)} zł <span className="text-xs font-normal text-slate-500">({gross > 0 ? ((profit / gross) * 100).toFixed(1) : '0'}% margin)</span>
           </dd>

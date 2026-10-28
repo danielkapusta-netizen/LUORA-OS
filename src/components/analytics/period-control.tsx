@@ -4,6 +4,7 @@ import { Input } from '@/components/ui';
 import type { PeriodKey } from '@/lib/analytics/period';
 import { cn } from '@/lib/utils';
 import { hrefWith } from './blocks';
+import { getT } from '@/lib/i18n/server';
 
 export const PERIOD_PRESETS: { value: PeriodKey; label: string }[] = [
   { value: 'week', label: 'Week' },
@@ -25,7 +26,7 @@ function shortDay(day: string): string {
  * custom dates; applying custom dates sets `from`/`to` and drops the preset. Parameters in `reset` (a page number)
  * are dropped on either, since they no longer mean the same thing.
  */
-export function RangeControl({
+export async function RangeControl({
   path,
   current,
   presets,
@@ -49,6 +50,7 @@ export function RangeControl({
   help?: string;
   label?: string;
 }) {
+  const t = await getT();
   const drop = [param, 'from', 'to', ...reset];
   const kept = Object.entries(current).filter(([k, v]) => v && !drop.includes(k)) as [string, string][];
   const cleared = Object.fromEntries(reset.map((k) => [k, undefined]));
@@ -78,16 +80,16 @@ export function RangeControl({
             ))}
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600">From</span>
+                <span className="text-xs font-medium text-slate-600">{t('From')}</span>
                 <Input type="date" name="from" defaultValue={custom?.from} required />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-slate-600">To</span>
+                <span className="text-xs font-medium text-slate-600">{t('To')}</span>
                 <Input type="date" name="to" defaultValue={custom?.to} required />
               </label>
             </div>
             <p className="text-xs text-slate-500">{help}</p>
-            <button className="inline-flex h-9 w-full items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white hover:bg-brand-700 max-md:h-11">Show these dates</button>
+            <button className="inline-flex h-9 w-full items-center justify-center rounded-full bg-brand-600 text-sm font-medium text-white hover:bg-brand-700 max-md:h-11">{t('Show these dates')}</button>
           </form>
         </details>
       </nav>

@@ -21,8 +21,12 @@ import { InvoiceCell } from './invoice-cell';
 import { PackedToggle } from './packed-toggle';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { retryFailedTrackingAction } from './actions';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Shipments' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Shipments') };
+}
 
 const STATES = [
   { value: '', label: 'All' },
@@ -33,6 +37,7 @@ const STATES = [
 ];
 
 export default async function ShipmentsPage({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
+  const t = await getT();
   await requireUser();
   const { state = '' } = await searchParams;
   const [rows, batches] = await Promise.all([recentShipments({ state: state || undefined }), recentBatches(10)]);
@@ -44,12 +49,12 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
     <>
       <AutoRefresh active={rows.some((r) => r.shipment.state === 'pending') || invoiceBusy} />
       <PageHeader
-        title="Shipments"
-        description="Labels bought through InPost and Allegro Delivery, and an invoice for any order. To create labels in bulk, select orders on the Orders page."
+        title={t('Shipments')}
+        description={t('Labels bought through InPost and Allegro Delivery, and an invoice for any order. To create labels in bulk, select orders on the Orders page.')}
         actions={
           rows.some((r) => r.shipment.trackingPushError && !r.shipment.trackingPushedAt) && (
             <ActionForm action={retryFailedTrackingAction}>
-              <SubmitButton variant="secondary">Retry failed tracking</SubmitButton>
+              <SubmitButton variant="secondary">{t('Retry failed tracking')}</SubmitButton>
             </ActionForm>
           )
         }
@@ -57,7 +62,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-4">
         <Card className="xl:col-span-3">
           <CardHeader
-            title="Recent labels"
+            title={t('Recent labels')}
             actions={STATES.map((s) => (
               <Link
                 key={s.value}
@@ -69,18 +74,18 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
             ))}
           />
           {rows.length === 0 ? (
-            <EmptyState title="No labels yet" />
+            <EmptyState title={t('No labels yet')} />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100 max-md:block">
                 <thead className="bg-slate-50 max-md:hidden">
                   <tr>
                     <th className="w-10" />
-                    <th className={th}>Buyer</th>
-                    <th className={th}>State</th>
-                    <th className={th}>Invoice</th>
-                    <th className={th}>Packed</th>
-                    <th className={cn(th, 'text-right')}>Label</th>
+                    <th className={th}>{t('Buyer')}</th>
+                    <th className={th}>{t('State')}</th>
+                    <th className={th}>{t('Invoice')}</th>
+                    <th className={th}>{t('Packed')}</th>
+                    <th className={cn(th, 'text-right')}>{t('Label')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 max-md:block">
@@ -99,7 +104,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                           <Link href={`/orders/${order.id}`} className="text-brand-700 hover:underline">
                             {order.externalNumber}
                           </Link>
-                          <span>· {formatDate(s.createdAt)}</span>
+                          <span>· {formatDate(s.createdAt, true, t.locale)}</span>
                         </div>
                         <ImportantNotes notes={(notes.get(order.id) ?? []).filter((n) => n.pinned)} className="mt-2 max-w-sm" />
                       </td>
@@ -110,9 +115,9 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                           {s.trackingPushedAt ? (
                             <span className="text-emerald-700">Tracking sent to {MARKETPLACE_LABELS[order.marketplace]}</span>
                           ) : s.trackingPushError ? (
-                            <span className="text-red-700">Tracking not sent: {s.trackingPushError}</span>
+                            <span className="text-red-700">{t('Tracking not sent:')} {s.trackingPushError}</span>
                           ) : s.state === 'created' ? (
-                            <span className="text-slate-500">Sending tracking…</span>
+                            <span className="text-slate-500">{t('Sending tracking…')}</span>
                           ) : null}
                         </div>
                       </td>
@@ -132,7 +137,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                       <td className={cn(td, cell, 'text-right max-md:text-left')}>
                         {s.state === 'created' && (
                           <PrintLabelButton href={`/api/labels/${s.id}`} className={buttonClass('secondary', 'sm')}>
-                            <Printer className="size-3.5" /> Print label
+                            <Printer className="size-3.5" /> {t('Print label')}
                           </PrintLabelButton>
                         )}
                       </td>
@@ -144,9 +149,9 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
           )}
         </Card>
         <Card>
-          <CardHeader title="Bulk batches" />
+          <CardHeader title={t('Bulk batches')} />
           {batches.length === 0 ? (
-            <EmptyState title="No batches yet">Select orders and press “Create labels”.</EmptyState>
+            <EmptyState title={t('No batches yet')}>{t('Select orders and press “Create labels”.')}</EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {batches.map((b) => (
@@ -154,7 +159,7 @@ export default async function ShipmentsPage({ searchParams }: { searchParams: Pr
                   <Link href={`/shipments/batches/${b.id}`} className="block px-4 py-2.5 hover:bg-slate-50">
                     <p className="text-sm font-medium text-brand-700">{b.total} order(s)</p>
                     <p className="text-xs text-slate-500">
-                      {formatDate(b.createdAt)}
+                      {formatDate(b.createdAt, true, t.locale)}
                       {b.skipped.length ? ` · ${b.skipped.length} skipped` : ''}
                     </p>
                   </Link>

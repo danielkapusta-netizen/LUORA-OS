@@ -9,10 +9,15 @@ import { env, isMockMode } from '@/server/env';
 import { withConfigured } from '@/server/services/accounts';
 import { demoAccountCount, listCarrierAccounts, listMarketplaceAccounts, storedCredentialKeys } from '@/server/services/settings';
 import { removeDemoDataAction, syncAccountAction, testCarrierAction, testMarketplaceAction } from '../actions';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Integrations' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Integrations') };
+}
 
 export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<{ message?: string }> }) {
+  const t = await getT();
   const user = await requireUser();
   const { message } = await searchParams;
   const [marketplaces, carriers, demoCount] = await Promise.all([
@@ -33,8 +38,8 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
               that point at them are skipped.
             </span>
             <ActionForm action={removeDemoDataAction}>
-              <SubmitButton size="sm" variant="danger" confirm="Delete all demo accounts, their orders, labels and shipping rules?">
-                Remove demo accounts
+              <SubmitButton size="sm" variant="danger" confirm={t('Delete all demo accounts, their orders, labels and shipping rules?')}>
+                {t('Remove demo accounts')}
               </SubmitButton>
             </ActionForm>
           </div>
@@ -42,39 +47,39 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
       )}
       {isMockMode() && (
         <Alert>
-          Demo mode (<code>INTEGRATIONS_MODE=mock</code>): orders and labels are generated locally and nothing is sent to Shopify, Allegro,
-          Empik, HEBE or InPost. Set <code>INTEGRATIONS_MODE=live</code> to use real accounts.
+          Demo mode (<code>{t('INTEGRATIONS_MODE=mock')}</code>): orders and labels are generated locally and nothing is sent to Shopify, Allegro,
+          Empik, HEBE or InPost. Set <code>{t('INTEGRATIONS_MODE=live')}</code> to use real accounts.
         </Alert>
       )}
 
       <Card>
         <CardHeader
-          title="Marketplaces"
-          description="Where orders come from. Each account is synced every few minutes."
+          title={t('Marketplaces')}
+          description={t('Where orders come from. Each account is synced every few minutes.')}
           actions={
             admin && (
               <>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=shopify">
-                  + Shopify
+                  {t('+ Shopify')}
                 </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=allegro">
-                  + Allegro
+                  {t('+ Allegro')}
                 </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=empik">
-                  + Empik
+                  {t('+ Empik')}
                 </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=hebe">
-                  + HEBE
+                  {t('+ HEBE')}
                 </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=vonhalsky">
-                  + Von Halsky
+                  {t('+ Von Halsky')}
                 </Link>
               </>
             )
           }
         />
         {marketplaces.length === 0 ? (
-          <EmptyState title="No marketplace accounts yet" />
+          <EmptyState title={t('No marketplace accounts yet')} />
         ) : (
           <ul className="divide-y divide-slate-100">
             {marketplaces.map((a) => {
@@ -87,16 +92,16 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{a.name}</span>
                       <MarketplaceBadge marketplace={a.type} />
-                      {!a.enabled && <Badge>Disabled</Badge>}
+                      {!a.enabled && <Badge>{t('Disabled')}</Badge>}
                       {a.stockSyncEnabled && <Badge tone={a.stockDryRun ? 'amber' : 'green'}>{a.stockDryRun ? 'Stock: dry run' : 'Stock sync on'}</Badge>}
-                      {a.type === 'allegro' && !isMockMode() && (allegroConnected ? <Badge tone="green">Connected</Badge> : <Badge tone="red">Not connected</Badge>)}
-                      {a.type === 'vonhalsky' && !isMockMode() && (vonHalskyConnected ? <Badge tone="green">Connected</Badge> : <Badge tone="red">Not connected</Badge>)}
+                      {a.type === 'allegro' && !isMockMode() && (allegroConnected ? <Badge tone="green">{t('Connected')}</Badge> : <Badge tone="red">{t('Not connected')}</Badge>)}
+                      {a.type === 'vonhalsky' && !isMockMode() && (vonHalskyConnected ? <Badge tone="green">{t('Connected')}</Badge> : <Badge tone="red">{t('Not connected')}</Badge>)}
                     </div>
-                    <p className="text-xs text-slate-500">Last sync {timeAgo(a.lastSyncedAt)}</p>
-                    {a.lastError && <p className="text-xs text-red-700">Error: {a.lastError}</p>}
+                    <p className="text-xs text-slate-500">Last sync {timeAgo(a.lastSyncedAt, t)}</p>
+                    {a.lastError && <p className="text-xs text-red-700">{t('Error:')} {a.lastError}</p>}
                     {a.type === 'shopify' && (
                       <p className="text-xs text-slate-500">
-                        Webhook URL (orders/create, orders/updated): <code className="break-all select-all">{`${env().APP_URL}/api/webhooks/shopify/${a.id}`}</code>
+                        {t('Webhook URL (orders/create, orders/updated):')} <code className="break-all select-all">{`${env().APP_URL}/api/webhooks/shopify/${a.id}`}</code>
                       </p>
                     )}
                   </div>
@@ -113,17 +118,17 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                     )}
                     <ActionForm action={syncAccountAction.bind(null, a.id)}>
                       <SubmitButton size="sm" variant="secondary">
-                        Sync now
+                        {t('Sync now')}
                       </SubmitButton>
                     </ActionForm>
                     <ActionForm action={testMarketplaceAction.bind(null, a.id)}>
-                      <SubmitButton size="sm" variant="secondary" pendingText="Testing…">
-                        Test
+                      <SubmitButton size="sm" variant="secondary" pendingText={t('Testing…')}>
+                        {t('Test')}
                       </SubmitButton>
                     </ActionForm>
                     {admin && (
                       <Link className={buttonClass('secondary', 'sm')} href={`/settings/integrations/marketplace/${a.id}`}>
-                        Edit
+                        {t('Edit')}
                       </Link>
                     )}
                   </div>
@@ -136,23 +141,23 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
 
       <Card>
         <CardHeader
-          title="Carriers"
-          description="Who prints the labels. Allegro Delivery ships Allegro orders only; InPost ships anything."
+          title={t('Carriers')}
+          description={t('Who prints the labels. Allegro Delivery ships Allegro orders only; InPost ships anything.')}
           actions={
             admin && (
               <>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/carrier/new?type=inpost">
-                  + InPost
+                  {t('+ InPost')}
                 </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/carrier/new?type=allegro_shipping">
-                  + Allegro Delivery
+                  {t('+ Allegro Delivery')}
                 </Link>
               </>
             )
           }
         />
         {carriers.length === 0 ? (
-          <EmptyState title="No carrier accounts yet" />
+          <EmptyState title={t('No carrier accounts yet')} />
         ) : (
           <ul className="divide-y divide-slate-100">
             {carriers.map((c) => (
@@ -161,26 +166,26 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{c.name}</span>
                     <Badge tone="violet">{CARRIER_LABELS[c.type]}</Badge>
-                    {!c.enabled && <Badge>Disabled</Badge>}
-                    {!c.sender && <Badge tone="red">No sender address</Badge>}
+                    {!c.enabled && <Badge>{t('Disabled')}</Badge>}
+                    {!c.sender && <Badge tone="red">{t('No sender address')}</Badge>}
                     {!c.configured && (
                       <Badge tone="red">{c.type === 'allegro_shipping' ? 'Allegro account not connected' : 'No API credentials'}</Badge>
                     )}
                   </div>
                   <p className="text-xs text-slate-500">
-                    Labels: {(c.settings.labelFormat ?? 'pdf').toUpperCase()} {c.settings.labelSize ?? 'A6'}
+                    {t('Labels:')} {(c.settings.labelFormat ?? 'pdf').toUpperCase()} {c.settings.labelSize ?? 'A6'}
                     {c.sender ? ` · from ${c.sender.city}` : ''}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-start gap-2">
                   <ActionForm action={testCarrierAction.bind(null, c.id)}>
-                    <SubmitButton size="sm" variant="secondary" pendingText="Testing…">
-                      Test
+                    <SubmitButton size="sm" variant="secondary" pendingText={t('Testing…')}>
+                      {t('Test')}
                     </SubmitButton>
                   </ActionForm>
                   {admin && (
                     <Link className={buttonClass('secondary', 'sm')} href={`/settings/integrations/carrier/${c.id}`}>
-                      Edit
+                      {t('Edit')}
                     </Link>
                   )}
                 </div>

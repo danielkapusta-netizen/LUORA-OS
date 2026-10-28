@@ -11,13 +11,18 @@ import { requireUser } from '@/server/auth';
 import { orderProfit } from '@/server/analytics/dataset';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
 import { ViewFilters } from '../filters';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Analytics · Orders P&L' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Analytics · Orders P&L') };
+}
 
 const PAGE = 30;
 type Params = ViewParams & { q?: string; margin?: string; page?: string; open?: string };
 
 export default async function OrdersProfitPage({ searchParams }: { searchParams: Promise<Params> }) {
+  const t = await getT();
   await requireUser();
   const params = await searchParams;
   const view = await analyticsView(params);
@@ -45,7 +50,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
       <ViewFilters view={view} path="/analytics/orders" extra={current} />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Pills
-          label="Margin"
+          label={t('Margin')}
           options={[
             { value: 'any', label: 'Any margin' },
             { value: 'healthy', label: '15% or more' },
@@ -57,27 +62,27 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
         />
         <form action="/analytics/orders">
           {Object.entries({ ...view.params, margin: params.margin }).map(([k, v]) => v && <input key={k} type="hidden" name={k} value={v} />)}
-          <Input name="q" defaultValue={params.q ?? ''} placeholder="Order, customer or product" className="h-8 w-64" aria-label="Search orders" />
+          <Input name="q" defaultValue={params.q ?? ''} placeholder={t('Order, customer or product')} className="h-8 w-64" aria-label={t('Search orders')} />
         </form>
         <span className="text-sm text-slate-600">
-          {orders.length} orders · {formatValue(revenue, 'pln')} revenue{showProfit && <> · {formatValue(profit, 'pln')} profit</>}
+          {orders.length} orders · {formatValue(revenue, 'pln', false, t.locale)} revenue{showProfit && <> · {formatValue(profit, 'pln', false, t.locale)} profit</>}
         </span>
       </div>
       <Card className="overflow-x-auto">
         {shown.length === 0 ? (
-          <EmptyState title="No orders match" />
+          <EmptyState title={t('No orders match')} />
         ) : (
           <table className="w-full">
             <thead className="border-b border-slate-100 bg-slate-50/60">
               <tr>
                 <th className="w-10" />
-                <th className={th}>Date</th>
-                <th className={th}>Order</th>
-                <th className={th}>Customer</th>
-                <th className={cn(th, 'text-right')}>Revenue</th>
-                <th className={cn(th, 'text-right')}>Fees</th>
-                {showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
-                <th className={cn(th, 'text-right')}>Margin</th>
+                <th className={th}>{t('Date')}</th>
+                <th className={th}>{t('Order')}</th>
+                <th className={th}>{t('Customer')}</th>
+                <th className={cn(th, 'text-right')}>{t('Revenue')}</th>
+                <th className={cn(th, 'text-right')}>{t('Fees')}</th>
+                {showProfit && <th className={cn(th, 'text-right')}>{t('Profit')}</th>}
+                <th className={cn(th, 'text-right')}>{t('Margin')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -104,14 +109,14 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                       <span className="flex items-center gap-1.5 text-xs text-slate-500">
                         <span className="inline-block size-2 rounded-sm" style={{ background: MARKETPLACE_COLORS[o.source] }} aria-hidden />
                         {channelName(o.source)} · {o.units} pcs
-                        {o.items.some((i) => i.feesEstimated) && <Badge tone="amber">fee estimated</Badge>}
+                        {o.items.some((i) => i.feesEstimated) && <Badge tone="amber">{t('fee estimated')}</Badge>}
                       </span>
                     </td>
                     <td className={td}>{o.customerName}</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.revenuePLN, 'pln')}</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.commissionPLN, 'pln')}</td>
-                    {showProfit && <td className={cn(td, 'text-right tabular-nums', o.marginPLN < 0 && 'text-red-700')}>{formatValue(o.marginPLN, 'pln')}</td>}
-                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.marginPct, 'percent')}</td>
+                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.revenuePLN, 'pln', false, t.locale)}</td>
+                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.commissionPLN, 'pln', false, t.locale)}</td>
+                    {showProfit && <td className={cn(td, 'text-right tabular-nums', o.marginPLN < 0 && 'text-red-700')}>{formatValue(o.marginPLN, 'pln', false, t.locale)}</td>}
+                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.marginPct, 'percent', false, t.locale)}</td>
                   </tr>,
                   open && (
                     <tr key={`${o.id}-detail`} className="bg-slate-50">
@@ -123,10 +128,10 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                                 <tr key={i.id}>
                                   <td className="py-1.5 pr-3">
                                     {i.qty} × {i.productLabel}
-                                    {!i.costKnown && <Badge tone="amber" className="ml-1.5">no cost</Badge>}
+                                    {!i.costKnown && <Badge tone="amber" className="ml-1.5">{t('no cost')}</Badge>}
                                   </td>
-                                  <td className="py-1.5 text-right tabular-nums">{formatValue(i.revenuePLN, 'pln')}</td>
-                                  {showProfit ? <td className={cn('py-1.5 text-right tabular-nums', i.marginPLN < 0 && 'text-red-700')}>{formatValue(i.marginPLN, 'pln')}</td> : <td className="py-1.5 text-right tabular-nums">{formatValue(i.marginPct, 'percent')}</td>}
+                                  <td className="py-1.5 text-right tabular-nums">{formatValue(i.revenuePLN, 'pln', false, t.locale)}</td>
+                                  {showProfit ? <td className={cn('py-1.5 text-right tabular-nums', i.marginPLN < 0 && 'text-red-700')}>{formatValue(i.marginPLN, 'pln', false, t.locale)}</td> : <td className="py-1.5 text-right tabular-nums">{formatValue(i.marginPct, 'percent', false, t.locale)}</td>}
                                 </tr>
                               ))}
                             </tbody>
@@ -143,11 +148,11 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
         )}
         {pages > 1 && (
           <div className="flex justify-end gap-3 border-t border-slate-100 px-4 py-2 text-sm">
-            {page > 1 && <Link href={link({ page: String(page - 1), open: undefined })}>← Newer</Link>}
+            {page > 1 && <Link href={link({ page: String(page - 1), open: undefined })}>{t('← Newer')}</Link>}
             <span className="text-slate-500">
               Page {page} of {pages}
             </span>
-            {page < pages && <Link href={link({ page: String(page + 1), open: undefined })}>Older →</Link>}
+            {page < pages && <Link href={link({ page: String(page + 1), open: undefined })}>{t('Older →')}</Link>}
           </div>
         )}
       </Card>

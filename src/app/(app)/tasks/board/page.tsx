@@ -7,8 +7,10 @@ import { requireUser } from '@/server/auth';
 import { listTasks } from '@/server/services/tasks';
 import { statusColumns } from '../columns';
 import { getActiveProjects, getPeople, getTagCounts, link, resolveScope, type TaskParams } from '../params';
+import { getT } from '@/lib/i18n/server';
 
 export default async function BoardPage({ searchParams }: { searchParams: Promise<TaskParams> }) {
+  const t = await getT();
   const user = await requireUser();
   const params = await searchParams;
   const now = warsawToday();
@@ -20,7 +22,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     getActiveProjects(),
     getTagCounts(),
   ]);
-  const dialog = { people, projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((t) => t.tag), meId: user.id };
+  const dialog = { people, projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((item) => item.tag), meId: user.id };
   const columns = statusColumns({
     cards,
     today: now,
@@ -40,7 +42,7 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
             {allDone ? 'Show only the last week' : 'Show every finished task'}
           </Link>
         </p>
-        <p>Drag a card to another column to change its status.</p>
+        <p>{t('Drag a card to another column to change its status.')}</p>
       </div>
       <Board columns={columns} />
     </>

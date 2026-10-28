@@ -10,10 +10,15 @@ import { requireUser } from '@/server/auth';
 import { loadCrmSettings, pendingTagChanges } from '@/server/services/crm-sync';
 import { allCustomers, orderDatesByCustomer } from '@/server/services/customers';
 import { runCrmSyncAction, saveCrmSettingsAction } from '../actions';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Customer segments' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Customer segments') };
+}
 
 export default async function SegmentsPage() {
+  const t = await getT();
   const user = await requireUser();
   const [list, dates, settings] = await Promise.all([allCustomers(), orderDatesByCustomer(), loadCrmSettings()]);
   const segments = segmentCustomers(list);
@@ -38,7 +43,7 @@ export default async function SegmentsPage() {
     <div className="space-y-8">
       <section>
         <SectionTitle
-          title="Segments"
+          title={t('Segments')}
           description={`By how recently, how often and how much each customer bought. ${Math.round(stats.repeatRate * 100)}% of customers came back for a second order${stats.medianDaysToSecond !== null ? `, typically after ${stats.medianDaysToSecond} days` : ''}.`}
         />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -50,7 +55,7 @@ export default async function SegmentsPage() {
               </div>
               <p className="mt-2 text-xs text-slate-500">{SEGMENTS[g.key].description}</p>
               <p className="mt-2 text-sm tabular-nums text-slate-700">
-                {formatValue(g.revenue, 'pln')} · {totalRevenue > 0 ? Math.round((g.revenue / totalRevenue) * 100) : 0}% of revenue
+                {formatValue(g.revenue, 'pln', false, t.locale)} · {totalRevenue > 0 ? Math.round((g.revenue / totalRevenue) * 100) : 0}% of revenue
               </p>
               <p className="mt-1 text-xs text-slate-600">{SEGMENTS[g.key].action}</p>
             </Link>
@@ -59,7 +64,7 @@ export default async function SegmentsPage() {
       </section>
 
       <section>
-        <SectionTitle title="Do they come back?" description="Each row is the customers whose first order fell in that month; each cell is the share who ordered again that many months later." />
+        <SectionTitle title={t('Do they come back?')} description={t('Each row is the customers whose first order fell in that month; each cell is the share who ordered again that many months later.')} />
         <Card>
           <CardBody>
             {cohortRows.length ? (
@@ -72,24 +77,24 @@ export default async function SegmentsPage() {
                 format={(v) => `${Math.round(v * 100)}%`}
               />
             ) : (
-              <p className="text-sm text-slate-500">No orders yet.</p>
+              <p className="text-sm text-slate-500">{t('No orders yet.')}</p>
             )}
-            <p className="mt-2 text-xs text-slate-500">M0 is the month of the first order. Empty cells are months that haven&apos;t happened yet.</p>
+            <p className="mt-2 text-xs text-slate-500">{t('M0 is the month of the first order. Empty cells are months that haven\'t happened yet.')}</p>
           </CardBody>
         </Card>
       </section>
 
       <section>
-        <SectionTitle title="Regulars who went quiet" description="Customers with two or more orders who are now over twice their usual gap since the last one, biggest spenders first." />
+        <SectionTitle title={t('Regulars who went quiet')} description={t('Customers with two or more orders who are now over twice their usual gap since the last one, biggest spenders first.')} />
         <Card className="overflow-x-auto">
           {overdue.length ? (
             <table className="w-full">
               <thead className="border-b border-slate-100 bg-slate-50/60">
                 <tr>
-                  <th className={th}>Customer</th>
-                  <th className={cn(th, 'text-right')}>Usually every</th>
-                  <th className={cn(th, 'text-right')}>Last order</th>
-                  <th className={cn(th, 'text-right')}>Lifetime revenue</th>
+                  <th className={th}>{t('Customer')}</th>
+                  <th className={cn(th, 'text-right')}>{t('Usually every')}</th>
+                  <th className={cn(th, 'text-right')}>{t('Last order')}</th>
+                  <th className={cn(th, 'text-right')}>{t('Lifetime revenue')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -102,13 +107,13 @@ export default async function SegmentsPage() {
                     </td>
                     <td className={cn(td, 'text-right tabular-nums')}>{o.usualGapDays} days</td>
                     <td className={cn(td, 'text-right tabular-nums')}>{o.daysSince} days ago</td>
-                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.customer.revenue, 'pln')}</td>
+                    <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.customer.revenue, 'pln', false, t.locale)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <p className="px-5 py-4 text-sm text-slate-500">Nobody is overdue.</p>
+            <p className="px-5 py-4 text-sm text-slate-500">{t('Nobody is overdue.')}</p>
           )}
         </Card>
       </section>
@@ -116,24 +121,24 @@ export default async function SegmentsPage() {
       {user.role === 'admin' && (
         <Card>
           <CardHeader
-            title="Write segments to Shopify"
-            description="Adds a tag such as luora-vip to the matching Shopify customers, so Shopify Email, Klaviyo and similar tools can target them. Only customers who bought on Shopify: Allegro and Empik buyer data may not be used for your own marketing."
+            title={t('Write segments to Shopify')}
+            description={t('Adds a tag such as luora-vip to the matching Shopify customers, so Shopify Email, Klaviyo and similar tools can target them. Only customers who bought on Shopify: Allegro and Empik buyer data may not be used for your own marketing.')}
             actions={
-              <ActionForm action={runCrmSyncAction} popup="Shopify tag sync">
+              <ActionForm action={runCrmSyncAction} popup={t('Shopify tag sync')}>
                 <SubmitButton size="sm" variant="secondary">
-                  Sync now
+                  {t('Sync now')}
                 </SubmitButton>
               </ActionForm>
             }
           />
           <CardBody className="space-y-4">
             <Alert tone="blue">
-              The Shopify app needs the <code>read_customers</code> and <code>write_customers</code> scopes. {shopifyCustomers} customer(s) can be synced;{' '}
+              The Shopify app needs the <code>{t('read_customers')}</code> and <code>{t('write_customers')}</code> scopes. {shopifyCustomers} customer(s) can be synced;{' '}
               {pending.length} would change with the settings below{settings.dryRun ? ' (dry run: nothing is sent yet)' : ''}.
             </Alert>
             <ActionForm action={saveCrmSettingsAction} className="space-y-4">
               <fieldset>
-                <legend className="mb-2 text-sm font-semibold">Segments to tag</legend>
+                <legend className="mb-2 text-sm font-semibold">{t('Segments to tag')}</legend>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {SEGMENT_ORDER.map((key) => (
                     <Checkbox
@@ -151,10 +156,10 @@ export default async function SegmentsPage() {
                 </div>
               </fieldset>
               <div className="flex flex-col gap-2">
-                <Checkbox name="syncManualTags" label="Also write the tags staff add to customers" defaultChecked={settings.syncManualTags} />
-                <Checkbox name="dryRun" label="Dry run: count the changes but don't send them" defaultChecked={settings.dryRun} />
+                <Checkbox name="syncManualTags" label={t('Also write the tags staff add to customers')} defaultChecked={settings.syncManualTags} />
+                <Checkbox name="dryRun" label={t('Dry run: count the changes but don\'t send them')} defaultChecked={settings.dryRun} />
               </div>
-              <SubmitButton>Save</SubmitButton>
+              <SubmitButton>{t('Save')}</SubmitButton>
             </ActionForm>
           </CardBody>
         </Card>

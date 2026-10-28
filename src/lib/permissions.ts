@@ -1,13 +1,15 @@
+import { msg } from '@/lib/i18n/msg';
+
 /** Who may see what. One table, used by the sidebar, the page guards and the data loaders. */
 export const ROLES = ['admin', 'logistics', 'marketing'] as const;
 export type Role = (typeof ROLES)[number];
 
-export const ROLE_LABEL: Record<Role, string> = { admin: 'Admin', logistics: 'Logistics', marketing: 'Marketing' };
+export const ROLE_LABEL: Record<Role, string> = { admin: msg('Admin'), logistics: msg('Logistics'), marketing: msg('Marketing') };
 
 export const ROLE_DESCRIPTION: Record<Role, string> = {
-  admin: 'Sees and changes everything.',
-  logistics: 'Orders, shipments, stock, customers, tasks and invoices. No analytics, pricing, profit or settings; the Dashboard shows what has to be shipped.',
-  marketing: 'Every page except Settings. Margins in %, but never how much profit was made.',
+  admin: msg('Sees and changes everything.'),
+  logistics: msg('Orders, shipments, stock, customers, tasks and invoices. No analytics, pricing, profit or settings; the Dashboard shows what has to be shipped.'),
+  marketing: msg('Every page except Settings. Margins in %, but never how much profit was made.'),
 };
 
 export const CAPABILITIES = ['analytics', 'profit', 'margin', 'settings', 'fullDashboard', 'pricing'] as const;

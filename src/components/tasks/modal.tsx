@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
 import { buttonClass } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/client';
 
 const ModalContext = createContext<{ close: () => void } | null>(null);
 
@@ -30,6 +31,7 @@ export function Modal({
   buttonClassName?: string;
   children: ReactNode;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   // Stable, so a form can close the dialog from an effect without running it on every render.
   const value = useMemo(() => ({ close: () => ref.current?.close() }), []);
@@ -51,7 +53,7 @@ export function Modal({
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-3">
           <h2 className="text-base font-semibold">{title}</h2>
-          <button type="button" aria-label="Close" onClick={close} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+          <button type="button" aria-label={t('Close')} onClick={close} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
             <X className="size-4" />
           </button>
         </div>

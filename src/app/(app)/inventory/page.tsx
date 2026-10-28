@@ -20,8 +20,12 @@ import { SUGGESTION_THRESHOLD } from '@/server/services/matching';
 import { emptyPerformance, productStats, type PerformanceLevel, type ProductPerformance } from '@/server/services/product-stats';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 import { adjustStockAction, confirmClearSuggestionsAction, importListingsAction, linkGroupAction, setListingStockAction, syncAllStockAction, unlinkListingAction } from './actions';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Inventory' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Inventory') };
+}
 
 type ListingRow = Awaited<ReturnType<typeof listProductsWithListings>>['listings'][number];
 
@@ -60,7 +64,8 @@ function Label({ children }: { children: React.ReactNode }) {
 }
 
 /** Green / amber / grey dot per platform: same stock as here, different, or not listed. */
-function PlatformDots({ listings, stock }: { listings: ListingRow[]; stock: number }) {
+async function PlatformDots({ listings, stock }: { listings: ListingRow[]; stock: number }) {
+  const t = await getT();
   return (
     <div className="mt-1.5 flex gap-2">
       {PLATFORMS.map((m) => {
@@ -91,7 +96,7 @@ function PlatformDots({ listings, stock }: { listings: ListingRow[]; stock: numb
               )}
             />
             {PLATFORM_LABEL[m]}
-            {own.length > 0 && (state === 'inactive' ? <span className="text-slate-400">inactive</span> : <span className="tabular-nums text-slate-700">{quantities.map((q) => q ?? '?').join('/')}</span>)}
+            {own.length > 0 && (state === 'inactive' ? <span className="text-slate-400">{t('inactive')}</span> : <span className="tabular-nums text-slate-700">{quantities.map((q) => q ?? '?').join('/')}</span>)}
           </span>
         );
       })}
@@ -99,18 +104,19 @@ function PlatformDots({ listings, stock }: { listings: ListingRow[]; stock: numb
   );
 }
 
-function ListingDetails({ listings, stock }: { listings: ListingRow[]; stock: number }) {
-  if (listings.length === 0) return <p className="px-2 py-3 text-sm text-slate-500">Not linked to any platform listing.</p>;
+async function ListingDetails({ listings, stock }: { listings: ListingRow[]; stock: number }) {
+  const t = await getT();
+  if (listings.length === 0) return <p className="px-2 py-3 text-sm text-slate-500">{t('Not linked to any platform listing.')}</p>;
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="min-w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs text-slate-500">
           <tr>
-            <th className="px-3 py-2 font-medium">Platform</th>
-            <th className="px-3 py-2 font-medium">Name on the platform</th>
-            <th className="px-3 py-2 text-right font-medium">Stock there</th>
-            <th className="px-3 py-2 font-medium">Send</th>
-            <th className="px-3 py-2 font-medium">Last sync</th>
+            <th className="px-3 py-2 font-medium">{t('Platform')}</th>
+            <th className="px-3 py-2 font-medium">{t('Name on the platform')}</th>
+            <th className="px-3 py-2 text-right font-medium">{t('Stock there')}</th>
+            <th className="px-3 py-2 font-medium">{t('Send')}</th>
+            <th className="px-3 py-2 font-medium">{t('Last sync')}</th>
             <th className="px-3 py-2" />
           </tr>
         </thead>
@@ -132,34 +138,34 @@ function ListingDetails({ listings, stock }: { listings: ListingRow[]; stock: nu
                   )}
                 </td>
                 <td className={cn('px-3 py-2 text-right align-top font-semibold tabular-nums', l.active && want !== null && qty !== null && qty !== want && 'text-amber-700')}>
-                  {l.active ? (qty ?? '?') : <span title="The offer is not on sale, so its stock figure does not count">0</span>}
+                  {l.active ? (qty ?? '?') : <span title={t('The offer is not on sale, so its stock figure does not count')}>0</span>}
                 </td>
                 <td className="px-3 py-2 align-top">
                   {l.active ? (
                     <ActionForm action={setListingStockAction.bind(null, l.id)} className="flex items-center gap-1.5" showOk={false}>
-                      <Select name="mode" defaultValue={l.stockMode} className="h-8 w-36 text-xs" aria-label="What is sent to this listing">
+                      <Select name="mode" defaultValue={l.stockMode} className="h-8 w-36 text-xs" aria-label={t('What is sent to this listing')}>
                         <option value="master">Master stock ({Math.max(0, stock)})</option>
-                        <option value="fixed">Fixed quantity</option>
-                        <option value="off">Nothing (manage there)</option>
+                        <option value="fixed">{t('Fixed quantity')}</option>
+                        <option value="off">{t('Nothing (manage there)')}</option>
                       </Select>
-                      <Input name="qty" inputMode="numeric" defaultValue={l.fixedQty ?? ''} placeholder="qty" aria-label="Fixed quantity" className="h-8 w-16 text-center text-xs" />
+                      <Input name="qty" inputMode="numeric" defaultValue={l.fixedQty ?? ''} placeholder={t('qty')} aria-label={t('Fixed quantity')} className="h-8 w-16 text-center text-xs" />
                       <SubmitButton size="sm" variant="secondary" pendingText="…">
-                        Save
+                        {t('Save')}
                       </SubmitButton>
                     </ActionForm>
                   ) : (
-                    <span className="text-xs">Nothing is sent while it is off sale</span>
+                    <span className="text-xs">{t('Nothing is sent while it is off sale')}</span>
                   )}
                 </td>
                 <td className="px-3 py-2 align-top text-xs text-slate-500">
                   {l.lastPushError ? (
-                    <span className="text-red-700">Not sent: {l.lastPushError}</span>
+                    <span className="text-red-700">{t('Not sent:')} {l.lastPushError}</span>
                   ) : l.lastPushedAt ? (
                     <>
-                      sent {l.lastPushedQty} · {formatDate(l.lastPushedAt)}
+                      sent {l.lastPushedQty} · {formatDate(l.lastPushedAt, true, t.locale)}
                     </>
                   ) : l.lastSeenAt ? (
-                    <>read {formatDate(l.lastSeenAt)}</>
+                    <>read {formatDate(l.lastSeenAt, true, t.locale)}</>
                   ) : (
                     '—'
                   )}
@@ -168,7 +174,7 @@ function ListingDetails({ listings, stock }: { listings: ListingRow[]; stock: nu
                   {l.marketplace !== 'shopify' && (
                     <ActionForm action={unlinkListingAction.bind(null, l.id)} showOk={false}>
                       <SubmitButton size="sm" variant="ghost" pendingText="…">
-                        Unlink
+                        {t('Unlink')}
                       </SubmitButton>
                     </ActionForm>
                   )}
@@ -192,6 +198,7 @@ function Stat({ label, children, className }: { label: string; children: React.R
 }
 
 export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string; days?: string; from?: string; to?: string; page?: string }> }) {
+  const t = await getT();
   const viewer = await requireUser();
   const params = await searchParams;
   const win = resolveDayWindow(params, PERIODS, 30);
@@ -251,8 +258,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     <>
       <AutoRefresh active={busy} seconds={10} />
       <PageHeader
-        title="Inventory"
-        description="Products and photos come from Shopify; Allegro, Empik and HEBE offers are matched by EAN. One stock number for every platform."
+        title={t('Inventory')}
+        description={t('Products and photos come from Shopify; Allegro, Empik and HEBE offers are matched by EAN. One stock number for every platform.')}
         actions={
           <>
             {viewer.role === 'admin' &&
@@ -264,16 +271,16 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   </Link>
                 ))}
             <Link className={buttonClass('secondary')} href="/inventory/vonhalsky">
-              Von Halsky offers
+              {t('Von Halsky offers')}
             </Link>
             <ActionForm action={importListingsAction}>
-              <SubmitButton variant="secondary" pendingText="Importing…">
-                Import listings
+              <SubmitButton variant="secondary" pendingText={t('Importing…')}>
+                {t('Import listings')}
               </SubmitButton>
             </ActionForm>
             <ActionForm action={syncAllStockAction}>
-              <SubmitButton pendingText="Starting…">
-                <RefreshCw className="size-4" /> Sync all stocks
+              <SubmitButton pendingText={t('Starting…')}>
+                <RefreshCw className="size-4" /> {t('Sync all stocks')}
               </SubmitButton>
             </ActionForm>
           </>
@@ -286,7 +293,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       )}
 
       <Card className="mb-5 grid grid-cols-2 divide-slate-100 md:grid-cols-3 md:divide-x xl:grid-cols-6">
-        <Stat label="Products">
+        <Stat label={t('Products')}>
           <span className="text-2xl font-semibold tabular-nums">{products.length}</span>
         </Stat>
         <Stat label={`Best seller · ${win.label}`} className="col-span-2 md:col-span-1">
@@ -301,7 +308,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             <span className="text-slate-400">—</span>
           )}
         </Stat>
-        <Stat label="Products selling">
+        <Stat label={t('Products selling')}>
           <Gauge value={share} tone={share >= 0.5 ? 'excellent' : share > 0 ? 'low' : 'none'} />
           <span className="font-semibold tabular-nums">
             {sold.length} <span className="text-sm font-normal text-slate-500">of {products.length}</span>
@@ -314,7 +321,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           <span className="text-2xl font-semibold tabular-nums">{pln(revenue)}</span>
           {stats.missingRates.length > 0 && <span className="text-xs text-amber-700">without {stats.missingRates.join(', ')}</span>}
         </Stat>
-        <Stat label="Out of stock">
+        <Stat label={t('Out of stock')}>
           <PackageX className={cn('size-5', outOfStock ? 'text-red-500' : 'text-slate-300')} />
           <span className={cn('text-2xl font-semibold tabular-nums', outOfStock && 'text-red-700')}>{outOfStock}</span>
         </Stat>
@@ -327,9 +334,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
               <span className="font-semibold">
                 Needs matching ({matching.length} product{matching.length === 1 ? '' : 's'}, {offerCount} offer{offerCount === 1 ? '' : 's'})
               </span>
-              <span className="ml-2 text-slate-500">Offers sharing an EAN are one product. Their Shopify product has no barcode, so pick it once. Stock isn’t synced until linked.</span>
+              <span className="ml-2 text-slate-500">{t('Offers sharing an EAN are one product. Their Shopify product has no barcode, so pick it once. Stock isn’t synced until linked.')}</span>
             </span>
-            <span className="text-xs font-medium text-brand-700 group-open:hidden">Show</span>
+            <span className="text-xs font-medium text-brand-700 group-open:hidden">{t('Show')}</span>
           </summary>
           <div className="border-t border-amber-200 bg-white">
             {clear > 0 && (
@@ -338,7 +345,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   {clear} product{clear === 1 ? ' has a' : 's have a'} clear match by name.
                 </span>
                 <ActionForm action={confirmClearSuggestionsAction}>
-                  <SubmitButton size="sm" variant="secondary" pendingText="Linking…">
+                  <SubmitButton size="sm" variant="secondary" pendingText={t('Linking…')}>
                     Link {clear} clear match{clear === 1 ? '' : 'es'}
                   </SubmitButton>
                 </ActionForm>
@@ -365,16 +372,16 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                             {g.clear ? 'Clear match by name' : 'Possible match'} ({Math.round(top.score * 100)}%) – check it
                           </span>
                         ) : (
-                          <span className="text-slate-500">No close match: choose the Shopify product</span>
+                          <span className="text-slate-500">{t('No close match: choose the Shopify product')}</span>
                         )}
-                        {g.eanDiffers && <span className="ml-2 text-amber-700">Shopify has another barcode for it</span>}
+                        {g.eanDiffers && <span className="ml-2 text-amber-700">{t('Shopify has another barcode for it')}</span>}
                       </p>
                     </div>
                     <ActionForm action={linkGroupAction.bind(null, g.listings.map((l) => l.id))} className="flex gap-1.5" showOk={false}>
                       <Select name="productId" className="h-9 min-w-0 flex-1 text-xs" defaultValue={top?.productId ?? ''}>
-                        <option value="">Choose Shopify product…</option>
+                        <option value="">{t('Choose Shopify product…')}</option>
                         {g.suggestions.length > 0 && (
-                          <optgroup label="Closest by name">
+                          <optgroup label={t('Closest by name')}>
                             {g.suggestions.map((s) => (
                               <option key={s.productId} value={s.productId}>
                                 {productName.get(s.productId)}
@@ -382,7 +389,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                             ))}
                           </optgroup>
                         )}
-                        <optgroup label="All products">
+                        <optgroup label={t('All products')}>
                           {products
                             .filter((p) => !suggestedIds.has(p.id))
                             .map((p) => (
@@ -416,9 +423,9 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             ) : (
               win.key !== '30' && <input type="hidden" name="days" value={win.key} />
             )}
-            <Input name="q" defaultValue={params.q} placeholder="Search name, SKU, EAN" className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
+            <Input name="q" defaultValue={params.q} placeholder={t('Search name, SKU, EAN')} className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
           </form>
-          <RangeControl path="/inventory" current={params} presets={PERIOD_PRESETS} active={win.key} param="days" custom={win.custom} reset={['page']} label="Sales period" />
+          <RangeControl path="/inventory" current={params} presets={PERIOD_PRESETS} active={win.key} param="days" custom={win.custom} reset={['page']} label={t('Sales period')} />
           <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
             {(Object.keys(SORTS) as Sort[]).map((s) => (
               <Link
@@ -444,14 +451,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   const own = byProduct.get(p.id) ?? [];
                   const f = perf(p.id);
                   return (
-                    <ExpandableRow key={p.id} colSpan={6} label="listings" stack className="align-middle" details={<ListingDetails listings={own} stock={p.stock} />}>
+                    <ExpandableRow key={p.id} colSpan={6} label={t('listings')} stack className="align-middle" details={<ListingDetails listings={own} stock={p.stock} />}>
                       <td className="py-3 pr-4 pl-2 max-md:order-1 max-md:px-0 max-md:pr-12">
                         <div className="flex min-w-64 items-center gap-3 max-md:min-w-0">
                           <ProductPhoto product={p} />
                           <div className="min-w-0">
                             <p className="font-medium leading-snug">{p.name}</p>
                             <p className="mt-0.5 text-xs">
-                              {hasRealSku(p.sku) ? <span className="font-mono text-slate-500">{p.sku}</span> : <Badge tone="amber">No SKU</Badge>}
+                              {hasRealSku(p.sku) ? <span className="font-mono text-slate-500">{p.sku}</span> : <Badge tone="amber">{t('No SKU')}</Badge>}
                               {p.ean && <span className="ml-2 font-mono text-slate-400">{p.ean}</span>}
                             </p>
                           </div>
@@ -467,7 +474,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           <ShoppingBag className="size-3.5 text-slate-400" /> {pln(f.revenue)}
                         </p>
                         {margins.get(p.id) && margins.get(p.id)!.gross > 0 && (
-                          <p className="mt-0.5 text-xs text-slate-500" title="Profit after VAT, fees, product cost, shipping and refunds">
+                          <p className="mt-0.5 text-xs text-slate-500" title={t('Profit after VAT, fees, product cost, shipping and refunds')}>
                             Margin{' '}
                             <span className={cn('font-medium tabular-nums', margins.get(p.id)!.profit < 0 ? 'text-red-700' : 'text-slate-800')}>
                               {((margins.get(p.id)!.profit / margins.get(p.id)!.gross) * 100).toFixed(1)}%
@@ -480,7 +487,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         <Gauge value={f.percentile} tone={f.level} className="h-10 w-16" label={`${LEVEL_LABEL[f.level]} performance`} />
                       </td>
                       <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap max-md:hidden">
-                        <Label>Sales rank</Label>
+                        <Label>{t('Sales rank')}</Label>
                         {f.rank ? (
                           <>
                             <p className="mt-0.5 flex items-center gap-1 text-lg font-semibold tabular-nums">
@@ -498,7 +505,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         )}
                       </td>
                       <td className="border-l border-slate-100 px-4 py-3 max-md:order-2 max-md:border-l-0 max-md:px-0 max-md:py-2">
-                        <Label>Stock {p.stock <= 0 && <span className="ml-1 font-medium text-red-600">out of stock</span>}</Label>
+                        <Label>Stock {p.stock <= 0 && <span className="ml-1 font-medium text-red-600">{t('out of stock')}</span>}</Label>
                         <ActionForm action={adjustStockAction.bind(null, p.id)} className="mt-1 flex items-center gap-1.5" showOk={false}>
                           <input type="hidden" name="mode" value="set" />
                           <Input
@@ -511,7 +518,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                             required
                           />
                           <SubmitButton size="sm" variant="secondary" pendingText="…">
-                            Update all
+                            {t('Update all')}
                           </SubmitButton>
                         </ActionForm>
                         <PlatformDots listings={own} stock={p.stock} />
@@ -526,28 +533,28 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
           {page > 1 ? (
             <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page - 1) })}>
-              Previous
+              {t('Previous')}
             </Link>
           ) : (
-            <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>Previous</span>
+            <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Previous')}</span>
           )}
           <span>
             Page {page} of {pages}
           </span>
           {page < pages ? (
             <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page + 1) })}>
-              Next
+              {t('Next')}
             </Link>
           ) : (
-            <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>Next</span>
+            <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Next')}</span>
           )}
         </div>
       </Card>
 
       <details className="rounded-2xl border border-slate-200 bg-white">
-        <summary className="cursor-pointer px-5 py-3 text-sm font-semibold">Recent stock pushes</summary>
+        <summary className="cursor-pointer px-5 py-3 text-sm font-semibold">{t('Recent stock pushes')}</summary>
         {log.length === 0 ? (
-          <EmptyState title="Nothing sent yet" />
+          <EmptyState title={t('Nothing sent yet')} />
         ) : (
           <ul className="divide-y divide-slate-100 border-t border-slate-100 text-sm">
             {log.map((e) => (
@@ -557,8 +564,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   {e.error && <span className="ml-1 text-red-700">({e.error})</span>}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
-                  {e.dryRun ? <Badge tone="amber">dry run</Badge> : e.ok ? <Badge tone="green">sent</Badge> : <Badge tone="red">failed</Badge>}
-                  <span className="text-xs text-slate-400">{timeAgo(e.createdAt)}</span>
+                  {e.dryRun ? <Badge tone="amber">{t('dry run')}</Badge> : e.ok ? <Badge tone="green">{t('sent')}</Badge> : <Badge tone="red">{t('failed')}</Badge>}
+                  <span className="text-xs text-slate-400">{timeAgo(e.createdAt, t)}</span>
                 </span>
               </li>
             ))}

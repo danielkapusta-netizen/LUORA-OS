@@ -5,12 +5,14 @@ import { projectColor } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
 import type { ProjectCard } from '@/server/services/tasks';
 import { AvatarStack } from './avatars';
+import { getT } from '@/lib/i18n/server';
 
 /**
  * A project. The compact form is the tile of the overview (people, name, "N tasks open"); the large form is the
  * card of the Projects page, with a progress bar and the numbers that matter.
  */
-export function ProjectCardView({ card, size = 'compact', today }: { card: ProjectCard; size?: 'compact' | 'large'; today?: string }) {
+export async function ProjectCardView({ card, size = 'compact', today }: { card: ProjectCard; size?: 'compact' | 'large'; today?: string }) {
+  const t = await getT();
   const { project, open, done, overdue, nextDue, members } = card;
   const color = projectColor(project.color);
   const total = open + done;
@@ -42,7 +44,7 @@ export function ProjectCardView({ card, size = 'compact', today }: { card: Proje
         <div>
           <div className="flex items-start justify-between gap-3">
             <p className="text-base font-semibold leading-snug text-slate-900">{project.name}</p>
-            {archived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">Archived</span>}
+            {archived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">{t('Archived')}</span>}
           </div>
           {project.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{project.description}</p>}
         </div>

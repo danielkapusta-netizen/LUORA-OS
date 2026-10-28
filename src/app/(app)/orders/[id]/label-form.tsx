@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Field, Input, Select } from '@/components/ui';
 import type { ActionResult } from '@/lib/action-result';
+import { useT } from '@/lib/i18n/client';
 
 interface Preset {
   id: string;
@@ -25,6 +26,7 @@ export interface LabelFormProps {
 }
 
 export function LabelForm({ action, carriers, services, presets, defaults, order }: LabelFormProps) {
+  const t = useT();
   const [carrierId, setCarrierId] = useState(defaults.carrierAccountId ?? carriers[0]?.id ?? '');
   const carrierServices = services[carrierId] ?? [];
   const [service, setService] = useState(defaults.service ?? carrierServices[0]?.id ?? '');
@@ -40,7 +42,7 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
   const needsPoint = carrierServices.find((s) => s.id === service)?.requiresPickupPoint;
 
   if (carriers.length === 0) {
-    return <p className="text-sm text-slate-500">No carrier account can ship this order. Add one in Settings → Integrations.</p>;
+    return <p className="text-sm text-slate-500">{t('No carrier account can ship this order. Add one in Settings → Integrations.')}</p>;
   }
 
   return (
@@ -51,7 +53,7 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Carrier">
+        <Field label={t('Carrier')}>
           <Select
             name="carrierAccountId"
             value={carrierId}
@@ -67,19 +69,19 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
             ))}
           </Select>
         </Field>
-        <Field label="Service">
+        <Field label={t('Service')}>
           <Select name="service" value={service} onChange={(e) => setService(e.target.value)}>
             {carrierServices.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
             ))}
-            {carrierServices.length === 0 && <option value="">No services (check the account)</option>}
+            {carrierServices.length === 0 && <option value="">{t('No services (check the account)')}</option>}
           </Select>
         </Field>
       </div>
 
-      <Field label="Package">
+      <Field label={t('Package')}>
         <Select
           defaultValue={initialPreset?.id}
           onChange={(e) => {
@@ -107,29 +109,29 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
             <Input name={k} inputMode="numeric" value={dims[k]} onChange={(e) => setDims({ ...dims, [k]: e.target.value })} required />
           </Field>
         ))}
-        <Field label="Weight kg">
+        <Field label={t('Weight kg')}>
           <Input name="weightKg" inputMode="decimal" value={dims.weightKg} onChange={(e) => setDims({ ...dims, weightKg: e.target.value })} required />
         </Field>
-        <Field label="Locker size">
+        <Field label={t('Locker size')}>
           <Select name="inpostTemplate" value={dims.inpostTemplate} onChange={(e) => setDims({ ...dims, inpostTemplate: e.target.value })}>
-            <option value="small">A (small)</option>
-            <option value="medium">B (medium)</option>
-            <option value="large">C (large)</option>
+            <option value="small">{t('A (small)')}</option>
+            <option value="medium">{t('B (medium)')}</option>
+            <option value="large">{t('C (large)')}</option>
           </Select>
         </Field>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label={needsPoint ? 'Pickup point (required)' : 'Pickup point'}>
-          <Input name="pickupPointId" defaultValue={order.pickupPointId ?? ''} placeholder="e.g. KRA010" required={needsPoint} />
+          <Input name="pickupPointId" defaultValue={order.pickupPointId ?? ''} placeholder={t('e.g. KRA010')} required={needsPoint} />
         </Field>
         <Field label={`COD (${order.currency})`}>
-          <Input name="codAmount" inputMode="decimal" defaultValue={order.codAmount ?? ''} placeholder="none" />
+          <Input name="codAmount" inputMode="decimal" defaultValue={order.codAmount ?? ''} placeholder={t('none')} />
         </Field>
         <Field label={`Insurance (${order.currency})`}>
-          <Input name="insuranceAmount" inputMode="decimal" placeholder="none" />
+          <Input name="insuranceAmount" inputMode="decimal" placeholder={t('none')} />
         </Field>
-        <Field label="Label">
+        <Field label={t('Label')}>
           <div className="flex gap-1.5">
             <Select name="labelFormat" defaultValue={carrier?.labelFormat ?? 'pdf'} key={`f-${carrierId}`}>
               <option value="pdf">PDF</option>
@@ -142,7 +144,7 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
           </div>
         </Field>
       </div>
-      <SubmitButton pendingText="Requesting label…">Create label</SubmitButton>
+      <SubmitButton pendingText={t('Requesting label…')}>{t('Create label')}</SubmitButton>
     </ActionForm>
   );
 }

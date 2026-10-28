@@ -2,6 +2,7 @@ import { Card, CardBody } from '@/components/ui';
 import { dayLabel, dayParts, today as warsawToday } from '@/lib/tasks/dates';
 import { cn } from '@/lib/utils';
 import type { Productivity } from '@/server/services/tasks';
+import { getT } from '@/lib/i18n/server';
 
 /** A small ring that fills to `value` (0 to 1). */
 function Ring({ value }: { value: number | null }) {
@@ -29,14 +30,15 @@ function Figure({ value, label, note }: { value: number | null; label: string; n
 }
 
 /** Today's progress, how punctual the team is, and a bar for each of the last seven days. */
-export function ProductivityCard({ data, now = warsawToday() }: { data: Productivity; now?: string }) {
+export async function ProductivityCard({ data, now = warsawToday() }: { data: Productivity; now?: string }) {
+  const t = await getT();
   const max = Math.max(1, ...data.perDay.map((d) => d.count));
   return (
     <Card>
       <CardBody className="grid gap-6 sm:grid-cols-[13rem_minmax(0,1fr)]">
         <div className="space-y-5">
-          <Figure value={data.doneToday} label="daily tasks done" note={data.plannedToday ? `${data.plannedToday} planned for today` : 'nothing planned for today'} />
-          <Figure value={data.onTime} label="finished on time" note="last 30 days" />
+          <Figure value={data.doneToday} label={t('daily tasks done')} note={data.plannedToday ? `${data.plannedToday} planned for today` : 'nothing planned for today'} />
+          <Figure value={data.onTime} label={t('finished on time')} note={t('last 30 days')} />
         </div>
         <div>
           <div className="flex h-28 items-end gap-2" role="img" aria-label={`Tasks finished per day over the last seven days: ${data.perDay.map((d) => d.count).join(', ')}`}>

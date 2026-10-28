@@ -22,8 +22,12 @@ import { dayLabel, today as warsawToday } from '@/lib/tasks/dates';
 import { dueState } from '@/lib/tasks/model';
 import { overdueCustomers, repeatStats } from '@/lib/crm/segments';
 import { LogisticsDashboard } from './logistics-dashboard';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Dashboard' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Dashboard') };
+}
 
 const OPEN = [
   { status: 'new', label: 'New' },
@@ -33,6 +37,7 @@ const OPEN = [
 ] as const;
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<ViewParams & { rank?: string; pulse?: string }> }) {
+  const t = await getT();
   const user = await requireUser();
   if (!can(user.role, 'fullDashboard')) return <LogisticsDashboard user={user} />;
   const params = await searchParams;
@@ -58,12 +63,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <div className="space-y-8">
       <PageHeader
-        title="Dashboard"
-        description={`${period.key === 'all' ? 'Every order on record' : `${formatDate(period.from)} – ${formatDate(period.to)}`}, compared ${period.comparisonLabel}. Cancelled orders left out.`}
+        title={t('Dashboard')}
+        description={`${period.key === 'all' ? 'Every order on record' : `${formatDate(period.from, t.locale)} – ${formatDate(period.to, t.locale)}`}, compared ${period.comparisonLabel}. Cancelled orders left out.`}
         actions={<PeriodControl path="/" current={current} periodKey={view.periodKey} from={view.params.from} to={view.params.to} />}
       />
 
-      <section aria-label="Open orders" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label={t('Open orders')} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {OPEN.map((o) => (
           <Link key={o.status} href={`/orders?status=${o.status}`} className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
             <p className="text-xs font-medium text-slate-500">{o.label}</p>
@@ -73,7 +78,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </section>
 
       {(tasks.length > 0 || repeat.customers > 0) && (
-        <section aria-label="Customers" className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr_1fr]">
+        <section aria-label={t('Customers')} className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr_1fr]">
           <Card className={tasksCardTone(tasks.length)}>
             <CardBody className="space-y-2">
               <MyTasksHeading count={tasks.length} limit={TASK_LIMIT} />
@@ -95,44 +100,44 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   })}
                 </ul>
               ) : (
-                <p className="text-sm text-slate-500">Nothing assigned to you.</p>
+                <p className="text-sm text-slate-500">{t('Nothing assigned to you.')}</p>
               )}
             </CardBody>
           </Card>
           <Link href="/customers/segments" className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
-            <p className="text-xs font-medium text-slate-500">Customers who came back</p>
+            <p className="text-xs font-medium text-slate-500">{t('Customers who came back')}</p>
             <p className="mt-1 text-xl font-semibold tabular-nums">{Math.round(repeat.repeatRate * 100)}%</p>
             <p className="text-xs text-slate-500">
               {repeat.repeatCustomers} of {repeat.customers} customers ordered again
             </p>
           </Link>
           <Link href="/customers/segments" className="rounded-2xl border border-black/5 bg-white px-4 py-3 hover:border-brand-500">
-            <p className="text-xs font-medium text-slate-500">Regulars gone quiet</p>
+            <p className="text-xs font-medium text-slate-500">{t('Regulars gone quiet')}</p>
             <p className={cn('mt-1 text-xl font-semibold tabular-nums', quietRegulars.length > 0 && 'text-amber-700')}>{quietRegulars.length}</p>
-            <p className="text-xs text-slate-500">over twice their usual gap since the last order</p>
+            <p className="text-xs text-slate-500">{t('over twice their usual gap since the last order')}</p>
           </Link>
         </section>
       )}
 
       {data.lineItems.length === 0 ? (
         <Card>
-          <EmptyState title="No sales to analyse yet">
+          <EmptyState title={t('No sales to analyse yet')}>
             Orders appear here once they sync. For your history, use “Import past orders” on each account in{' '}
             <Link href="/settings/integrations" className="underline">
-              Settings → Integrations
+              {t('Settings → Integrations')}
             </Link>
             , and add product costs in{' '}
             <Link href="/settings/costs" className="underline">
-              Costs & margins
+              {t('Costs & margins')}
             </Link>
             .
           </EmptyState>
         </Card>
       ) : snapshot.isEmpty ? (
         <Card>
-          <EmptyState title="No orders in this period">
+          <EmptyState title={t('No orders in this period')}>
             <Link href={link({ period: 'all' })} className="underline">
-              Show all time
+              {t('Show all time')}
             </Link>
           </EmptyState>
         </Card>
@@ -142,7 +147,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           <section>
             <SectionTitle
-              title="Summary"
+              title={t('Summary')}
               description={`${snapshot.totals.orders} orders from ${snapshot.totals.customers} customers. ${showProfit ? 'Profit is after VAT, fees, product cost, shipping and refunds.' : 'Margin is after VAT, fees, product cost, shipping and refunds.'}`}
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -154,12 +159,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           <section>
             <SectionTitle
-              title="Top products"
+              title={t('Top products')}
               actions={
                 <div className="flex items-center gap-2">
                   {showProfit && (
                     <Pills
-                      label="Rank products by"
+                      label={t('Rank products by')}
                       options={[
                         { value: 'revenue', label: 'Revenue' },
                         { value: 'profit', label: 'Profit' },
@@ -169,7 +174,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     />
                   )}
                   <Link href={hrefWith('/analytics/products', view.params, {})} className={buttonClass('secondary', 'sm')}>
-                    All products
+                    {t('All products')}
                   </Link>
                 </div>
               }
@@ -178,12 +183,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               <table className="w-full">
                 <thead className="border-b border-slate-100 bg-slate-50/60">
                   <tr>
-                    <th className={th}>Product</th>
-                    <th className={cn(th, 'text-right')}>Units</th>
-                    <th className={cn(th, 'text-right')}>Revenue</th>
-                    {showProfit && <th className={cn(th, 'text-right')}>Profit</th>}
-                    <th className={cn(th, 'text-right')}>Margin</th>
-                    {showProfit && <th className={cn(th, 'text-right')}>Share of profit</th>}
+                    <th className={th}>{t('Product')}</th>
+                    <th className={cn(th, 'text-right')}>{t('Units')}</th>
+                    <th className={cn(th, 'text-right')}>{t('Revenue')}</th>
+                    {showProfit && <th className={cn(th, 'text-right')}>{t('Profit')}</th>}
+                    <th className={cn(th, 'text-right')}>{t('Margin')}</th>
+                    {showProfit && <th className={cn(th, 'text-right')}>{t('Share of profit')}</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -199,9 +204,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         </span>
                       </td>
                       <td className={cn(td, 'text-right tabular-nums')}>{p.units}</td>
-                      <td className={cn(td, 'text-right tabular-nums')}>{formatValue(p.revenuePLN, 'pln')}</td>
-                      {showProfit && <td className={cn(td, 'text-right tabular-nums', p.marginPLN < 0 && 'text-red-700')}>{formatValue(p.marginPLN, 'pln')}</td>}
-                      <td className={cn(td, 'text-right tabular-nums')}>{formatValue(p.marginPct, 'percent')}</td>
+                      <td className={cn(td, 'text-right tabular-nums')}>{formatValue(p.revenuePLN, 'pln', false, t.locale)}</td>
+                      {showProfit && <td className={cn(td, 'text-right tabular-nums', p.marginPLN < 0 && 'text-red-700')}>{formatValue(p.marginPLN, 'pln', false, t.locale)}</td>}
+                      <td className={cn(td, 'text-right tabular-nums')}>{formatValue(p.marginPct, 'percent', false, t.locale)}</td>
                       {showProfit && <td className={cn(td, 'text-right tabular-nums')}>{Math.round(p.marginShare * 100)}%</td>}
                     </tr>
                   ))}
@@ -212,7 +217,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           {questions.length > 0 && (
             <section>
-              <SectionTitle title="Questions worth asking" description="Answered from your own numbers; a card only appears when the data supports an answer." />
+              <SectionTitle title={t('Questions worth asking')} description={t('Answered from your own numbers; a card only appears when the data supports an answer.')} />
               <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {questions.map((q) => (
                   <QuestionCard key={q.id} answer={q} />
@@ -225,7 +230,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           <section>
             <SectionTitle
-              title="What needs a decision"
+              title={t('What needs a decision')}
               actions={
                 <Link href={hrefWith('/analytics/actions', view.params, {})} className={buttonClass('secondary', 'sm')}>
                   All {snapshot.insights.length} findings
@@ -249,13 +254,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               </div>
               <div className="space-y-3">
                 <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  <TrendingUp className="size-4 text-emerald-600" aria-hidden /> Opportunities
+                  <TrendingUp className="size-4 text-emerald-600" aria-hidden /> {t('Opportunities')}
                 </h3>
                 {opportunities.length ? (
                   opportunities.map((i) => <InsightCard key={i.id} insight={i} productHref={productHref} />)
                 ) : (
                   <Card>
-                    <EmptyState title="No scaling opportunities yet" />
+                    <EmptyState title={t('No scaling opportunities yet')} />
                   </Card>
                 )}
               </div>
@@ -264,11 +269,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           <section>
             <SectionTitle
-              title="Business pulse"
+              title={t('Business pulse')}
               description={`By ${period.granularity}; quiet ${period.granularity}s show as zero.`}
               actions={
                 <Pills
-                  label="Pulse metric"
+                  label={t('Pulse metric')}
                   options={[
                     { value: 'money', label: showProfit ? 'Revenue & profit' : 'Revenue' },
                     { value: 'orders', label: 'Orders' },
@@ -291,7 +296,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </section>
 
           <section>
-            <SectionTitle title="Where you sell" />
+            <SectionTitle title={t('Where you sell')} />
             <Card>
               <CardBody>
                 <ChannelBars channels={snapshot.channels} />
