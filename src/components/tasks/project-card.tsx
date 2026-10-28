@@ -29,7 +29,7 @@ export async function ProjectCardView({ card, size = 'compact', today }: { card:
         <div>
           <p className="font-medium leading-snug text-slate-900">{project.name}</p>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
-            {open} {open === 1 ? 'task' : 'tasks'} open
+            {t.plural(open, '{n} task open', '{n} tasks open')}
             <ArrowRight className="size-3 transition-transform group-hover:translate-x-0.5" aria-hidden />
           </p>
         </div>
