@@ -40,7 +40,7 @@ export default async function VonHalskyOffersPage() {
     <>
       <PageHeader
         title={t('Von Halsky offers')}
-        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${account.settings.vhMarkupPercent ?? 10}%. Nothing is created until you tick products and press Create. Offers whose price was set on the Pricing page keep it.`}
+        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup: account.settings.vhMarkupPercent ?? 10 })} ${t('Nothing is created until you tick products and press Create.')} ${t('Offers whose price was set on the Pricing page keep it.')}`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
@@ -59,11 +59,11 @@ export default async function VonHalskyOffersPage() {
       <Card className="mb-5">
         <CardHeader
           title={t('Categories')}
-          description={categories.length ? `${categories.length} cosmetics categories loaded from InPost.` : 'Load the category list from InPost before creating offers.'}
+          description={categories.length ? t('{n} cosmetics categories loaded from InPost.', { n: categories.length }) : t('Load the category list from InPost before creating offers.')}
           actions={
             <ActionForm action={loadCategoriesAction.bind(null, account.id)} popup={t('Loading categories')}>
               <SubmitButton variant="secondary" size="sm" pendingText={t('Loading…')}>
-                {categories.length ? 'Reload categories' : 'Load categories'}
+                {categories.length ? t('Reload categories') : t('Load categories')}
               </SubmitButton>
             </ActionForm>
           }
@@ -75,7 +75,7 @@ export default async function VonHalskyOffersPage() {
               const sample = rows.find((r) => r.productType === type);
               return (
                 <ActionForm key={type || '(none)'} action={saveCategoryAction.bind(null, account.id, type)} className="flex flex-wrap items-center gap-2">
-                  <span className="w-48 text-sm font-medium">{type || '(no product type)'}</span>
+                  <span className="w-48 text-sm font-medium">{type || t('(no product type)')}</span>
                   <Select name="categoryId" defaultValue={sample?.categoryId ?? ''} className="max-w-xl flex-1">
                     <option value="">{t('Choose…')}</option>
                     {categories.map((c) => (
@@ -96,7 +96,7 @@ export default async function VonHalskyOffersPage() {
       </Card>
 
       <Card>
-        <CardHeader title={`${rows.length} products without an offer`} description={`${ready.length} ready. Start with three, check them in the InPost app, then create the rest.`} />
+        <CardHeader title={t('{n} products without an offer', { n: rows.length })} description={t('{n} ready. Start with three, check them in the InPost app, then create the rest.', { n: ready.length })} />
         {rows.length === 0 ? (
           <CardBody>
             <p className="text-sm text-slate-500">{t('Every Shopify product already has a Von Halsky offer.')}</p>
@@ -116,13 +116,13 @@ export default async function VonHalskyOffersPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{r.name}</p>
                     <p className="truncate text-xs text-slate-500">
-                      EAN {r.ean ?? '—'} · {r.categoryPath ?? 'no category'}
+                      EAN {r.ean ?? '—'} · {r.categoryPath ?? t('no category')}
                     </p>
                   </div>
                   <div className="text-right text-sm">
                     <p>{r.price ? `${r.price} zł` : '—'}</p>
                     <p className="text-xs text-slate-500">
-                      Shopify {r.shopifyPrice ?? '—'} · stock {r.stock}
+                      Shopify {r.shopifyPrice ?? '—'} · {t('stock {n}', { n: r.stock })}
                     </p>
                   </div>
                   <div className="w-40 text-right">

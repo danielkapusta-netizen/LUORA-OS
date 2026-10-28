@@ -10,6 +10,7 @@ import { createOffersAction, refreshFromShopifyAction } from '../actions';
 import { hasRealSku } from '@/lib/sku';
 import { MARKETPLACE_LABELS } from '@/lib/utils';
 import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -17,9 +18,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 const CATALOGUE: Record<CatalogueState, { tone: 'green' | 'amber' | 'red'; label: string }> = {
-  found: { tone: 'green', label: 'In catalogue' },
-  unverified: { tone: 'amber', label: 'Catalogue not checked' },
-  missing: { tone: 'red', label: 'Not in catalogue' },
+  found: { tone: 'green', label: msg('In catalogue') },
+  unverified: { tone: 'amber', label: msg('Catalogue not checked') },
+  missing: { tone: 'red', label: msg('Not in catalogue') },
 };
 
 export default async function PublishPage({ params }: { params: Promise<{ accountId: string }> }) {
@@ -46,8 +47,8 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
   return (
     <>
       <PageHeader
-        title={`Publish to ${label}`}
-        description={`Shopify products without an offer in ${account.name}. Price = Shopify + ${markup}%. ${mirakl ? `${label} accepts a product it knows by EAN; if it refuses one, the reason is shown.` : 'Only products the Allegro catalogue knows by EAN can be listed.'} Nothing is created until you tick products and press Create.`}
+        title={t('Publish to {platform}', { platform: label })}
+        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup })} ${mirakl ? t('{platform} accepts a product it knows by EAN; if it refuses one, the reason is shown.', { platform: label }) : t('Only products the Allegro catalogue knows by EAN can be listed.')} ${t('Nothing is created until you tick products and press Create.')}`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
@@ -59,7 +60,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
               </SubmitButton>
             </ActionForm>
             <Link className={buttonClass('secondary')} href={settingsHref}>
-              {label} settings
+              {t('{platform} settings', { platform: label })}
             </Link>
           </>
         }
@@ -70,7 +71,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
           <CardBody className="text-sm text-amber-900">
             {t('Before offers can be created:')} {setupProblems.join('; ')}.{' '}
             <Link href={settingsHref} className="font-medium underline">
-              Open {label} settings
+              {t('Open {platform} settings', { platform: label })}
             </Link>
           </CardBody>
         </Card>
@@ -79,10 +80,10 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
       <Card>
         {rows.length === 0 ? (
           <CardBody>
-            <p className="text-sm text-slate-500">{error ? 'Fix the problem above to see the products.' : `Every Shopify product already has a ${label} offer.`}</p>
+            <p className="text-sm text-slate-500">{error ? t('Fix the problem above to see the products.') : t('Every Shopify product already has a {platform} offer.', { platform: label })}</p>
           </CardBody>
         ) : (
-          <ActionForm action={createOffersAction.bind(null, account.id)} popup={`Creating ${label} offers`}>
+          <ActionForm action={createOffersAction.bind(null, account.id)} popup={t('Creating {platform} offers', { platform: label })}>
             <div className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <label key={r.productId} className="flex items-center gap-3 px-5 py-3">
@@ -96,19 +97,19 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{r.name}</p>
                     <p className="truncate text-xs text-slate-500">
-                      {hasRealSku(r.sku) ? `SKU ${r.sku}` : 'no SKU in Shopify (the EAN is used)'} · EAN {r.ean ?? '—'}
+                      {hasRealSku(r.sku) ? `SKU ${r.sku}` : t('no SKU in Shopify (the EAN is used)')} · EAN {r.ean ?? '—'}
                     </p>
                   </div>
                   <div className="text-right text-sm">
                     <p>{r.price ? `${r.price} zł` : '—'}</p>
                     <p className="text-xs text-slate-500">
-                      Shopify {r.shopifyPrice ?? '—'} · stock {r.stock}
+                      Shopify {r.shopifyPrice ?? '—'} · {t('stock {n}', { n: r.stock })}
                     </p>
                   </div>
                   <div className="flex w-48 flex-col items-end gap-1">
                     {r.catalogue && (
                       <Badge tone={mirakl && r.catalogue === 'missing' ? 'amber' : CATALOGUE[r.catalogue].tone}>
-                        {mirakl && r.catalogue === 'missing' ? `Not found by ${label}’s lookup · you can still try` : CATALOGUE[r.catalogue].label}
+                        {mirakl && r.catalogue === 'missing' ? t('Not found by {platform}’s lookup · you can still try', { platform: label }) : t(CATALOGUE[r.catalogue].label)}
                       </Badge>
                     )}
                     {r.problems.filter((p) => p !== 'not in the catalogue').length > 0 && <Badge tone="amber">{r.problems.filter((p) => p !== 'not in the catalogue').join(', ')}</Badge>}
