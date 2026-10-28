@@ -2,6 +2,8 @@
 // windows they offer last week (the whole Monday-to-Sunday week) and any two dates typed in.
 // Days are the shop's days: they begin and end at midnight in Warsaw, like the day columns of Operations.
 import { parseCustomRange } from './period';
+import { intlTag, type Locale } from '@/lib/i18n/locales';
+import type { T } from '@/lib/i18n/translate';
 
 const DAY_MS = 86_400_000;
 export const SHOP_TIME_ZONE = 'Europe/Warsaw';
@@ -53,8 +55,8 @@ function mondayOf(day: string): string {
   return plusDays(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
 }
 
-function shortDay(day: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
+function shortDay(day: string, locale: Locale = 'en'): string {
+  return new Intl.DateTimeFormat(intlTag(locale), { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`));
 }
 
 /**
@@ -73,6 +75,13 @@ export function resolveDayWindow(input: { days?: string; from?: string; to?: str
   }
   const days = allowed.find((d) => String(d) === input.days) ?? fallback;
   return { key: String(days), label: `${days} days`, from: new Date(now.getTime() - days * DAY_MS), to: now };
+}
+
+/** The window's name as a person reads it ("30 days", "last week", "3 Mar – 9 Mar"), in their language. */
+export function windowLabel(win: DayWindow, t: T): string {
+  if (win.custom) return `${shortDay(win.custom.from, t.locale)} – ${shortDay(win.custom.to, t.locale)}`;
+  if (win.key === 'lastweek') return t('last week');
+  return t.plural(Number(win.key), '{n} day', '{n} days');
 }
 
 /** One-tap day ranges for a plain "from – until" filter (the Orders list), as `YYYY-MM-DD` pairs. */

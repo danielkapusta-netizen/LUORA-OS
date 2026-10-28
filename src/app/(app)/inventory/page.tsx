@@ -9,7 +9,7 @@ import { Gauge } from '@/components/gauge';
 import { productMargins } from '@/server/analytics/dataset';
 import { Badge, buttonClass, Card, EmptyState, Input, PageHeader, Select } from '@/components/ui';
 import { RangeControl } from '@/components/analytics/period-control';
-import { resolveDayWindow } from '@/lib/analytics/window';
+import { resolveDayWindow, windowLabel } from '@/lib/analytics/window';
 import { hasRealSku } from '@/lib/sku';
 import { cn, formatDate, timeAgo } from '@/lib/utils';
 import { can } from '@/lib/permissions';
@@ -20,6 +20,7 @@ import { SUGGESTION_THRESHOLD } from '@/server/services/matching';
 import { emptyPerformance, productStats, type PerformanceLevel, type ProductPerformance } from '@/server/services/product-stats';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 import { adjustStockAction, confirmClearSuggestionsAction, importListingsAction, linkGroupAction, setListingStockAction, syncAllStockAction, unlinkListingAction } from './actions';
+import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -31,12 +32,11 @@ type ListingRow = Awaited<ReturnType<typeof listProductsWithListings>>['listings
 
 const PAGE_SIZE = 20;
 const PERIODS = [7, 30, 90] as const;
-const PERIOD_PRESETS = [...PERIODS.map((d) => ({ value: String(d), label: `${d} days` })), { value: 'lastweek', label: 'Last week' }];
-const SORTS = { sales: 'Best selling', name: 'Name', stock: 'Lowest stock', new: 'Newest' } as const;
+const SORTS = { sales: msg('Best selling'), name: msg('Name'), stock: msg('Lowest stock'), new: msg('Newest') } as const;
 type Sort = keyof typeof SORTS;
 const PLATFORMS = ['shopify', 'allegro', 'empik', 'hebe', 'vonhalsky'] as const;
 const PLATFORM_LABEL: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', hebe: 'HEBE', vonhalsky: 'Von Halsky' };
-const LEVEL_LABEL: Record<PerformanceLevel, string> = { excellent: 'Excellent', good: 'Good', low: 'Low', none: 'No sales' };
+const LEVEL_LABEL: Record<PerformanceLevel, string> = { excellent: msg('Excellent'), good: msg('Good'), low: msg('Low'), none: msg('No sales') };
 const LEVEL_TONE: Record<PerformanceLevel, string> = { excellent: 'text-emerald-600', good: 'text-emerald-600', low: 'text-amber-600', none: 'text-slate-400' };
 
 const compact = new Intl.NumberFormat('pl-PL', { notation: 'compact', maximumFractionDigits: 1 });
@@ -133,7 +133,7 @@ async function ListingDetails({ listings, stock }: { listings: ListingRow[]; sto
                   {l.title}
                   {!l.active && (
                     <Badge tone="gray" className="ml-2">
-                      {l.listingStatus ? `Not on sale: ${l.listingStatus.toLowerCase()}` : 'Not on sale'}
+                      {l.listingStatus ? t('Not on sale: {status}', { status: l.listingStatus.toLowerCase() }) : t('Not on sale')}
                     </Badge>
                   )}
                 </td>
@@ -144,7 +144,7 @@ async function ListingDetails({ listings, stock }: { listings: ListingRow[]; sto
                   {l.active ? (
                     <ActionForm action={setListingStockAction.bind(null, l.id)} className="flex items-center gap-1.5" showOk={false}>
                       <Select name="mode" defaultValue={l.stockMode} className="h-8 w-36 text-xs" aria-label={t('What is sent to this listing')}>
-                        <option value="master">Master stock ({Math.max(0, stock)})</option>
+                        <option value="master">{t('Master stock ({n})', { n: Math.max(0, stock) })}</option>
                         <option value="fixed">{t('Fixed quantity')}</option>
                         <option value="off">{t('Nothing (manage there)')}</option>
                       </Select>
@@ -162,10 +162,10 @@ async function ListingDetails({ listings, stock }: { listings: ListingRow[]; sto
                     <span className="text-red-700">{t('Not sent:')} {l.lastPushError}</span>
                   ) : l.lastPushedAt ? (
                     <>
-                      sent {l.lastPushedQty} · {formatDate(l.lastPushedAt, true, t.locale)}
+                      {t('sent {n}', { n: l.lastPushedQty ?? 0 })} · {formatDate(l.lastPushedAt, true, t.locale)}
                     </>
                   ) : l.lastSeenAt ? (
-                    <>read {formatDate(l.lastSeenAt, true, t.locale)}</>
+                    <>{t('read {date}', { date: formatDate(l.lastSeenAt, true, t.locale) })}</>
                   ) : (
                     '—'
                   )}
@@ -202,6 +202,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const viewer = await requireUser();
   const params = await searchParams;
   const win = resolveDayWindow(params, PERIODS, 30);
+  const winLabel = windowLabel(win, t);
+  const periodPresets = [...PERIODS.map((d) => ({ value: String(d), label: t.plural(d, '{n} day', '{n} days') })), { value: 'lastweek', label: t('Last week') }];
   const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'sales';
   const [{ products, listings }, accounts, matching, log, stats, pending] = await Promise.all([
     listProductsWithListings(),
@@ -267,7 +269,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 .filter((a) => a.enabled && (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe'))
                 .map((a) => (
                   <Link key={a.id} className={buttonClass('secondary')} href={`/inventory/publish/${a.id}`}>
-                    Publish to {PLATFORM_LABEL[a.type]}
+                    {t('Publish to {platform}', { platform: PLATFORM_LABEL[a.type] })}
                   </Link>
                 ))}
             <Link className={buttonClass('secondary')} href="/inventory/vonhalsky">
@@ -288,7 +290,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       />
       {dryRun.length > 0 && (
         <p className="-mt-2 mb-4 text-xs text-amber-700">
-          Dry run on {dryRun.map((a) => `${a.name} (${pending.get(a.id) ?? 0} to send)`).join(', ')}: stock changes are only logged, not sent. Switch it off in Settings → Integrations.
+          {t('Dry run on {accounts}: stock changes are only logged, not sent. Switch it off in Settings → Integrations.', { accounts: dryRun.map((a) => `${a.name} (${t('{n} to send', { n: pending.get(a.id) ?? 0 })})`).join(', ') })}
         </p>
       )}
 
@@ -296,7 +298,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <Stat label={t('Products')}>
           <span className="text-2xl font-semibold tabular-nums">{products.length}</span>
         </Stat>
-        <Stat label={`Best seller · ${win.label}`} className="col-span-2 md:col-span-1">
+        <Stat label={t('Best seller · {period}', { period: winLabel })} className="col-span-2 md:col-span-1">
           {best ? (
             <>
               <ProductPhoto product={best} size="size-8" />
@@ -311,15 +313,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <Stat label={t('Products selling')}>
           <Gauge value={share} tone={share >= 0.5 ? 'excellent' : share > 0 ? 'low' : 'none'} />
           <span className="font-semibold tabular-nums">
-            {sold.length} <span className="text-sm font-normal text-slate-500">of {products.length}</span>
+            {sold.length} <span className="text-sm font-normal text-slate-500">{t('of {n}', { n: products.length })}</span>
           </span>
         </Stat>
-        <Stat label={`Units sold · ${win.label}`}>
+        <Stat label={t('Units sold · {period}', { period: winLabel })}>
           <span className="text-2xl font-semibold tabular-nums">{units.toLocaleString('pl-PL')}</span>
         </Stat>
-        <Stat label={`Revenue · ${win.label}`}>
+        <Stat label={t('Revenue · {period}', { period: winLabel })}>
           <span className="text-2xl font-semibold tabular-nums">{pln(revenue)}</span>
-          {stats.missingRates.length > 0 && <span className="text-xs text-amber-700">without {stats.missingRates.join(', ')}</span>}
+          {stats.missingRates.length > 0 && <span className="text-xs text-amber-700">{t('without {currencies}', { currencies: stats.missingRates.join(', ') })}</span>}
         </Stat>
         <Stat label={t('Out of stock')}>
           <PackageX className={cn('size-5', outOfStock ? 'text-red-500' : 'text-slate-300')} />
@@ -332,7 +334,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-5 py-3">
             <span className="text-sm">
               <span className="font-semibold">
-                Needs matching ({matching.length} product{matching.length === 1 ? '' : 's'}, {offerCount} offer{offerCount === 1 ? '' : 's'})
+                {t('Needs matching ({products}, {offers})', { products: t.plural(matching.length, '{n} product', '{n} products'), offers: t.plural(offerCount, '{n} offer', '{n} offers') })}
               </span>
               <span className="ml-2 text-slate-500">{t('Offers sharing an EAN are one product. Their Shopify product has no barcode, so pick it once. Stock isn’t synced until linked.')}</span>
             </span>
@@ -342,11 +344,11 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             {clear > 0 && (
               <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-2.5 text-sm text-slate-600">
                 <span>
-                  {clear} product{clear === 1 ? ' has a' : 's have a'} clear match by name.
+                  {t.plural(clear, '{n} product has a clear match by name.', '{n} products have a clear match by name.')}
                 </span>
                 <ActionForm action={confirmClearSuggestionsAction}>
                   <SubmitButton size="sm" variant="secondary" pendingText={t('Linking…')}>
-                    Link {clear} clear match{clear === 1 ? '' : 'es'}
+                    {t.plural(clear, 'Link {n} clear match', 'Link {n} clear matches')}
                   </SubmitButton>
                 </ActionForm>
               </div>
@@ -358,18 +360,18 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 return (
                   <li key={g.key} className="grid grid-cols-1 items-center gap-2 px-5 py-3 lg:grid-cols-[1fr_minmax(0,28rem)]">
                     <div className="min-w-0 space-y-1.5">
-                      <p className="text-xs text-slate-500">{g.ean ? `EAN ${g.ean}` : 'no EAN'}</p>
+                      <p className="text-xs text-slate-500">{g.ean ? `EAN ${g.ean}` : t('no EAN')}</p>
                       {g.listings.map((l) => (
                         <div key={l.id} className="flex items-start gap-2 text-sm">
                           <MarketplaceBadge marketplace={l.marketplace} />
                           <span className="min-w-0 flex-1">{l.title}</span>
-                          <span className="shrink-0 text-xs text-slate-500">stock {l.lastSeenQty ?? '?'}</span>
+                          <span className="shrink-0 text-xs text-slate-500">{t('stock {n}', { n: l.lastSeenQty ?? '?' })}</span>
                         </div>
                       ))}
                       <p className="text-xs">
                         {top ? (
                           <span className={g.clear ? 'text-emerald-700' : 'text-amber-700'}>
-                            {g.clear ? 'Clear match by name' : 'Possible match'} ({Math.round(top.score * 100)}%) – check it
+                            {t('{kind} ({pct}%) – check it', { kind: g.clear ? t('Clear match by name') : t('Possible match'), pct: Math.round(top.score * 100) })}
                           </span>
                         ) : (
                           <span className="text-slate-500">{t('No close match: choose the Shopify product')}</span>
@@ -400,7 +402,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         </optgroup>
                       </Select>
                       <SubmitButton size="sm" pendingText="…">
-                        Link{g.listings.length > 1 ? ` ${g.listings.length}` : ''}
+                        {g.listings.length > 1 ? t('Link {n}', { n: g.listings.length }) : t('Link')}
                       </SubmitButton>
                     </ActionForm>
                   </li>
@@ -425,7 +427,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             )}
             <Input name="q" defaultValue={params.q} placeholder={t('Search name, SKU, EAN')} className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
           </form>
-          <RangeControl path="/inventory" current={params} presets={PERIOD_PRESETS} active={win.key} param="days" custom={win.custom} reset={['page']} label={t('Sales period')} />
+          <RangeControl path="/inventory" current={params} presets={periodPresets} active={win.key} param="days" custom={win.custom} reset={['page']} label={t('Sales period')} />
           <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
             {(Object.keys(SORTS) as Sort[]).map((s) => (
               <Link
@@ -433,15 +435,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 href={hrefWith(params, { sort: s === 'sales' ? undefined : s, page: undefined })}
                 className={cn('shrink-0 rounded-full px-3 py-1 whitespace-nowrap max-md:px-4 max-md:py-2 max-md:text-sm', s === sort ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
               >
-                {SORTS[s]}
+                {t(SORTS[s])}
               </Link>
             ))}
           </div>
         </div>
 
         {shown.length === 0 ? (
-          <EmptyState title={products.length ? 'No product matches the search' : 'No products yet'}>
-            {products.length ? null : 'Press “Import listings” to load your products and photos from Shopify.'}
+          <EmptyState title={products.length ? t('No product matches the search') : t('No products yet')}>
+            {products.length ? null : t('Press “Import listings” to load your products and photos from Shopify.')}
           </EmptyState>
         ) : (
           <div className="overflow-x-auto">
@@ -466,7 +468,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                       </td>
                       <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap max-md:order-3 max-md:border-l-0 max-md:px-0 max-md:py-1">
                         <Label>
-                          Performance <span className={cn('ml-1 font-medium', LEVEL_TONE[f.level])}>{LEVEL_LABEL[f.level]}</span>
+                          {t('Performance')} <span className={cn('ml-1 font-medium', LEVEL_TONE[f.level])}>{t(LEVEL_LABEL[f.level])}</span>
                         </Label>
                         <p className="mt-1 flex items-center gap-2 text-sm tabular-nums">
                           <TrendingUp className="size-3.5 text-slate-400" /> {f.units}
@@ -475,16 +477,16 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         </p>
                         {margins.get(p.id) && margins.get(p.id)!.gross > 0 && (
                           <p className="mt-0.5 text-xs text-slate-500" title={t('Profit after VAT, fees, product cost, shipping and refunds')}>
-                            Margin{' '}
+                            {t('Margin')}{' '}
                             <span className={cn('font-medium tabular-nums', margins.get(p.id)!.profit < 0 ? 'text-red-700' : 'text-slate-800')}>
                               {((margins.get(p.id)!.profit / margins.get(p.id)!.gross) * 100).toFixed(1)}%
                             </span>{' '}
-                            {showProfit && <>· {pln(margins.get(p.id)!.profit)} profit</>}
+                            {showProfit && <>· {t('{amount} profit', { amount: pln(margins.get(p.id)!.profit) })}</>}
                           </p>
                         )}
                       </td>
                       <td className="px-2 py-3 max-md:hidden">
-                        <Gauge value={f.percentile} tone={f.level} className="h-10 w-16" label={`${LEVEL_LABEL[f.level]} performance`} />
+                        <Gauge value={f.percentile} tone={f.level} className="h-10 w-16" label={t('{level} performance', { level: t(LEVEL_LABEL[f.level]) })} />
                       </td>
                       <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap max-md:hidden">
                         <Label>{t('Sales rank')}</Label>
@@ -492,7 +494,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           <>
                             <p className="mt-0.5 flex items-center gap-1 text-lg font-semibold tabular-nums">
                               {f.rank === 1 && <Trophy className="size-4 text-amber-500" />}#{f.rank}
-                              <span className="text-xs font-normal text-slate-400">of {products.length}</span>
+                              <span className="text-xs font-normal text-slate-400">{t('of {n}', { n: products.length })}</span>
                             </p>
                             <p className="text-[11px] text-slate-500">
                               {PLATFORMS.filter((m) => f.rankByMarketplace[m])
@@ -505,13 +507,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         )}
                       </td>
                       <td className="border-l border-slate-100 px-4 py-3 max-md:order-2 max-md:border-l-0 max-md:px-0 max-md:py-2">
-                        <Label>Stock {p.stock <= 0 && <span className="ml-1 font-medium text-red-600">{t('out of stock')}</span>}</Label>
+                        <Label>{t('Stock')} {p.stock <= 0 && <span className="ml-1 font-medium text-red-600">{t('out of stock')}</span>}</Label>
                         <ActionForm action={adjustStockAction.bind(null, p.id)} className="mt-1 flex items-center gap-1.5" showOk={false}>
                           <input type="hidden" name="mode" value="set" />
                           <Input
                             name="value"
                             inputMode="numeric"
-                            aria-label={`Stock of ${p.name}`}
+                            aria-label={t('Stock of {name}', { name: p.name })}
                             defaultValue={p.stock}
                             key={p.stock}
                             className={cn('h-8 w-20 text-center font-semibold tabular-nums', p.stock <= 0 && 'text-red-700', p.stock > 0 && p.stock < 5 && 'text-amber-700')}
@@ -539,7 +541,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Previous')}</span>
           )}
           <span>
-            Page {page} of {pages}
+            {t('Page {page} of {pages}', { page, pages })}
           </span>
           {page < pages ? (
             <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page + 1) })}>
