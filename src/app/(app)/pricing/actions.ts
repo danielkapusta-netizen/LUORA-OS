@@ -7,6 +7,7 @@ import { enqueue, JOBS } from '@/server/jobs/queue';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 import { isPricePlatform, pushPrices, PRICE_PLATFORM_LABEL } from '@/server/services/pricing';
 import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
 const FIELD = 'price:';
 
@@ -22,13 +23,17 @@ export async function pushPricesAction(platform: string, _prev: ActionResult, fo
       .flatMap(([key, value]) => (key.startsWith(FIELD) && typeof value === 'string' && value.trim() !== '' ? [{ listingId: key.slice(FIELD.length), price: value }] : []))
       .filter((r) => !only || r.listingId === only);
     if (requests.length === 0) throw new Error(msg('Type a new price first'));
-    const label = isPricePlatform(platform) ? PRICE_PLATFORM_LABEL[platform] : 'the platform';
+    const label = isPricePlatform(platform) ? PRICE_PLATFORM_LABEL[platform] : (await getT())('the platform');
     const { updated, unchanged, failed } = await pushPrices(requests);
     revalidatePath('/pricing');
     const problems = failed.map((f) => `${f.title}: ${f.message}`).join(' | ');
     if (updated === 0 && failed.length) throw new Error(problems);
-    if (updated === 0) return unchanged ? 'Those prices are already on ' + label : 'No price changed';
-    return `Sent ${updated} price${updated === 1 ? '' : 's'} to ${label}.${failed.length ? ` Not sent: ${problems}` : ''}`;
+    if (updated === 0) {
+      const t = await getT();
+      return unchanged ? t('Those prices are already on {platform}', { platform: label }) : t('No price changed');
+    }
+    const t = await getT();
+    return `${t.plural(updated, 'Sent {n} price to {platform}.', 'Sent {n} prices to {platform}.', { platform: label })}${failed.length ? ` ${t('Not sent:')} ${problems}` : ''}`;
   });
 }
 
@@ -39,6 +44,6 @@ export async function refreshPricesAction(platform: string): Promise<ActionResul
     const accounts = (await listMarketplaceAccounts()).filter((a) => a.enabled && a.type === platform);
     if (accounts.length === 0) throw new Error(msg('This platform has no connected account'));
     for (const a of accounts) await enqueue(JOBS.listingsImport, { accountId: a.id }, { singletonKey: a.id });
-    return 'Reading the prices again. Refresh the page in a moment.';
+    return msg('Reading the prices again. Refresh the page in a moment.');
   });
 }

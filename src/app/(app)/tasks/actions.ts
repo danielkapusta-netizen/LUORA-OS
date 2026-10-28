@@ -69,7 +69,7 @@ export async function createTaskAction(_prev: ActionResult, fd: FormData): Promi
       }
     }
     refresh();
-    return 'Task created';
+    return msg('Task created');
   });
 }
 
@@ -82,7 +82,7 @@ export async function saveTaskAction(id: string, _prev: ActionResult, fd: FormDa
     if (isTaskStatus(status)) await setTaskStatus(id, status, user);
     await setAssignees(id, fd.getAll('assigneeIds').map(String), user);
     refresh();
-    return 'Saved';
+    return msg('Saved');
   });
 }
 
@@ -135,7 +135,7 @@ export async function addCommentAction(id: string, _prev: ActionResult, fd: Form
   return attempt(async () => {
     await addComment(id, text(fd, 'body'), user);
     refresh();
-    return 'Comment added';
+    return msg('Comment added');
   });
 }
 
@@ -144,7 +144,7 @@ export async function addChecklistItemAction(id: string, _prev: ActionResult, fd
   return attempt(async () => {
     await addChecklistItem(id, text(fd, 'text'));
     refresh();
-    return 'Added';
+    return msg('Added');
   });
 }
 
@@ -180,7 +180,7 @@ export async function updateProjectAction(id: string, _prev: ActionResult, fd: F
   return attempt(async () => {
     await updateProject(id, projectFields(fd));
     refresh();
-    return 'Saved';
+    return msg('Saved');
   });
 }
 

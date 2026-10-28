@@ -91,7 +91,7 @@ export async function bulkAssignAction(_prev: ActionResult, formData: FormData):
   return attempt(async () => {
     await assignOrder(ids(formData), assignee || null, user.id);
     refresh();
-    return 'Assignment saved';
+    return msg('Assignment saved');
   });
 }
 
@@ -101,7 +101,7 @@ export async function changeStatusAction(orderId: string, _prev: ActionResult, f
   return attempt(async () => {
     await changeStatus(getDb(), orderId, status, { userId: user.id });
     refresh(orderId);
-    return 'Status changed';
+    return msg('Status changed');
   });
 }
 
@@ -110,7 +110,7 @@ export async function addNoteAction(orderId: string, _prev: ActionResult, formDa
   return attempt(async () => {
     await addNote(orderId, user.id, String(formData.get('note') ?? ''), formData.get('important') === 'on');
     refresh(orderId);
-    return 'Note added';
+    return msg('Note added');
   });
 }
 
@@ -119,7 +119,7 @@ export async function editNoteAction(noteId: string, _prev: ActionResult, formDa
   return attempt(async () => {
     const { orderId } = await editNote(noteId, user, String(formData.get('note') ?? ''));
     refresh(orderId);
-    return 'Note saved';
+    return msg('Note saved');
   });
 }
 
@@ -128,7 +128,7 @@ export async function deleteNoteAction(noteId: string): Promise<ActionResult> {
   return attempt(async () => {
     const { orderId } = await deleteNote(noteId, user);
     refresh(orderId);
-    return 'Note deleted';
+    return msg('Note deleted');
   });
 }
 
@@ -167,7 +167,7 @@ export async function updateAddressAction(orderId: string, _prev: ActionResult, 
     if (!address.name || !address.street || !address.city || !address.postalCode) throw new Error(msg('Name, street, city and postal code are required'));
     await updateShippingDetails(orderId, { address, pickupPointId: field('pickupPointId').toUpperCase() || null }, user.id);
     refresh(orderId);
-    return 'Address saved';
+    return msg('Address saved');
   });
 }
 
@@ -176,7 +176,7 @@ export async function acceptOrderAction(orderId: string): Promise<ActionResult> 
   return attempt(async () => {
     await acceptOrder(orderId, user.id);
     refresh(orderId);
-    return 'Order accepted';
+    return msg('Order accepted');
   });
 }
 
@@ -185,7 +185,7 @@ export async function refreshOrderAction(orderId: string): Promise<ActionResult>
   return attempt(async () => {
     await refreshOrder(orderId);
     refresh(orderId);
-    return 'Order refreshed from the marketplace';
+    return msg('Order refreshed from the marketplace');
   });
 }
 
@@ -221,7 +221,7 @@ export async function createLabelAction(orderId: string, _prev: ActionResult, fo
       user.id,
     );
     refresh(orderId);
-    return 'Label requested. It will appear here in a few seconds.';
+    return msg('Label requested. It will appear here in a few seconds.');
   });
 }
 
@@ -230,7 +230,7 @@ export async function cancelShipmentAction(orderId: string, shipmentId: string):
   return attempt(async () => {
     await cancelShipment(shipmentId, user.id);
     refresh(orderId);
-    return 'Label cancelled';
+    return msg('Label cancelled');
   });
 }
 
@@ -239,7 +239,7 @@ export async function retryShipmentAction(orderId: string, shipmentId: string): 
   return attempt(async () => {
     await retryShipment(shipmentId, user.id);
     refresh(orderId);
-    return 'Label requested again';
+    return msg('Label requested again');
   });
 }
 
@@ -248,7 +248,7 @@ export async function pollShipmentAction(orderId: string, shipmentId: string): P
   return attempt(async () => {
     await pollNow(shipmentId);
     refresh(orderId);
-    return 'Checking with the carrier…';
+    return msg('Checking with the carrier…');
   });
 }
 
@@ -257,7 +257,7 @@ export async function retryTrackingAction(orderId: string, shipmentId: string): 
   return attempt(async () => {
     await retryTrackingPush(shipmentId);
     refresh(orderId);
-    return 'Sending tracking again…';
+    return msg('Sending tracking again…');
   });
 }
 
@@ -282,6 +282,6 @@ export async function quickLabelAction(orderId: string): Promise<ActionResult> {
       user.id,
     );
     refresh(orderId);
-    return 'Label requested – it appears here in a few seconds.';
+    return msg('Label requested – it appears here in a few seconds.');
   });
 }

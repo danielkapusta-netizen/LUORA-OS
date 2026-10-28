@@ -19,6 +19,7 @@ import {
 } from '@/server/services/costs';
 import { scheduleFullRecompute } from '@/server/services/profit';
 import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const amount = (fd: FormData, name: string) => parseAmount(text(fd, name));
@@ -56,7 +57,7 @@ export async function saveProfitSettingsAction(_prev: ActionResult, fd: FormData
     });
     await scheduleFullRecompute();
     revalidatePath('/settings/costs');
-    return 'Saved';
+    return msg('Saved');
   });
 }
 
@@ -78,7 +79,7 @@ export async function saveProductCostAction(productId: string, _prev: ActionResu
     );
     await scheduleFullRecompute();
     revalidatePath('/settings/costs');
-    return 'Saved';
+    return msg('Saved');
   });
 }
 
@@ -157,9 +158,10 @@ export async function invoiceCostsAction(_prev: ActionResult, fd: FormData): Pro
     );
     if (!preview && result.saved) await scheduleFullRecompute();
     revalidatePath('/settings/costs');
-    const head = `${preview ? 'Would save' : 'Saved'} ${preview ? result.lines.length : result.saved} cost(s) from ${result.pieces} pieces at ${result.rate} PLN per ${text(fd, 'currency') || 'EUR'}; delivery and extras add ${pln(result.freightPln + result.extraPln)} per piece.`;
-    const lines = result.lines.slice(0, 30).map((l) => `${l.name} (${l.qty} pcs): ${pln(l.unitCostPln)}`);
-    const missed = result.unmatched.length ? ` Not matched to a product (nothing saved): ${result.unmatched.join('; ')}.` : '';
+    const t = await getT();
+    const head = t(preview ? 'Would save {n} cost(s) from {pieces} pieces at {rate} PLN per {currency}; delivery and extras add {extra} per piece.' : 'Saved {n} cost(s) from {pieces} pieces at {rate} PLN per {currency}; delivery and extras add {extra} per piece.', { n: preview ? result.lines.length : result.saved, pieces: result.pieces, rate: result.rate, currency: text(fd, 'currency') || 'EUR', extra: pln(result.freightPln + result.extraPln) });
+    const lines = result.lines.slice(0, 30).map((l) => `${l.name} (${t('{n} pcs', { n: l.qty })}): ${pln(l.unitCostPln)}`);
+    const missed = result.unmatched.length ? ` ${t('Not matched to a product (nothing saved): {names}.', { names: result.unmatched.join('; ') })}` : '';
     return `${head} ${lines.join(' | ')}${result.lines.length > 30 ? ' | …' : ''}${missed}`;
   });
 }

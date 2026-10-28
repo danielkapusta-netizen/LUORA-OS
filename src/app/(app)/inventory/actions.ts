@@ -7,6 +7,7 @@ import { enqueue, JOBS } from '@/server/jobs/queue';
 import { adjustStock, confirmClearSuggestions, linkGroup, linkListing, setListingStock } from '@/server/services/inventory';
 import { listMarketplaceAccounts } from '@/server/services/settings';
 import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
 export async function adjustStockAction(productId: string, _prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const user = await requireUser();
@@ -16,7 +17,7 @@ export async function adjustStockAction(productId: string, _prev: ActionResult, 
     if (!Number.isInteger(value)) throw new Error(msg('Enter a whole number'));
     await adjustStock({ productId, mode, value, userId: user.id, note: String(formData.get('note') ?? '') });
     revalidatePath('/inventory');
-    return 'Stock updated; marketplaces will follow shortly';
+    return msg('Stock updated; marketplaces will follow shortly');
   });
 }
 
@@ -28,7 +29,7 @@ export async function linkGroupAction(listingIds: string[], _prev: ActionResult,
     if (!productId) throw new Error(msg('Choose the Shopify product first'));
     await linkGroup(listingIds, productId);
     revalidatePath('/inventory');
-    return 'Linked';
+    return msg('Linked');
   });
 }
 
@@ -37,7 +38,7 @@ export async function unlinkListingAction(listingId: string): Promise<ActionResu
   return attempt(async () => {
     await linkListing(listingId, null);
     revalidatePath('/inventory');
-    return 'Unlinked; it is back under “Needs matching”';
+    return msg('Unlinked; it is back under “Needs matching”');
   });
 }
 
@@ -46,7 +47,7 @@ export async function confirmClearSuggestionsAction(): Promise<ActionResult> {
   return attempt(async () => {
     const linked = await confirmClearSuggestions();
     revalidatePath('/inventory');
-    return `Linked ${linked} listing(s)`;
+    return (await getT()).plural(linked, 'Linked {n} listing', 'Linked {n} listings');
   });
 }
 
@@ -55,7 +56,7 @@ export async function importListingsAction(): Promise<ActionResult> {
   return attempt(async () => {
     const accounts = (await listMarketplaceAccounts()).filter((a) => a.enabled);
     for (const a of accounts) await enqueue(JOBS.listingsImport, { accountId: a.id }, { singletonKey: a.id });
-    return `Importing listings from ${accounts.length} account(s). Refresh in a moment.`;
+    return (await getT()).plural(accounts.length, 'Importing listings from {n} account. Refresh in a moment.', 'Importing listings from {n} accounts. Refresh in a moment.');
   });
 }
 

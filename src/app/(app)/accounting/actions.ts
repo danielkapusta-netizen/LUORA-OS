@@ -6,6 +6,8 @@ import { requireAdmin, requireUser } from '@/server/auth';
 import type { AccountingSettings } from '@/server/db/schema';
 import { checkAccountingConnection, markInvoicedElsewhere, requestInvoice, retryInvoice, saveAccounting, undoInvoicedElsewhere } from '@/server/services/invoicing';
 import { scheduleFullRecompute } from '@/server/services/profit';
+import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const bool = (fd: FormData, name: string) => fd.get(name) === 'on';
@@ -20,7 +22,7 @@ export async function createInvoiceAction(orderId: string): Promise<ActionResult
   return attempt(async () => {
     await requestInvoice(orderId, user.id);
     refresh();
-    return 'Invoice requested – it appears here in a few seconds.';
+    return msg('Invoice requested – it appears here in a few seconds.');
   });
 }
 
@@ -29,7 +31,7 @@ export async function retryInvoiceAction(invoiceId: string): Promise<ActionResul
   return attempt(async () => {
     await retryInvoice(invoiceId, user.id);
     refresh();
-    return 'Trying again – refresh in a few seconds.';
+    return msg('Trying again – refresh in a few seconds.');
   });
 }
 
@@ -38,7 +40,7 @@ export async function markInvoicedElsewhereAction(orderId: string): Promise<Acti
   return attempt(async () => {
     await markInvoicedElsewhere(orderId, user.id);
     refresh();
-    return 'Marked as already invoiced';
+    return msg('Marked as already invoiced');
   });
 }
 
@@ -47,7 +49,7 @@ export async function undoInvoicedElsewhereAction(invoiceId: string): Promise<Ac
   return attempt(async () => {
     await undoInvoicedElsewhere(invoiceId, user.id);
     refresh();
-    return 'Back in “To issue”';
+    return msg('Back in “To issue”');
   });
 }
 
@@ -90,11 +92,11 @@ export async function saveAccountingAction(_prev: ActionResult, fd: FormData): P
     await scheduleFullRecompute();
     revalidatePath('/settings/accounting');
     revalidatePath('/accounting');
-    return 'Saved';
+    return msg('Saved');
   });
 }
 
 export async function testAccountingAction(): Promise<ActionResult> {
   await requireAdmin();
-  return attempt(async () => `Connected: ${await checkAccountingConnection()}`);
+  return attempt(async () => (await getT())('Connected: {detail}', { detail: await checkAccountingConnection() }));
 }
