@@ -621,8 +621,14 @@ export async function listOrders(f: OrderFilters) {
 
   const returning = await returningInfo(rows.map((r) => ({ id: r.order.id, customerId: r.order.customerId, placedAt: r.order.placedAt })));
   const notes = await noteCounts(ids);
+  // What was bought, for the list's products column.
+  const lines = ids.length
+    ? await db.select({ orderId: orderItems.orderId, name: orderItems.name, quantity: orderItems.quantity }).from(orderItems).where(inArray(orderItems.orderId, ids)).orderBy(asc(orderItems.id))
+    : [];
+  const products = new Map<string, { name: string; quantity: number }[]>();
+  for (const l of lines) products.set(l.orderId, [...(products.get(l.orderId) ?? []), { name: l.name, quantity: l.quantity }]);
   return {
-    rows: rows.map((r) => ({ ...r, shipment: latest.get(r.order.id) ?? null, returning: returning.get(r.order.id) ?? null, notes: notes.get(r.order.id) ?? null })),
+    rows: rows.map((r) => ({ ...r, products: products.get(r.order.id) ?? [], shipment: latest.get(r.order.id) ?? null, returning: returning.get(r.order.id) ?? null, notes: notes.get(r.order.id) ?? null })),
     total: count,
     page,
     pageSize: PAGE_SIZE,

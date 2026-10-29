@@ -25,7 +25,7 @@ export async function ShipmentOrderDetails({
   return (
     <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[minmax(0,20rem)_1fr]">
       <div className="space-y-3">
-        <CustomerSummary buyerName={order.buyer.name} recipientName={a.name} />
+        <CustomerSummary buyerName={order.buyer.name} recipientName={a.name} href={order.customerId ? `/customers/${order.customerId}` : undefined} />
         <div className="flex gap-3 px-1">
           <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />
           <div className="min-w-0 text-sm">

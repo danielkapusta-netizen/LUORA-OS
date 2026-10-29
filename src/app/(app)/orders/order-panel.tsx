@@ -59,7 +59,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
   return (
     <Card className="p-6 max-xl:border-0 max-xl:bg-transparent max-xl:p-0 max-xl:shadow-none">
       <AutoRefresh active={waiting} />
-      <CustomerSummary buyerName={order.buyer.name} recipientName={a.name} />
+      <CustomerSummary buyerName={order.buyer.name} recipientName={a.name} href={order.customerId ? `/customers/${order.customerId}` : undefined} />
       {returning && order.customerId && (
         <Link
           href={`/customers/${order.customerId}`}
@@ -107,6 +107,17 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
               )}
               {order.deliveryMethodName && <p className="mt-0.5 text-xs text-slate-500">{t('Buyer chose:')} {order.deliveryMethodName}</p>}
             </div>
+          </div>
+        </div>
+        {/* Where it goes, right under how it goes, so both can be checked before the label is made. */}
+        <div className="mt-3 flex gap-3 border-t border-black/[0.06] pt-3">
+          <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-slate-500">{order.pickupPointId ? t('Pickup point') : t('Ship to')}</p>
+            <p className="mt-0.5 text-sm text-ink">
+              {order.pickupPointId && <span className="font-medium">{order.pickupPointId} · </span>}
+              {a.street}, {a.postalCode} {a.city}
+            </p>
           </div>
         </div>
 
@@ -192,10 +203,6 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         <InfoRow icon={Hash} label={t('Order #')}>
           <span className="font-medium">{order.externalNumber}</span>
           <span className="text-slate-500"> · {formatDate(order.placedAt, true, t.locale)}</span>
-        </InfoRow>
-        <InfoRow icon={MapPin} label={order.pickupPointId ? t('Pickup point') : t('Ship to')}>
-          {order.pickupPointId && <span className="font-medium">{order.pickupPointId} · </span>}
-          {a.street}, {a.postalCode} {a.city}
         </InfoRow>
         <InfoRow icon={BadgeCheck} label={t('Status')}>
           <span className="flex flex-wrap items-center gap-2">

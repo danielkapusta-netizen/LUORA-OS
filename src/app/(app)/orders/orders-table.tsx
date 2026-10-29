@@ -1,6 +1,7 @@
 'use client';
 
 import { MessageSquareText, Printer, Truck } from 'lucide-react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { MarketplaceBadge, StatusBadge } from '@/components/badges';
@@ -22,6 +23,10 @@ export interface OrderRow {
   accountName: string;
   placedAt: string;
   buyer: string;
+  /** The customer's account, for the link on their name. */
+  customerId: string | null;
+  /** What was bought, line by line. */
+  products: { name: string; quantity: number }[];
   city: string;
   itemCount: number;
   total: string;
@@ -46,6 +51,14 @@ function shortDate(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(intlTag(locale), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
 }
 
+function shortDay(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(intlTag(locale), { day: 'numeric', month: 'short', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
+}
+
+function shortTime(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(intlTag(locale), { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
+}
+
 function sinceLabel(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(intlTag(locale), { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
 }
@@ -54,6 +67,26 @@ function sinceLabel(iso: string, locale: Locale): string {
 function notesLabel(notes: { count: number; important: number }, t: T): string {
   const base = t.plural(notes.count, '{n} note', '{n} notes');
   return notes.important ? `${base}, ${t('{n} important', { n: notes.important })}` : base;
+}
+
+const SHOWN = 4;
+
+/** What was bought, one product per line. The more lines, the smaller the type, so the cell stays the same height. */
+function ProductList({ products }: { products: OrderRow['products'] }) {
+  const t = useT();
+  if (!products.length) return <span className="text-slate-400">—</span>;
+  const size = products.length === 1 ? 'text-sm' : products.length <= 3 ? 'text-xs' : 'text-[11px] leading-tight';
+  return (
+    <ul className={cn('w-48 space-y-0.5 2xl:w-60', size)} title={products.map((p) => `${p.quantity}× ${p.name}`).join('\n')}>
+      {products.slice(0, SHOWN).map((p, i) => (
+        <li key={i} className="flex gap-1 text-ink">
+          {p.quantity > 1 && <span className="shrink-0 font-mono font-medium tabular-nums">{p.quantity}×</span>}
+          <span className={cn('min-w-0', products.length === 1 ? 'line-clamp-2' : 'truncate')}>{p.name}</span>
+        </li>
+      ))}
+      {products.length > SHOWN && <li className="text-slate-500">{t('+{n} more', { n: products.length - SHOWN })}</li>}
+    </ul>
+  );
 }
 
 function LabelChip({ row }: { row: OrderRow }) {
@@ -184,7 +217,10 @@ export function OrdersTable({
                   <span className="truncate text-base font-semibold text-ink">{r.buyer}</span>
                   <span className="shrink-0 text-base font-medium tabular-nums">{formatMoney(r.total, r.currency)}</span>
                 </span>
-                <span className="mt-0.5 flex items-center gap-2 text-sm text-slate-500">
+                {r.products.length > 0 && (
+                  <span className="mt-1 line-clamp-2 text-xs text-slate-600">{r.products.map((p) => (p.quantity > 1 ? `${p.quantity}× ${p.name}` : p.name)).join(' · ')}</span>
+                )}
+                <span className="mt-1.5 flex items-center gap-2 text-sm text-slate-500">
                   <MarketplaceBadge marketplace={r.marketplace} />
                   <span className="truncate">
                     {r.number} · {shortDate(r.placedAt, t.locale)}
@@ -227,11 +263,11 @@ export function OrdersTable({
                   onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))}
                 />
               </th>
-              <th className={th}>{t('Order #')}</th>
+              <th className={th}>{t('Date')}</th>
+              <th className={th}>{t('Products')}</th>
               <th className={th}>{t('Customer')}</th>
               <th className={th}>{t('Source')}</th>
               <th className={cn(th, 'hidden 2xl:table-cell')}>{t('Courier')}</th>
-              <th className={cn(th, 'hidden 2xl:table-cell')}>{t('Date')}</th>
               <th className={th}>{t('Status')}</th>
               <th className={cn(th, 'pr-5 text-right')}>{t('Total')}</th>
             </tr>
@@ -258,13 +294,27 @@ export function OrdersTable({
                       onChange={() => toggle(r.id)}
                     />
                   </td>
-                  <td className={cn(td, 'font-mono text-[13px] whitespace-nowrap text-ink')}>
-                    {r.number}
-                    <div className="font-sans text-xs text-slate-500 2xl:hidden">{shortDate(r.placedAt, t.locale)}</div>
+                  <td className={cn(td, 'whitespace-nowrap')} title={r.number}>
+                    <div className="text-ink tabular-nums">{shortDay(r.placedAt, t.locale)}</div>
+                    <div className="text-xs text-slate-500 tabular-nums">{shortTime(r.placedAt, t.locale)}</div>
                   </td>
                   <td className={td}>
-                    <div className="flex items-center gap-1.5 font-medium whitespace-nowrap text-ink">
-                      {r.buyer}
+                    <ProductList products={r.products} />
+                  </td>
+                  <td className={td}>
+                    <div className="flex min-w-44 max-w-72 flex-wrap items-center gap-x-1.5 gap-y-1 font-medium text-ink">
+                      {r.customerId ? (
+                        <Link
+                          href={`/customers/${r.customerId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="whitespace-nowrap underline decoration-black/20 underline-offset-4 hover:decoration-ink"
+                          title={t('Open customer')}
+                        >
+                          {r.buyer}
+                        </Link>
+                      ) : (
+                        <span className="whitespace-nowrap">{r.buyer}</span>
+                      )}
                       {r.returning && (
                         <span
                           className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-800"
@@ -295,10 +345,11 @@ export function OrdersTable({
                   <td className={td}>
                     <MarketplaceBadge marketplace={r.marketplace} />
                   </td>
-                  <td className={cn(td, 'hidden max-w-40 truncate text-slate-600 2xl:table-cell')} title={r.courier ?? undefined}>
-                    {r.courier ?? <span className="text-slate-400">—</span>}
+                  <td className={cn(td, 'hidden 2xl:table-cell')}>
+                    <span className="line-clamp-2 w-40 text-slate-600" title={r.courier ?? undefined}>
+                      {r.courier ?? <span className="text-slate-400">—</span>}
+                    </span>
                   </td>
-                  <td className={cn(td, 'hidden whitespace-nowrap text-slate-600 2xl:table-cell')}>{shortDate(r.placedAt, t.locale)}</td>
                   <td className={td}>
                     <StatusBadge status={r.status} />
                     {!r.readyToShip && r.status !== 'cancelled' && <div className="mt-1 text-[11px] text-amber-700">{t('Awaiting marketplace')}</div>}

@@ -1,4 +1,5 @@
 import { Package, UserRound } from 'lucide-react';
+import Link from 'next/link';
 import { cn, formatMoney } from '@/lib/utils';
 import { getT } from '@/lib/i18n/server';
 
@@ -12,7 +13,7 @@ function initials(name: string): string {
 }
 
 /** Buyer's name, and whether the parcel goes to them or to someone else. */
-export async function CustomerSummary({ buyerName, recipientName, className }: { buyerName: string; recipientName: string; className?: string }) {
+export async function CustomerSummary({ buyerName, recipientName, href, className }: { buyerName: string; recipientName: string; /** The customer's account, when known. */ href?: string; className?: string }) {
   const t = await getT();
   return (
     <div className={cn('flex items-center gap-3 rounded-2xl bg-sidebar p-4', className)}>
@@ -20,7 +21,13 @@ export async function CustomerSummary({ buyerName, recipientName, className }: {
         {initials(buyerName)}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{buyerName}</p>
+        {href ? (
+          <Link href={href} className="block truncate font-medium underline decoration-black/20 underline-offset-4 hover:decoration-ink" title={t('Open customer')}>
+            {buyerName}
+          </Link>
+        ) : (
+          <p className="truncate font-medium">{buyerName}</p>
+        )}
         <div className="mt-1.5 flex items-center gap-1.5 text-sm">
           <UserRound className="size-3.5 shrink-0 text-slate-400" />
           {recipientName === buyerName ? (
