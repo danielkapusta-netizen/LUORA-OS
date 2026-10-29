@@ -11,6 +11,9 @@ import { cn, formatMoney, ordinal } from '@/lib/utils';
 import type { OrderStatus } from '@/server/db/schema';
 import { bulkAssignAction, bulkCreateLabelsAction, bulkStatusAction } from './actions';
 import { useOrderSheet } from './order-sheet';
+import { useT } from '@/lib/i18n/client';
+import { intlTag, type Locale } from '@/lib/i18n/locales';
+import type { T } from '@/lib/i18n/translate';
 
 export interface OrderRow {
   id: string;
@@ -39,24 +42,30 @@ export interface OrderRow {
 const th = 'px-3 py-3 text-left text-xs font-medium text-slate-500';
 const td = 'px-3 py-3.5 text-sm';
 
-function shortDate(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
+function shortDate(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(intlTag(locale), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
 }
 
-function sinceLabel(iso: string): string {
-  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
+function sinceLabel(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(intlTag(locale), { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
 }
 
 /** A label does not move an order, so the row says it has one: "Label ready" until the parcel is packed. */
+function notesLabel(notes: { count: number; important: number }, t: T): string {
+  const base = t.plural(notes.count, '{n} note', '{n} notes');
+  return notes.important ? `${base}, ${t('{n} important', { n: notes.important })}` : base;
+}
+
 function LabelChip({ row }: { row: OrderRow }) {
+  const t = useT();
   if (!row.shipment?.hasLabel || ['shipped', 'delivered', 'cancelled'].includes(row.status)) return null;
   return row.shipment.packed ? (
-    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20" title="Packed; it moves to Shipped once the tracking has reached the marketplace">
-      Packed
+    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20" title={t('Packed; it moves to Shipped once the tracking has reached the marketplace')}>
+      {t('Packed')}
     </span>
   ) : (
-    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-600/20" title="The label is made. The order stays here until you press Packed">
-      Label ready
+    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-600/20" title={t('The label is made. The order stays here until you press Packed')}>
+      {t('Label ready')}
     </span>
   );
 }
@@ -72,6 +81,7 @@ export function OrdersTable({
   users: { id: string; name: string }[];
   statuses: { value: string; label: string }[];
 }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -96,44 +106,44 @@ export function OrdersTable({
       return next;
     });
 
-  if (rows.length === 0) return <EmptyState title="No orders match these filters">New orders appear here after the next sync.</EmptyState>;
+  if (rows.length === 0) return <EmptyState title={t('No orders match these filters')}>{t('New orders appear here after the next sync.')}</EmptyState>;
 
   return (
     <>
       {checked.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-b border-brand-100 bg-brand-50 px-5 py-2.5">
-          <span className="text-sm font-medium text-brand-700">{checked.size} selected</span>
+          <span className="text-sm font-medium text-brand-700">{t('{n} selected', { n: checked.size })}</span>
           <ActionForm action={bulkCreateLabelsAction} showOk={false}>
             <input type="hidden" name="ids" value={ids} />
-            <SubmitButton size="sm" pendingText="Queuing labels…">
-              <Truck className="size-3.5" /> Generate labels
+            <SubmitButton size="sm" pendingText={t('Queuing labels…')}>
+              <Truck className="size-3.5" /> {t('Generate labels')}
             </SubmitButton>
           </ActionForm>
           {labelIds.length > 0 && (
             <PrintLabelButton className={buttonClass('secondary', 'sm')} href={`/api/labels/merged?shipments=${labelIds.join(',')}`}>
-              <Printer className="size-3.5" /> Print {labelIds.length} label(s)
+              <Printer className="size-3.5" /> {t.plural(labelIds.length, 'Print {n} label', 'Print {n} labels')}
             </PrintLabelButton>
           )}
           <ActionForm action={bulkStatusAction} className="flex items-center gap-1.5">
             <input type="hidden" name="ids" value={ids} />
             <Select name="status" className="h-8 w-40 text-xs" defaultValue="">
               <option value="" disabled>
-                Set status…
+                {t('Set status…')}
               </option>
               {statuses.map((s) => (
                 <option key={s.value} value={s.value}>
-                  {s.label}
+                  {t(s.label)}
                 </option>
               ))}
             </Select>
             <SubmitButton size="sm" variant="secondary">
-              Apply
+              {t('Apply')}
             </SubmitButton>
           </ActionForm>
           <ActionForm action={bulkAssignAction} className="flex items-center gap-1.5">
             <input type="hidden" name="ids" value={ids} />
             <Select name="assigneeId" className="h-8 w-36 text-xs" defaultValue="">
-              <option value="">Unassigned</option>
+              <option value="">{t('Unassigned')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -141,11 +151,11 @@ export function OrdersTable({
               ))}
             </Select>
             <SubmitButton size="sm" variant="secondary">
-              Assign
+              {t('Assign')}
             </SubmitButton>
           </ActionForm>
           <button className="ml-auto text-xs text-brand-700 hover:underline" onClick={() => setChecked(new Set())}>
-            Clear selection
+            {t('Clear selection')}
           </button>
         </div>
       )}
@@ -153,12 +163,12 @@ export function OrdersTable({
       <div className="md:hidden">
         <label className="flex min-h-11 items-center gap-3 border-b border-slate-100 px-4 text-xs font-medium text-slate-500">
           <input type="checkbox" className="size-5 rounded accent-brand-600" checked={allChecked} onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))} />
-          Select all on this page
+          {t('Select all on this page')}
         </label>
         <ul>
           {rows.map((r) => (
             <li key={r.id} className={cn('flex items-stretch border-b border-slate-100 last:border-0', r.returning && 'shadow-[inset_3px_0_0_0_theme(colors.violet.500)]', checked.has(r.id) && 'bg-brand-50/60')}>
-              <label className="flex w-12 shrink-0 items-center justify-center" aria-label={`Select order ${r.number}`}>
+              <label className="flex w-12 shrink-0 items-center justify-center" aria-label={t('Select order {number}', { number: r.number })}>
                 <input type="checkbox" className="size-5 rounded accent-brand-600" checked={checked.has(r.id)} onChange={() => toggle(r.id)} />
               </label>
               <button type="button" onClick={() => open(r.id)} className="press min-w-0 flex-1 py-3.5 pr-4 text-left active:bg-slate-900/[0.04]">
@@ -169,27 +179,27 @@ export function OrdersTable({
                 <span className="mt-0.5 flex items-center gap-2 text-sm text-slate-500">
                   <MarketplaceBadge marketplace={r.marketplace} />
                   <span className="truncate">
-                    {r.number} · {shortDate(r.placedAt)}
+                    {r.number} · {shortDate(r.placedAt, t.locale)}
                   </span>
                 </span>
                 <span className="mt-2 flex flex-wrap items-center gap-1.5">
                   <StatusBadge status={r.status} />
                   <LabelChip row={r} />
-                  {r.cod && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">COD</span>}
-                  {r.returning && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">Returning · {ordinal(r.returning.orderNumber)}</span>}
+                  {r.cod && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">{t('COD')}</span>}
+                  {r.returning && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">{t('Returning · {ordinal}', { ordinal: ordinal(r.returning.orderNumber, t.locale) })}</span>}
                   {r.notes && (
                     <span
                       className={cn(
                         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold',
                         r.notes.important > 0 ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300' : 'bg-slate-100 text-slate-600',
                       )}
-                      aria-label={`${r.notes.count} note${r.notes.count === 1 ? '' : 's'}${r.notes.important ? `, ${r.notes.important} important` : ''}`}
+                      aria-label={notesLabel(r.notes, t)}
                     >
                       <MessageSquareText className="size-3" aria-hidden /> {r.notes.count}
                     </span>
                   )}
-                  {!r.readyToShip && r.status !== 'cancelled' && <span className="text-xs text-amber-700">Awaiting marketplace</span>}
-                  {r.shipment?.state === 'failed' && <span className="text-xs text-red-700">Label failed</span>}
+                  {!r.readyToShip && r.status !== 'cancelled' && <span className="text-xs text-amber-700">{t('Awaiting marketplace')}</span>}
+                  {r.shipment?.state === 'failed' && <span className="text-xs text-red-700">{t('Label failed')}</span>}
                 </span>
               </button>
             </li>
@@ -203,19 +213,19 @@ export function OrdersTable({
               <th className={cn(th, 'w-10 pl-5')}>
                 <input
                   type="checkbox"
-                  aria-label="Select all"
+                  aria-label={t('Select all')}
                   className="size-4 rounded accent-brand-600"
                   checked={allChecked}
                   onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))}
                 />
               </th>
-              <th className={th}>Order #</th>
-              <th className={th}>Customer</th>
-              <th className={th}>Source</th>
-              <th className={cn(th, 'hidden 2xl:table-cell')}>Courier</th>
-              <th className={cn(th, 'hidden 2xl:table-cell')}>Date</th>
-              <th className={th}>Status</th>
-              <th className={cn(th, 'pr-5 text-right')}>Total</th>
+              <th className={th}>{t('Order #')}</th>
+              <th className={th}>{t('Customer')}</th>
+              <th className={th}>{t('Source')}</th>
+              <th className={cn(th, 'hidden 2xl:table-cell')}>{t('Courier')}</th>
+              <th className={cn(th, 'hidden 2xl:table-cell')}>{t('Date')}</th>
+              <th className={th}>{t('Status')}</th>
+              <th className={cn(th, 'pr-5 text-right')}>{t('Total')}</th>
             </tr>
           </thead>
           <tbody>
@@ -234,7 +244,7 @@ export function OrdersTable({
                   <td className={cn(td, 'pl-5')} onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      aria-label={`Select order ${r.number}`}
+                      aria-label={t('Select order {number}', { number: r.number })}
                       className="size-4 rounded accent-brand-600"
                       checked={checked.has(r.id)}
                       onChange={() => toggle(r.id)}
@@ -242,7 +252,7 @@ export function OrdersTable({
                   </td>
                   <td className={cn(td, 'font-medium whitespace-nowrap', active && 'text-brand-700')}>
                     {r.number}
-                    <div className="text-xs font-normal text-slate-400 2xl:hidden">{shortDate(r.placedAt)}</div>
+                    <div className="text-xs font-normal text-slate-400 2xl:hidden">{shortDate(r.placedAt, t.locale)}</div>
                   </td>
                   <td className={td}>
                     <div className="flex items-center gap-1.5 font-medium whitespace-nowrap text-slate-800">
@@ -250,9 +260,9 @@ export function OrdersTable({
                       {r.returning && (
                         <span
                           className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800"
-                          title={`${ordinal(r.returning.orderNumber)} order · first ordered ${sinceLabel(r.returning.since)}`}
+                          title={t('{ordinal} order · first ordered {date}', { ordinal: ordinal(r.returning.orderNumber, t.locale), date: sinceLabel(r.returning.since, t.locale) })}
                         >
-                          Returning · {ordinal(r.returning.orderNumber)}
+                          {t('Returning · {ordinal}', { ordinal: ordinal(r.returning.orderNumber, t.locale) })}
                         </span>
                       )}
                       <LabelChip row={r} />
@@ -262,8 +272,8 @@ export function OrdersTable({
                             'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
                             r.notes.important > 0 ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300' : 'bg-slate-100 text-slate-600',
                           )}
-                          title={`${r.notes.count} note${r.notes.count === 1 ? '' : 's'}${r.notes.important ? ` · ${r.notes.important} important` : ''}`}
-                          aria-label={`${r.notes.count} note${r.notes.count === 1 ? '' : 's'}${r.notes.important ? `, ${r.notes.important} important` : ''}`}
+                          title={notesLabel(r.notes, t)}
+                          aria-label={notesLabel(r.notes, t)}
                         >
                           <MessageSquareText className="size-3" aria-hidden />
                           {r.notes.count}
@@ -271,7 +281,7 @@ export function OrdersTable({
                       )}
                     </div>
                     <div className="text-xs whitespace-nowrap text-slate-400">
-                      {r.city} · {r.itemCount} item{r.itemCount === 1 ? '' : 's'}
+                      {r.city} · {t.plural(r.itemCount, '{n} item', '{n} items')}
                     </div>
                   </td>
                   <td className={td}>
@@ -280,15 +290,15 @@ export function OrdersTable({
                   <td className={cn(td, 'hidden max-w-40 truncate text-slate-600 2xl:table-cell')} title={r.courier ?? undefined}>
                     {r.courier ?? <span className="text-slate-300">—</span>}
                   </td>
-                  <td className={cn(td, 'hidden whitespace-nowrap text-slate-600 2xl:table-cell')}>{shortDate(r.placedAt)}</td>
+                  <td className={cn(td, 'hidden whitespace-nowrap text-slate-600 2xl:table-cell')}>{shortDate(r.placedAt, t.locale)}</td>
                   <td className={td}>
                     <StatusBadge status={r.status} />
-                    {!r.readyToShip && r.status !== 'cancelled' && <div className="mt-1 text-[11px] text-amber-700">Awaiting marketplace</div>}
-                    {r.shipment?.state === 'failed' && <div className="mt-1 text-[11px] text-red-700">Label failed</div>}
+                    {!r.readyToShip && r.status !== 'cancelled' && <div className="mt-1 text-[11px] text-amber-700">{t('Awaiting marketplace')}</div>}
+                    {r.shipment?.state === 'failed' && <div className="mt-1 text-[11px] text-red-700">{t('Label failed')}</div>}
                   </td>
                   <td className={cn(td, 'pr-5 text-right font-medium whitespace-nowrap tabular-nums')}>
                     {formatMoney(r.total, r.currency)}
-                    {r.cod && <div className="text-[11px] font-medium text-orange-700">COD</div>}
+                    {r.cod && <div className="text-[11px] font-medium text-orange-700">{t('COD')}</div>}
                   </td>
                 </tr>
               );

@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { env } from './env';
+import { msg } from '@/lib/i18n/msg';
 
 const scryptAsync = promisify(scrypt) as (password: string, salt: Buffer, keylen: number) => Promise<Buffer>;
 
@@ -10,10 +11,10 @@ function encryptionKey(): Buffer {
   const raw = env().ENCRYPTION_KEY;
   if (raw) {
     const key = Buffer.from(raw, 'base64');
-    if (key.length !== 32) throw new Error('ENCRYPTION_KEY must be 32 bytes encoded as base64');
+    if (key.length !== 32) throw new Error(msg('ENCRYPTION_KEY must be 32 bytes encoded as base64'));
     return key;
   }
-  if (env().NODE_ENV === 'production') throw new Error('ENCRYPTION_KEY is required in production');
+  if (env().NODE_ENV === 'production') throw new Error(msg('ENCRYPTION_KEY is required in production'));
   if (!warnedDevKey) {
     console.warn('ENCRYPTION_KEY is not set; using an insecure development key');
     warnedDevKey = true;
@@ -32,7 +33,7 @@ export function encryptJson(value: unknown): string {
 
 export function decryptJson<T>(payload: string): T {
   const [version, iv, tag, ciphertext] = payload.split(':');
-  if (version !== 'v1' || !iv || !tag || !ciphertext) throw new Error('Unrecognised encrypted payload');
+  if (version !== 'v1' || !iv || !tag || !ciphertext) throw new Error(msg('Unrecognised encrypted payload'));
   const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), Buffer.from(iv, 'base64'));
   decipher.setAuthTag(Buffer.from(tag, 'base64'));
   const plaintext = Buffer.concat([decipher.update(Buffer.from(ciphertext, 'base64')), decipher.final()]);

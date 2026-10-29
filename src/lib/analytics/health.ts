@@ -19,6 +19,7 @@ import type {
   PeriodComparison,
   ProductPerformance,
 } from './types'
+import { msg } from '@/lib/i18n/msg'
 
 export interface HealthInput {
   lineItems: readonly LineItem[]
@@ -74,7 +75,7 @@ function headlineFor(score: number, input: HealthInput): string {
     case 'watch':
       return `Profit is being eroded faster than it is being earned. ${open > 0 ? `${findings} below would move this materially.` : 'Two or three pricing decisions would move this materially.'}`
     case 'at-risk':
-      return `Margin structure needs intervention before scaling spend any further.`
+      return msg(`Margin structure needs intervention before scaling spend any further.`)
   }
 }
 
@@ -88,7 +89,7 @@ export function computeHealthScore(input: HealthInput): HealthScore {
   // 1. Profitability — the anchor. Everything else modulates it.
   const profitability: HealthComponent = {
     key: 'profitability',
-    label: 'Profitability',
+    label: msg('Profitability'),
     weight: 0.3,
     score: clamp(
       ((marginPct - MARGIN_FLOOR_PCT) / (MARGIN_TARGET_PCT - MARGIN_FLOOR_PCT)) * 100,
@@ -98,22 +99,22 @@ export function computeHealthScore(input: HealthInput): HealthScore {
     value: formatPercent(marginPct),
     detail:
       marginPct >= 35
-        ? 'Portfolio margin is comfortably above the marketplace retail benchmark.'
+        ? msg('Portfolio margin is comfortably above the marketplace retail benchmark.')
         : marginPct >= 20
-          ? 'Portfolio margin is workable but leaves little room for advertising.'
-          : 'Portfolio margin is too thin to absorb returns or ad spend.',
+          ? msg('Portfolio margin is workable but leaves little room for advertising.')
+          : msg('Portfolio margin is too thin to absorb returns or ad spend.'),
   }
 
   // 2. Momentum — direction of travel over the two most recent equal windows.
   const change = comparison.revenueChangePct
   const momentum: HealthComponent = {
     key: 'momentum',
-    label: 'Momentum',
+    label: msg('Momentum'),
     weight: 0.25,
     score: !comparison.isReliable || change === null ? 50 : clamp(55 + change * 2.25, 0, 100),
     value: !comparison.isReliable || change === null ? 'Not enough history' : `${change > 0 ? '+' : ''}${change.toFixed(1)}%`,
     detail: !comparison.isReliable || change === null
-      ? 'Scored neutral until there are two comparable trading windows.'
+      ? msg('Scored neutral until there are two comparable trading windows.')
       : change > 0
         ? `Revenue grew against the previous ${comparison.windowDays} days.`
         : `Revenue fell against the previous ${comparison.windowDays} days.`,
@@ -123,28 +124,28 @@ export function computeHealthScore(input: HealthInput): HealthScore {
   const topMarginShare = Math.max(0, ...products.map((product) => product.marginShare)) * 100
   const concentration: HealthComponent = {
     key: 'concentration',
-    label: 'Profit concentration',
+    label: msg('Profit concentration'),
     weight: 0.2,
     score: clamp(100 - Math.max(0, topMarginShare - SAFE_CONCENTRATION_PCT) * 2.2, 0, 100),
     value: `${topMarginShare.toFixed(0)}% from one product`,
     detail:
       topMarginShare > 40
-        ? 'A single product carries most of the profit — a stockout would be material.'
-        : 'Profit is spread across enough products to absorb a single product stalling.',
+        ? msg('A single product carries most of the profit — a stockout would be material.')
+        : msg('Profit is spread across enough products to absorb a single product stalling.'),
   }
 
   // 4. Channel balance — dependency on one marketplace.
   const topChannelShare = Math.max(0, ...channels.map((channel) => channel.revenueShare)) * 100
   const channelBalance: HealthComponent = {
     key: 'channel-balance',
-    label: 'Channel balance',
+    label: msg('Channel balance'),
     weight: 0.1,
     score: clamp(100 - Math.max(0, topChannelShare - SAFE_CHANNEL_SHARE_PCT) * 2.5, 0, 100),
     value: `${topChannelShare.toFixed(0)}% from one channel`,
     detail:
       topChannelShare > 70
-        ? 'Most revenue depends on a single marketplace and its policy changes.'
-        : 'Revenue is spread across marketplaces well enough to absorb a policy change.',
+        ? msg('Most revenue depends on a single marketplace and its policy changes.')
+        : msg('Revenue is spread across marketplaces well enough to absorb a policy change.'),
   }
 
   // 5. Data integrity — confidence in every number above.
@@ -152,14 +153,14 @@ export function computeHealthScore(input: HealthInput): HealthScore {
     (coverage.totalLineItems - coverage.completeLineItems) * 2
   const dataIntegrity: HealthComponent = {
     key: 'data-integrity',
-    label: 'Data confidence',
+    label: msg('Data confidence'),
     weight: 0.15,
     score: clamp(integrityScore, 0, 100),
     value: formatPercent(coverage.costCoverage * 100, 0),
     detail:
       coverage.linesMissingCost > 0
         ? `${formatPLN(coverage.revenueMissingCostPLN)} of revenue has no landed cost on file, so its profit is overstated.`
-        : 'Every order is matched to a landed cost.',
+        : msg('Every order is matched to a landed cost.'),
   }
 
   const components = [profitability, momentum, concentration, channelBalance, dataIntegrity]

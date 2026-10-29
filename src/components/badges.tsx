@@ -1,20 +1,25 @@
+'use client';
+
+import { useT } from '@/lib/i18n/client';
+import { msg } from '@/lib/i18n/msg';
 import type { OrderStatus } from '@/server/db/schema';
 import { MARKETPLACE_LABELS } from '@/lib/utils';
 import { Badge, type BadgeTone } from './ui';
 
 const STATUS: Record<OrderStatus, { label: string; tone: BadgeTone }> = {
-  new: { label: 'New', tone: 'blue' },
-  processing: { label: 'Processing', tone: 'violet' },
-  label_created: { label: 'Label created', tone: 'amber' },
-  shipped: { label: 'Shipped', tone: 'green' },
-  delivered: { label: 'Delivered', tone: 'gray' },
-  on_hold: { label: 'On hold', tone: 'orange' },
-  cancelled: { label: 'Cancelled', tone: 'red' },
+  new: { label: msg('New'), tone: 'blue' },
+  processing: { label: msg('Processing'), tone: 'violet' },
+  label_created: { label: msg('Label created'), tone: 'amber' },
+  shipped: { label: msg('Shipped'), tone: 'green' },
+  delivered: { label: msg('Delivered'), tone: 'gray' },
+  on_hold: { label: msg('On hold'), tone: 'orange' },
+  cancelled: { label: msg('Cancelled'), tone: 'red' },
 };
 
 export function StatusBadge({ status }: { status: OrderStatus }) {
+  const t = useT();
   const s = STATUS[status];
-  return <Badge tone={s.tone}>{s.label}</Badge>;
+  return <Badge tone={s.tone}>{t(s.label)}</Badge>;
 }
 
 // Same hues as the analytics charts, so a marketplace keeps one colour across the app.
@@ -35,13 +40,14 @@ export function MarketplaceBadge({ marketplace }: { marketplace: string }) {
 }
 
 const SHIPMENT: Record<string, { label: string; tone: BadgeTone }> = {
-  pending: { label: 'Creating…', tone: 'amber' },
-  created: { label: 'Label ready', tone: 'green' },
-  failed: { label: 'Failed', tone: 'red' },
-  cancelled: { label: 'Cancelled', tone: 'gray' },
+  pending: { label: msg('Creating…'), tone: 'amber' },
+  created: { label: msg('Label ready'), tone: 'green' },
+  failed: { label: msg('Failed'), tone: 'red' },
+  cancelled: { label: msg('Cancelled'), tone: 'gray' },
 };
 
 export function ShipmentBadge({ state }: { state: string }) {
+  const t = useT();
   const s = SHIPMENT[state] ?? { label: state, tone: 'gray' as const };
-  return <Badge tone={s.tone}>{s.label}</Badge>;
+  return <Badge tone={s.tone}>{t(s.label)}</Badge>;
 }

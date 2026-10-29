@@ -1,5 +1,6 @@
 import { Package, UserRound } from 'lucide-react';
 import { cn, formatMoney } from '@/lib/utils';
+import { getT } from '@/lib/i18n/server';
 
 function initials(name: string): string {
   return name
@@ -11,7 +12,8 @@ function initials(name: string): string {
 }
 
 /** Buyer's name, and whether the parcel goes to them or to someone else. */
-export function CustomerSummary({ buyerName, recipientName, className }: { buyerName: string; recipientName: string; className?: string }) {
+export async function CustomerSummary({ buyerName, recipientName, className }: { buyerName: string; recipientName: string; className?: string }) {
+  const t = await getT();
   return (
     <div className={cn('flex items-center gap-3 rounded-2xl bg-canvas p-4', className)}>
       <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-base font-semibold text-brand-700">
@@ -22,10 +24,10 @@ export function CustomerSummary({ buyerName, recipientName, className }: { buyer
         <div className="mt-1.5 flex items-center gap-1.5 text-sm">
           <UserRound className="size-3.5 shrink-0 text-slate-400" />
           {recipientName === buyerName ? (
-            <span className="text-slate-500">Recipient is the buyer</span>
+            <span className="text-slate-500">{t('Recipient is the buyer')}</span>
           ) : (
             <span>
-              <span className="text-slate-500">Ships to </span>
+              <span className="text-slate-500">{t('Ships to')} </span>
               <span className="font-medium text-amber-700">{recipientName}</span>
             </span>
           )}
@@ -48,7 +50,7 @@ export interface SummaryItem {
  * Products with photo and quantity; prices only when a currency is given.
  * `highlightQuantity` marks lines with more than one piece in yellow, so packers don't miss them.
  */
-export function OrderItemsList({
+export async function OrderItemsList({
   items,
   currency,
   highlightQuantity,
@@ -59,6 +61,7 @@ export function OrderItemsList({
   highlightQuantity?: boolean;
   className?: string;
 }) {
+  const t = await getT();
   return (
     <ul className={cn('space-y-2.5', className)}>
       {items.map((i) => (
@@ -76,10 +79,10 @@ export function OrderItemsList({
             <p className="mt-0.5 text-xs text-slate-400">
               {highlightQuantity && i.quantity > 1 ? (
                 <span className="mr-1 inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-sm font-semibold text-amber-800 ring-1 ring-amber-300">
-                  Qty {i.quantity}
+                  {t('Qty {n}', { n: i.quantity })}
                 </span>
               ) : (
-                <>Qty {i.quantity} </>
+                <>{t('Qty {n}', { n: i.quantity })} </>
               )}
               {i.sku ? `· ${i.sku}` : ''}
             </p>

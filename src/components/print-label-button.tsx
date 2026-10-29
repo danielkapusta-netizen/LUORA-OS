@@ -2,6 +2,7 @@
 
 import { Printer } from 'lucide-react';
 import { useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
 /** Rendering resolution; 300 dpi keeps barcodes sharp on label printers. */
@@ -74,6 +75,7 @@ async function printPages(pages: { url: string; widthPt: number; heightPt: numbe
  * ZPL labels (thermal printers) can't be printed from a browser, so those are downloaded as before.
  */
 export function PrintLabelButton({ href, className, children }: { href: string; className?: string; children?: React.ReactNode }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,7 +95,7 @@ export function PrintLabelButton({ href, className, children }: { href: string; 
       }
       await printPages(await renderPages(await response.arrayBuffer()));
     } catch (err) {
-      setError(`Could not print: ${err instanceof Error ? err.message : String(err)}`);
+      setError(t('Could not print: {reason}', { reason: err instanceof Error ? err.message : String(err) }));
     } finally {
       setBusy(false);
     }
@@ -104,10 +106,10 @@ export function PrintLabelButton({ href, className, children }: { href: string; 
       <a href={href} onClick={print} target="_blank" rel="noreferrer" aria-busy={busy} className={cn(className, busy && 'pointer-events-none opacity-70')}>
         {children ?? (
           <>
-            <Printer className="size-3.5" /> Print label
+            <Printer className="size-3.5" /> {t('Print label')}
           </>
         )}
-        {busy && <span className="sr-only"> (preparing…)</span>}
+        {busy && <span className="sr-only"> {t('(preparing…)')}</span>}
       </a>
       {error && <span className="mt-1 block text-xs text-red-700">{error}</span>}
     </>

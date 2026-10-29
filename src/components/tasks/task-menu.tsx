@@ -7,11 +7,13 @@ import { deleteTaskAction, moveTaskAction, toggleAssignMeAction } from '@/app/(a
 import type { ActionResult } from '@/lib/action-result';
 import { STATUS_LABEL, TASK_STATUSES, type TaskStatus } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/client';
 
 const ITEM = 'block w-full rounded-lg px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50';
 
 /** The "…" menu of a task card: open, move to another column, assign yourself, delete. */
 export function TaskMenu({ id, status, assignedToMe, canDelete }: { id: string; status: TaskStatus; assignedToMe: boolean; canDelete: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
@@ -43,7 +45,7 @@ export function TaskMenu({ id, status, assignedToMe, canDelete }: { id: string; 
     <div ref={ref} className={cn('relative', pending && 'opacity-50')}>
       <button
         type="button"
-        aria-label="Task actions"
+        aria-label={t('Task actions')}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
@@ -54,15 +56,15 @@ export function TaskMenu({ id, status, assignedToMe, canDelete }: { id: string; 
       {open && (
         <div role="menu" className="absolute right-0 z-30 mt-1 w-52 rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
           <Link role="menuitem" href={`/tasks/${id}`} className={ITEM}>
-            Open
+            {t('Open')}
           </Link>
           {TASK_STATUSES.filter((s) => s !== status).map((s) => (
             <button key={s} type="button" role="menuitem" className={ITEM} onClick={() => run(() => moveTaskAction(id, s))}>
-              Move to {STATUS_LABEL[s]}
+              {t('Move to {status}', { status: t(STATUS_LABEL[s]) })}
             </button>
           ))}
           <button type="button" role="menuitem" className={ITEM} onClick={() => run(() => toggleAssignMeAction(id))}>
-            {assignedToMe ? 'Take me off' : 'Assign to me'}
+            {assignedToMe ? t('Take me off') : t('Assign to me')}
           </button>
           {canDelete && (
             <button
@@ -70,10 +72,10 @@ export function TaskMenu({ id, status, assignedToMe, canDelete }: { id: string; 
               role="menuitem"
               className={cn(ITEM, 'text-red-700 hover:bg-red-50')}
               onClick={() => {
-                if (window.confirm('Delete this task? This cannot be undone.')) run(() => deleteTaskAction(id));
+                if (window.confirm(t('Delete this task? This cannot be undone.'))) run(() => deleteTaskAction(id));
               }}
             >
-              Delete
+              {t('Delete')}
             </button>
           )}
         </div>

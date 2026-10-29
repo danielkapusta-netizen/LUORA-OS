@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Sheet } from '@/components/sheet';
+import { useT } from '@/lib/i18n/client';
 
 interface OrderSheetState {
   /** The order the person opened, or null when nothing is open. */
@@ -62,8 +63,9 @@ export function OrderSheetProvider({ children }: { children: ReactNode }) {
 }
 
 function Placeholder() {
+  const t = useT();
   return (
-    <div className="animate-pulse space-y-4 py-2 xl:hidden" aria-busy="true" aria-label="Loading the order">
+    <div className="animate-pulse space-y-4 py-2 xl:hidden" aria-busy="true" aria-label={t('Loading the order')}>
       <div className="h-16 rounded-2xl bg-slate-900/5" />
       <div className="h-12 rounded-xl bg-slate-900/5" />
       <div className="h-12 rounded-xl bg-slate-900/5" />
@@ -74,11 +76,12 @@ function Placeholder() {
 
 /** The order's details (rendered once, by the server): a bottom sheet on a phone or tablet, the side panel on a desktop. */
 export function OrderSheet({ children }: { children: ReactNode }) {
+  const t = useT();
   const ctx = useOrderSheet();
   if (!ctx) return <>{children}</>;
   const loading = ctx.selection !== null && ctx.selection !== ctx.urlOrder;
   return (
-    <Sheet open={ctx.selection !== null} onClose={ctx.close} title="Order" staticFromXl>
+    <Sheet open={ctx.selection !== null} onClose={ctx.close} title={t('Order')} staticFromXl>
       {loading && <Placeholder />}
       <div className={loading ? 'max-xl:hidden' : undefined}>{children}</div>
     </Sheet>

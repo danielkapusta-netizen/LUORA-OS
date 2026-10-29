@@ -4,15 +4,16 @@ import { invoices, orders, shipments, type OrderStatus } from '../db/schema';
 import { enqueue, JOBS } from '../jobs/queue';
 import { logEvent } from './events';
 import { applyOrderStock, restockOrder, scheduleStockPush } from './inventory';
+import { msg } from '@/lib/i18n/msg';
 
 export const STATUS_LABELS: Record<OrderStatus, string> = {
-  new: 'New',
-  processing: 'Processing',
-  label_created: 'Label created',
-  shipped: 'Shipped',
-  delivered: 'Delivered',
-  on_hold: 'On hold',
-  cancelled: 'Cancelled',
+  new: msg('New'),
+  processing: msg('Processing'),
+  label_created: msg('Label created'),
+  shipped: msg('Shipped'),
+  delivered: msg('Delivered'),
+  on_hold: msg('On hold'),
+  cancelled: msg('Cancelled'),
 };
 
 /** Which statuses an order may move to from each status. */
@@ -80,7 +81,7 @@ export async function changeStatus(
   options: { userId?: string | null; reason?: string; force?: boolean } = {},
 ): Promise<void> {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId));
-  if (!order) throw new TransitionError('Order not found');
+  if (!order) throw new TransitionError(msg('Order not found'));
   if (order.status === to) return;
   if (!options.force && !canTransition(order.status, to)) {
     throw new TransitionError(`Can't move an order from "${STATUS_LABELS[order.status]}" to "${STATUS_LABELS[to]}"`);
@@ -92,7 +93,7 @@ export async function changeStatus(
     .set({ status: to, ...(to === 'shipped' && !order.shippedAt ? { shippedAt: new Date() } : {}) })
     .where(and(eq(orders.id, orderId), eq(orders.status, order.status)))
     .returning({ id: orders.id });
-  if (updated.length === 0) throw new TransitionError('The order changed meanwhile; reload and try again');
+  if (updated.length === 0) throw new TransitionError(msg('The order changed meanwhile; reload and try again'));
   await logEvent(db, orderId, 'status', `${STATUS_LABELS[order.status]} → ${STATUS_LABELS[to]}${options.reason ? ` (${options.reason})` : ''}`, {
     userId: options.userId,
     data: { from: order.status, to },

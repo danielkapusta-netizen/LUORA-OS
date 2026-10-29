@@ -26,6 +26,7 @@ import type {
   ProductCost,
   ProductPerformance,
 } from './types'
+import { msg } from '@/lib/i18n/msg'
 
 /** Totals for one window, computed from orders rather than line items. */
 export interface WindowTotals {
@@ -108,7 +109,7 @@ export function buildKpis(
   return [
     {
       key: 'revenue',
-      label: 'Revenue',
+      label: msg('Revenue'),
       value: totals.revenuePLN,
       previous: previous?.revenuePLN ?? null,
       changePct: changeBetween(totals.revenuePLN, previous?.revenuePLN ?? null),
@@ -120,7 +121,7 @@ export function buildKpis(
     },
     {
       key: 'profit',
-      label: 'Profit',
+      label: msg('Profit'),
       value: totals.marginPLN,
       previous: previous?.marginPLN ?? null,
       changePct: changeBetween(totals.marginPLN, previous?.marginPLN ?? null),
@@ -132,7 +133,7 @@ export function buildKpis(
     },
     {
       key: 'margin',
-      label: 'Margin rate',
+      label: msg('Margin rate'),
       value: totals.marginPct,
       previous: previous?.marginPct ?? null,
       changePct:
@@ -142,11 +143,11 @@ export function buildKpis(
       average: meanOf(series, (point) => point.marginPct),
       series: series.map((point) => point.marginPct),
       format: 'percent',
-      hint: 'Profit as a share of revenue. Movement is shown in percentage points, since a rate cannot change by a percentage of itself.',
+      hint: msg('Profit as a share of revenue. Movement is shown in percentage points, since a rate cannot change by a percentage of itself.'),
     },
     {
       key: 'orders',
-      label: 'Orders',
+      label: msg('Orders'),
       value: totals.orders,
       previous: previous?.orders ?? null,
       changePct: changeBetween(totals.orders, previous?.orders ?? null),
@@ -154,11 +155,11 @@ export function buildKpis(
       average: meanOf(series, (point) => point.orders),
       series: series.map((point) => point.orders),
       format: 'number',
-      hint: 'Customer purchases. A multi-item basket counts once, not once per product.',
+      hint: msg('Customer purchases. A multi-item basket counts once, not once per product.'),
     },
     {
       key: 'basket',
-      label: 'Average basket',
+      label: msg('Average basket'),
       value: totals.avgOrderValuePLN,
       previous: previous?.avgOrderValuePLN ?? null,
       changePct: changeBetween(totals.avgOrderValuePLN, previous?.avgOrderValuePLN ?? null),
@@ -166,7 +167,7 @@ export function buildKpis(
       average: meanOf(series, (point) => point.avgOrderValuePLN),
       series: series.map((point) => point.avgOrderValuePLN),
       format: 'pln',
-      hint: 'Revenue divided by orders — what a typical customer spends per purchase.',
+      hint: msg('Revenue divided by orders — what a typical customer spends per purchase.'),
     },
   ]
 }

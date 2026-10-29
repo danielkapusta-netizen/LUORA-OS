@@ -15,6 +15,7 @@ import { enqueue, JOBS } from '../jobs/queue';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
 import { createMatcher, isClearSuggestion, type MatchSuggestion } from './matching';
+import { msg } from '@/lib/i18n/msg';
 
 /** Seconds to wait so a burst of orders becomes one stock push per account. */
 const PUSH_DEBOUNCE_SECONDS = 30;
@@ -75,7 +76,7 @@ export async function adjustStock(input: {
 }): Promise<void> {
   const db = getDb();
   const [product] = await db.select().from(products).where(eq(products.id, input.productId));
-  if (!product) throw new Error('Product not found');
+  if (!product) throw new Error(msg('Product not found'));
   const delta = input.mode === 'set' ? input.value - product.stock : input.value;
   if (delta === 0) return;
   // Relative update, so an order arriving meanwhile isn't overwritten.
@@ -281,7 +282,7 @@ async function autoLinkListings(): Promise<void> {
 export async function linkListing(listingId: string, productId: string | null): Promise<void> {
   const db = getDb();
   const [listing] = await db.select().from(productListings).where(eq(productListings.id, listingId));
-  if (!listing) throw new Error('Listing not found');
+  if (!listing) throw new Error(msg('Listing not found'));
   await db.update(productListings).set({ productId }).where(eq(productListings.id, listingId));
   if (productId) {
     // A Shopify product without a barcode takes the one from the offer it was just matched to,
@@ -614,10 +615,10 @@ export async function recentStockLog(limit = 50) {
 
 /** Chooses what is sent to one listing: the master stock, a fixed quantity, or nothing. */
 export async function setListingStock(listingId: string, mode: 'master' | 'fixed' | 'off', fixedQty?: number | null): Promise<void> {
-  if (mode === 'fixed' && (fixedQty == null || !Number.isInteger(fixedQty) || fixedQty < 0)) throw new Error('Enter a whole number, 0 or more');
+  if (mode === 'fixed' && (fixedQty == null || !Number.isInteger(fixedQty) || fixedQty < 0)) throw new Error(msg('Enter a whole number, 0 or more'));
   const db = getDb();
   const [listing] = await db.select({ id: productListings.id }).from(productListings).where(eq(productListings.id, listingId));
-  if (!listing) throw new Error('Listing not found');
+  if (!listing) throw new Error(msg('Listing not found'));
   await db
     .update(productListings)
     .set({ stockMode: mode, fixedQty: mode === 'fixed' ? fixedQty! : null, lastPushError: null })

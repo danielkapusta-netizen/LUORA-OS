@@ -8,6 +8,7 @@ import { enqueue, JOBS } from '@/server/jobs/queue';
 import { saveCrmSettings } from '@/server/services/crm-sync';
 import { addCustomerNote, mergeCustomers, setCustomerTags } from '@/server/services/customers';
 import { createTask, setTaskDone } from '@/server/services/tasks';
+import { msg } from '@/lib/i18n/msg';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 
@@ -16,7 +17,7 @@ export async function addNoteAction(customerId: string, _prev: ActionResult, fd:
   return attempt(async () => {
     await addCustomerNote(customerId, text(fd, 'body'), user.id);
     revalidatePath(`/customers/${customerId}`);
-    return 'Note added';
+    return msg('Note added');
   });
 }
 
@@ -25,7 +26,7 @@ export async function saveTagsAction(customerId: string, _prev: ActionResult, fd
   return attempt(async () => {
     await setCustomerTags(customerId, text(fd, 'tags').split(','));
     revalidatePath(`/customers/${customerId}`);
-    return 'Tags saved';
+    return msg('Tags saved');
   });
 }
 
@@ -36,7 +37,7 @@ export async function addTaskAction(customerId: string, _prev: ActionResult, fd:
     const assignee = text(fd, 'assigneeId');
     await createTask({ title: text(fd, 'title'), dueDate: text(fd, 'dueAt') || null, customerId, assigneeIds: assignee ? [assignee] : [] }, user);
     revalidatePath('/', 'layout');
-    return 'Task added';
+    return msg('Task added');
   });
 }
 
@@ -63,7 +64,7 @@ export async function saveCrmSettingsAction(_prev: ActionResult, fd: FormData): 
       dryRun: fd.get('dryRun') === 'on',
     });
     revalidatePath('/customers/segments');
-    return 'Saved';
+    return msg('Saved');
   });
 }
 
@@ -71,6 +72,6 @@ export async function runCrmSyncAction(): Promise<ActionResult> {
   await requireAdmin();
   return attempt(async () => {
     await enqueue(JOBS.crmSync, {}, { singletonKey: 'manual' });
-    return 'Sync queued; it runs in the background.';
+    return msg('Sync queued; it runs in the background.');
   });
 }

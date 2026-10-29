@@ -10,6 +10,7 @@
 import { brandOf, categoryOf } from './orders'
 import { ratio, sum } from './parse'
 import type { LineItem, Order, ProductPerformance } from './types'
+import { msg } from '@/lib/i18n/msg'
 
 export type CatalogueDimension = 'product' | 'brand' | 'category'
 
@@ -223,7 +224,7 @@ export function scoreCatalogueRow(
   if (marginGap >= 10) {
     score += 25
     factors.push({
-      label: 'Margin',
+      label: msg('Margin'),
       detail: `${row.marginPct.toFixed(1)}% — well above the ${portfolioMarginPct.toFixed(1)}% portfolio average.`,
       positive: true,
     })
@@ -231,21 +232,21 @@ export function scoreCatalogueRow(
     // Within a couple of points of the average is in line with it, not below it.
     score += 12
     factors.push({
-      label: 'Margin',
+      label: msg('Margin'),
       detail: `${row.marginPct.toFixed(1)}% — in line with the portfolio average.`,
       positive: true,
     })
   } else if (marginGap >= -10) {
     score -= 10
     factors.push({
-      label: 'Margin',
+      label: msg('Margin'),
       detail: `${row.marginPct.toFixed(1)}% — below the ${portfolioMarginPct.toFixed(1)}% portfolio average.`,
       positive: false,
     })
   } else {
     score -= 25
     factors.push({
-      label: 'Margin',
+      label: msg('Margin'),
       detail: `${row.marginPct.toFixed(1)}% — far below the portfolio average, diluting overall profitability.`,
       positive: false,
     })
@@ -259,14 +260,14 @@ export function scoreCatalogueRow(
     if (marginShift <= -3) {
       score -= 15
       factors.push({
-        label: 'Trend',
+        label: msg('Trend'),
         detail: `Margin fell ${Math.abs(marginShift).toFixed(1)} points against last month.`,
         positive: false,
       })
     } else if (marginShift >= 3) {
       score += 12
       factors.push({
-        label: 'Trend',
+        label: msg('Trend'),
         detail: `Margin improved ${marginShift.toFixed(1)} points against last month.`,
         positive: true,
       })
@@ -279,7 +280,7 @@ export function scoreCatalogueRow(
     if (priceShift <= -5) {
       score -= 8
       factors.push({
-        label: 'Price',
+        label: msg('Price'),
         detail: `Realised unit price dropped ${Math.abs(priceShift).toFixed(1)}% — discounting or a mix shift.`,
         positive: false,
       })
@@ -289,7 +290,7 @@ export function scoreCatalogueRow(
   // Weight in the book: a big row carries more consequence either way.
   if (row.revenueShare >= 0.1) {
     factors.push({
-      label: 'Scale',
+      label: msg('Scale'),
       detail: `${(row.revenueShare * 100).toFixed(1)}% of revenue — material to the business.`,
       positive: row.marginPct >= portfolioMarginPct,
     })
@@ -299,7 +300,7 @@ export function scoreCatalogueRow(
   if (row.costUnknown) {
     score -= 10
     factors.push({
-      label: 'Data',
+      label: msg('Data'),
       detail: 'No landed cost on file, so the profit shown here is overstated.',
       positive: false,
     })

@@ -8,10 +8,15 @@ import { calculatorCandidates } from '@/server/db/schema';
 import { analyticsView } from '@/server/analytics/view';
 import { plnRateOn } from '@/server/services/fx';
 import { deleteCandidateAction, saveCandidateAction } from './actions';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Analytics · Calculator' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Analytics · Calculator') };
+}
 
 export default async function CalculatorPage() {
+  const t = await getT();
   await requireUser();
   const [view, saved, usd, eur, krw] = await Promise.all([
     analyticsView({}, 'quarter'),
@@ -27,8 +32,7 @@ export default async function CalculatorPage() {
   return (
     <>
       <p className="mb-4 max-w-3xl text-sm text-slate-500">
-        Will this product make money? Enter the supplier&apos;s quote and the price you&apos;d sell at. Fee rates are measured from your own sales of the last quarter
-        on each marketplace.
+        {t('Will this product make money? Enter the supplier\'s quote and the price you\'d sell at. Fee rates are measured from your own sales of the last quarter on each marketplace.')}
       </p>
       <Calculator
         rates={channelCommissionRates(view.fullSnapshot.orders)}

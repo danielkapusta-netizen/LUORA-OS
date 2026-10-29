@@ -6,6 +6,8 @@ import { requireUser } from '@/server/auth';
 import { requestInvoice, retryInvoice } from '@/server/services/invoicing';
 import { setPacked } from '@/server/services/shipping';
 import { retryFailedTrackingPushes } from '@/server/services/tracking';
+import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
 function refreshInvoices() {
   revalidatePath('/shipments');
@@ -19,7 +21,7 @@ export async function createInvoiceForOrderAction(orderId: string): Promise<Acti
   return attempt(async () => {
     await requestInvoice(orderId, user.id, { anyOrder: true });
     refreshInvoices();
-    return 'Invoice requested';
+    return msg('Invoice requested');
   });
 }
 
@@ -28,7 +30,7 @@ export async function retryInvoiceFromShipmentsAction(invoiceId: string): Promis
   return attempt(async () => {
     await retryInvoice(invoiceId, user.id);
     refreshInvoices();
-    return 'Trying again';
+    return msg('Trying again');
   });
 }
 
@@ -37,7 +39,7 @@ export async function retryFailedTrackingAction(): Promise<ActionResult> {
   return attempt(async () => {
     const count = await retryFailedTrackingPushes();
     revalidatePath('/shipments');
-    return `Sending tracking again for ${count} label(s). Refresh in a moment.`;
+    return (await getT()).plural(count, 'Sending tracking again for {n} label. Refresh in a moment.', 'Sending tracking again for {n} labels. Refresh in a moment.');
   });
 }
 

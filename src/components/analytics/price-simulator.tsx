@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { marginAt, profitAt } from '@/lib/analytics/pricing';
 import { cn } from '@/lib/utils';
 import { formatValue } from './format';
+import { useT } from '@/lib/i18n/client';
 
 /** "What if I sold it at…": margin and monthly profit at another gross price, instantly. */
 export function PriceSimulator({
@@ -22,6 +23,7 @@ export function PriceSimulator({
   /** Off for people who may see margins but not how much profit is made. */
   showProfit?: boolean;
 }) {
+  const t = useT();
   const [price, setPrice] = useState(Math.round(averagePrice * 100) / 100);
   const valid = price > 0;
   const profit = valid ? profitAt(price, commissionRate, unitCost) : 0;
@@ -31,7 +33,7 @@ export function PriceSimulator({
   return (
     <div className="space-y-3">
       <label className="block text-xs font-medium text-slate-600">
-        Gross price, zł
+        {t('Gross price, zł')}
         <div className="mt-1 flex items-center gap-3">
           <input
             type="range"
@@ -53,24 +55,24 @@ export function PriceSimulator({
       </label>
       <dl className={cn('grid gap-3 text-sm', showProfit ? 'grid-cols-3' : 'grid-cols-1')}>
         <div>
-          <dt className="text-xs text-slate-500">Margin</dt>
+          <dt className="text-xs text-slate-500">{t('Margin')}</dt>
           <dd className={cn('font-semibold tabular-nums', margin < 0 && 'text-red-700')}>
-            {formatValue(margin, 'percent')}{' '}
+            {formatValue(margin, 'percent', false, t.locale)}{' '}
             <span className="text-xs font-normal text-slate-500">
               ({margin - averageMarginPct >= 0 ? '+' : ''}
-              {(margin - averageMarginPct).toFixed(1)} pp)
+              {(margin - averageMarginPct).toFixed(1)} {t('pp')})
             </span>
           </dd>
         </div>
         {showProfit && (
         <div>
-          <dt className="text-xs text-slate-500">Profit per unit</dt>
+          <dt className="text-xs text-slate-500">{t('Profit per unit')}</dt>
           <dd className="font-semibold tabular-nums">{formatValue(profit, 'pln')}</dd>
         </div>
         )}
         {showProfit && (
         <div>
-          <dt className="text-xs text-slate-500">Monthly change</dt>
+          <dt className="text-xs text-slate-500">{t('Monthly change')}</dt>
           <dd className={cn('font-semibold tabular-nums', monthlyDelta < 0 ? 'text-red-700' : 'text-emerald-700')}>
             {monthlyDelta >= 0 ? '+' : ''}
             {formatValue(monthlyDelta, 'pln')}
@@ -79,7 +81,7 @@ export function PriceSimulator({
         )}
       </dl>
       <p className="text-xs text-slate-500">
-        Assumes {monthlyUnits} units a month, {(commissionRate * 100).toFixed(1)}% fees and a {formatValue(unitCost, 'pln')} landed cost; shipping and packaging are left out.
+        {t('Assumes {units} units a month, {fees}% fees and a {cost} landed cost; shipping and packaging are left out.', { units: monthlyUnits, fees: (commissionRate * 100).toFixed(1), cost: formatValue(unitCost, 'pln', false, t.locale) })}
       </p>
     </div>
   );

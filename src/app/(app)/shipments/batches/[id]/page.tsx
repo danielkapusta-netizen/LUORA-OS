@@ -18,10 +18,15 @@ import { getBatch } from '@/server/services/shipping';
 import { ImportantNotes } from '../../../orders/order-notes';
 import { ShipmentOrderDetails } from '../../order-details';
 import { PackedToggle } from '../../packed-toggle';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Label batch' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Label batch') };
+}
 
 export default async function BatchPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getT();
   await requireUser();
   const { id } = await params;
   const data = await getBatch(id);
@@ -37,15 +42,15 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
     <>
       <AutoRefresh active={pending > 0} seconds={2} />
       <Link href="/shipments" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft className="size-4" /> Shipments
+        <ArrowLeft className="size-4" /> {t('Shipments')}
       </Link>
       <PageHeader
-        title={`Label batch · ${batch.total} order(s)`}
-        description={`Started ${formatDate(batch.createdAt)}`}
+        title={t('Label batch · {orders}', { orders: t.plural(batch.total, '{n} order', '{n} orders') })}
+        description={t('Started {date}', { date: formatDate(batch.createdAt, true, t.locale) })}
         actions={
           done > 0 && (
             <PrintLabelButton className={buttonClass('primary')} href={`/api/labels/merged?batch=${batch.id}`}>
-              <Printer className="size-4" /> Print {done} label(s)
+              <Printer className="size-4" /> {t.plural(done, 'Print {n} label', 'Print {n} labels')}
             </PrintLabelButton>
           )
         }
@@ -53,10 +58,10 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
       <Card className="mb-5 px-4 py-3">
         <div className="mb-2 flex flex-wrap gap-4 text-sm">
-          <span className="text-emerald-700">{done} ready</span>
-          <span className="text-amber-700">{pending} in progress</span>
-          <span className="text-red-700">{failed} failed</span>
-          <span className="text-slate-500">{skipped.length} skipped</span>
+          <span className="text-emerald-700">{t('{n} ready', { n: done })}</span>
+          <span className="text-amber-700">{t('{n} in progress', { n: pending })}</span>
+          <span className="text-red-700">{t('{n} failed', { n: failed })}</span>
+          <span className="text-slate-500">{t('{n} skipped', { n: skipped.length })}</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full bg-brand-600 transition-all" style={{ width: `${percent}%` }} />
@@ -66,7 +71,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
       {skipped.length > 0 && (
         <div className="mb-5">
           <Alert>
-            <p className="mb-1 font-medium">Not queued:</p>
+            <p className="mb-1 font-medium">{t('Not queued:')}</p>
             <ul className="list-disc space-y-0.5 pl-5">
               {skipped.map((s) => (
                 <li key={s.orderId}>
@@ -86,16 +91,16 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
       )}
 
       <Card>
-        <CardHeader title="Labels" />
+        <CardHeader title={t('Labels')} />
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 max-md:block">
             <thead className="bg-slate-50 max-md:hidden">
               <tr>
                 <th className="w-10" />
-                <th className={th}>Buyer</th>
-                <th className={th}>State</th>
-                <th className={th}>Packed</th>
-                <th className={cn(th, 'text-right')}>Label</th>
+                <th className={th}>{t('Buyer')}</th>
+                <th className={th}>{t('State')}</th>
+                <th className={th}>{t('Packed')}</th>
+                <th className={cn(th, 'text-right')}>{t('Label')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 max-md:block">
@@ -126,7 +131,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                   <td className={cn(td, cell, 'text-right max-md:text-left')}>
                     {s.state === 'created' && (
                       <PrintLabelButton href={`/api/labels/${s.id}`} className={buttonClass('secondary', 'sm')}>
-                        <Printer className="size-3.5" /> Print label
+                        <Printer className="size-3.5" /> {t('Print label')}
                       </PrintLabelButton>
                     )}
                   </td>

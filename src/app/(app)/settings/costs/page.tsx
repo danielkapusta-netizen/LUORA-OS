@@ -15,17 +15,23 @@ import {
   sheetCostsAction,
   shopifyCostsAction,
 } from './actions';
+import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Costs & margins' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Costs & margins') };
+}
 
 /** The Apps Script behind the Luora Analytics sheet. */
 const LUORA_ANALYTICS_SHEET =
   'https://script.google.com/macros/s/AKfycbxM8GUKKRaprp8MVAP7V5fL1JnBA6l-X8DdKUJsW_y7XGIjsfeo4GBAESTrwB73nB3Fnw/exec';
 
 const pct = (v: number | undefined) => (v === undefined ? '' : String(Math.round(v * 10000) / 100));
-const SOURCES: Record<string, string> = { manual: 'entered', import: 'pasted', sheet: 'sheet', shopify: 'Shopify', invoice: 'invoice' };
+const SOURCES: Record<string, string> = { manual: msg('entered'), import: msg('pasted'), sheet: msg('sheet'), shopify: 'Shopify', invoice: msg('invoice') };
 
 export default async function CostsPage({ searchParams }: { searchParams: Promise<{ q?: string; missing?: string; history?: string }> }) {
+  const t = await getT();
   await requireAdmin();
   const params = await searchParams;
   const missing = params.missing === '1';
@@ -47,24 +53,23 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
     <div className="space-y-5">
       <Card>
         <CardHeader
-          title="How profit is calculated"
+          title={t('How profit is calculated')}
           description={
             <>
-              Profit = revenue without VAT − marketplace fees − product cost − label and packaging + shipping paid by the buyer − refunds. VAT rates come from{' '}
+              {t('Profit = revenue without VAT − marketplace fees − product cost − label and packaging + shipping paid by the buyer − refunds. VAT rates come from')}{' '}
               <Link href="/settings/accounting" className="underline">
-                Accounting
+                {t('Accounting')}
               </Link>{' '}
-              (Polish rate {pct(vat)}%, OSS rates for other EU countries).
+              {t('(Polish rate {rate}%, OSS rates for other EU countries).', { rate: pct(vat) })}
             </>
           }
         />
         <CardBody>
           <ActionForm action={saveProfitSettingsAction} className="space-y-5">
             <fieldset>
-              <legend className="mb-1 text-sm font-semibold">Marketplace fees when the marketplace reports none</legend>
+              <legend className="mb-1 text-sm font-semibold">{t('Marketplace fees when the marketplace reports none')}</legend>
               <p className="mb-2 text-xs text-slate-500">
-                Real fees are read from Allegro billing, Empik and HEBE commissions and Shopify Payments. These rates (% of the gross price) are only used for orders
-                without a reported fee yet, and such orders are marked as estimated.
+                {t('Real fees are read from Allegro billing, Empik and HEBE commissions and Shopify Payments. These rates (% of the gross price) are only used for orders without a reported fee yet, and such orders are marked as estimated.')}
               </p>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {(['allegro', 'empik', 'hebe', 'shopify', 'vonhalsky'] as const).map((m) => (
@@ -76,95 +81,95 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
               <Checkbox
                 className="mt-3"
                 name="feesVatDeductible"
-                label="Fees are invoiced with VAT that the company deducts (count them without VAT)"
+                label={t('Fees are invoiced with VAT that the company deducts (count them without VAT)')}
                 defaultChecked={settings.feesVatDeductible}
               />
             </fieldset>
 
             <fieldset>
-              <legend className="mb-1 text-sm font-semibold">Shipping costs per parcel (PLN, without VAT)</legend>
+              <legend className="mb-1 text-sm font-semibold">{t('Shipping costs per parcel (PLN, without VAT)')}</legend>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {LABEL_COST_SERVICES.map((s) => (
                   <Field key={s.key} label={s.label} hint={'hint' in s ? s.hint : undefined}>
                     <Input name={`label_${s.key}`} inputMode="decimal" defaultValue={settings.labelCosts[s.key] ?? ''} />
                   </Field>
                 ))}
-                <Field label="Other parcels" hint="Labels bought outside Luora, and past orders.">
+                <Field label={t('Other parcels')} hint={t('Labels bought outside Luora, and past orders.')}>
                   <Input name="defaultLabelCost" inputMode="decimal" defaultValue={settings.defaultLabelCost} />
                 </Field>
-                <Field label="Packaging">
+                <Field label={t('Packaging')}>
                   <Input name="packagingCost" inputMode="decimal" defaultValue={settings.packagingCost} />
                 </Field>
               </div>
             </fieldset>
 
             <fieldset>
-              <legend className="mb-1 text-sm font-semibold">Margin targets (% of gross revenue)</legend>
+              <legend className="mb-1 text-sm font-semibold">{t('Margin targets (% of gross revenue)')}</legend>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Field label="Target" hint="Used for price recommendations.">
+                <Field label={t('Target')} hint={t('Used for price recommendations.')}>
                   <Input name="targetMargin" inputMode="decimal" defaultValue={pct(settings.targetMargin)} />
                 </Field>
-                <Field label="Healthy from">
+                <Field label={t('Healthy from')}>
                   <Input name="healthyMargin" inputMode="decimal" defaultValue={pct(settings.healthyMargin)} />
                 </Field>
-                <Field label="Thin from">
+                <Field label={t('Thin from')}>
                   <Input name="thinMargin" inputMode="decimal" defaultValue={pct(settings.thinMargin)} />
                 </Field>
-                <Field label="Critical below">
+                <Field label={t('Critical below')}>
                   <Input name="criticalMargin" inputMode="decimal" defaultValue={pct(settings.criticalMargin)} />
                 </Field>
               </div>
             </fieldset>
-            <SubmitButton>Save</SubmitButton>
+            <SubmitButton>{t('Save')}</SubmitButton>
           </ActionForm>
         </CardBody>
       </Card>
 
       <Card>
         <CardHeader
-          title="Product costs"
-          description="Landed cost of one unit in PLN without VAT: purchase price + freight + duty. A cost applies from its date on, so changing it never rewrites past margins."
+          title={t('Product costs')}
+          description={t('Landed cost of one unit in PLN without VAT: purchase price + freight + duty. A cost applies from its date on, so changing it never rewrites past margins.')}
         />
         <CardBody className="space-y-3">
           <div className="flex flex-wrap gap-4 text-sm">
             <span>
-              <span className="font-semibold">{withCost}</span> of {allRows.length} products have a cost
+              <span className="font-semibold">{withCost}</span> {t('of {n} products have a cost', { n: allRows.length })}
             </span>
             <span>
-              <span className="font-semibold">{revenue > 0 ? Math.round((covered / revenue) * 100) : 0}%</span> of the last 90 days&apos; revenue is covered
+              <span className="font-semibold">{revenue > 0 ? Math.round((covered / revenue) * 100) : 0}%</span> {t("of the last 90 days' revenue is covered")}
             </span>
           </div>
           {allRows.length === 0 && (
             <Alert tone="blue">
-              No products yet. Products come from Shopify: use “Import listings for stock sync” on the Shopify account in{' '}
+              {t('No products yet. Products come from Shopify: use “Import listings for stock sync” on the Shopify account in')}{' '}
               <Link href="/settings/integrations" className="underline">
-                Integrations
+                {t('Integrations')}
               </Link>
               .
             </Alert>
           )}
           <form className="flex flex-wrap items-end gap-2" action="/settings/costs">
-            <Field label="Search" className="w-72">
-              <Input name="q" defaultValue={params.q ?? ''} placeholder="Name, SKU, EAN or brand" />
+            <Field label={t('Search')} className="w-72">
+              <Input name="q" defaultValue={params.q ?? ''} placeholder={t('Name, SKU, EAN or brand')} />
             </Field>
-            <Checkbox name="missing" value="1" label="Only products without a cost" defaultChecked={missing} />
+            <Checkbox name="missing" value="1" label={t('Only products without a cost')} defaultChecked={missing} />
             <SubmitButton variant="secondary" size="sm">
-              Filter
+              {t('Filter')}
             </SubmitButton>
           </form>
         </CardBody>
         {rows.length === 0 ? (
-          allRows.length > 0 && <EmptyState title={missing ? 'Every product has a cost' : 'No product matches'} />
+          allRows.length > 0 && <EmptyState title={missing ? t('Every product has a cost') : t('No product matches')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="border-y border-slate-100 bg-slate-50/60">
                 <tr>
-                  <th className={th}>Product</th>
-                  <th className={cn(th, 'text-right')}>Sold, 90 days</th>
-                  <th className={cn(th, 'text-right')}>Avg net price</th>
-                  <th className={th}>Current cost</th>
-                  <th className={th}>Set cost</th>
+                  <th className={th}>{t('Product')}</th>
+                  <th className={cn(th, 'text-right')}>{t('Sold, 90 days')}</th>
+                  <th className={cn(th, 'text-right')}>{t('Avg net price')}</th>
+                  <th className={th}>{t('Current cost')}</th>
+                  <th className={th}>{t('Set cost')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -196,7 +201,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                       <td className={cn(td, 'text-right whitespace-nowrap')}>
                         {r.units90 > 0 ? (
                           <>
-                            {r.units90} pcs
+                            {t('{n} pcs', { n: r.units90 })}
                             <span className="block text-xs text-slate-500">{formatMoney(r.revenue90)}</span>
                           </>
                         ) : (
@@ -210,23 +215,23 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                             <span className="font-medium">{formatMoney(Number(r.cost.unitCost))}</span>
                             {share !== null && (
                               <Badge tone={share > 0.7 ? 'red' : share > 0.55 ? 'amber' : 'green'} className="ml-1.5">
-                                {Math.round(share * 100)}% of price
+                                {t('{pct}% of price', { pct: Math.round(share * 100) })}
                               </Badge>
                             )}
                             <span className="block text-xs text-slate-500">
-                              {r.cost.effectiveFrom === '2000-01-01' ? 'always' : `from ${r.cost.effectiveFrom}`} · {SOURCES[r.cost.source] ?? r.cost.source}
+                              {r.cost.effectiveFrom === '2000-01-01' ? t('always') : t('from {date}', { date: r.cost.effectiveFrom })} · {SOURCES[r.cost.source] ? t(SOURCES[r.cost.source]) : r.cost.source}
                               {r.entries > 1 && (
                                 <>
                                   {' · '}
                                   <Link href={`${link({ history: r.product.id })}#${r.product.id}`} className="underline">
-                                    {r.entries} entries
+                                    {t.plural(r.entries, '{n} entry', '{n} entries')}
                                   </Link>
                                 </>
                               )}
                             </span>
                           </>
                         ) : (
-                          <Badge tone="amber">No cost</Badge>
+                          <Badge tone="amber">{t('No cost')}</Badge>
                         )}
                         {params.history === r.product.id && (
                           <ul className="mt-2 space-y-1 text-xs">
@@ -237,8 +242,8 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                                   {h.purchasePrice && ` (${h.purchasePrice} ${h.purchaseCurrency})`}
                                 </span>
                                 <form action={deleteProductCostAction.bind(null, h.id)}>
-                                  <SubmitButton variant="ghost" size="sm" confirm="Delete this cost entry?">
-                                    Delete
+                                  <SubmitButton variant="ghost" size="sm" confirm={t('Delete this cost entry?')}>
+                                    {t('Delete')}
                                   </SubmitButton>
                                 </form>
                               </li>
@@ -249,23 +254,23 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                       <td className={td}>
                         <ActionForm action={saveProductCostAction.bind(null, r.product.id)} className="space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Input name="unitCost" inputMode="decimal" placeholder="Cost, PLN" className="h-8 w-24" aria-label="Unit cost in PLN" />
-                            <Input name="effectiveFrom" type="date" className="h-8 w-36" aria-label="Valid from" title="Valid from (empty = always)" />
-                            <SubmitButton size="sm">Save</SubmitButton>
+                            <Input name="unitCost" inputMode="decimal" placeholder={t('Cost, PLN')} className="h-8 w-24" aria-label={t('Unit cost in PLN')} />
+                            <Input name="effectiveFrom" type="date" className="h-8 w-36" aria-label={t('Valid from')} title={t('Valid from (empty = always)')} />
+                            <SubmitButton size="sm">{t('Save')}</SubmitButton>
                           </div>
                           <details className="text-xs text-slate-500">
-                            <summary className="cursor-pointer">From purchase price…</summary>
+                            <summary className="cursor-pointer">{t('From purchase price…')}</summary>
                             <div className="mt-2 flex flex-wrap gap-2">
-                              <Input name="purchasePrice" inputMode="decimal" placeholder="Price" className="h-8 w-20" aria-label="Purchase price" />
-                              <Select name="purchaseCurrency" className="h-8 w-20" defaultValue="USD" aria-label="Currency">
+                              <Input name="purchasePrice" inputMode="decimal" placeholder={t('Price')} className="h-8 w-20" aria-label={t('Purchase price')} />
+                              <Select name="purchaseCurrency" className="h-8 w-20" defaultValue="USD" aria-label={t('Currency')}>
                                 {['PLN', 'USD', 'EUR', 'KRW', 'GBP'].map((c) => (
                                   <option key={c}>{c}</option>
                                 ))}
                               </Select>
-                              <Input name="freight" inputMode="decimal" placeholder="Freight, PLN" className="h-8 w-24" aria-label="Freight per unit" />
-                              <Input name="duty" inputMode="decimal" placeholder="Duty, PLN" className="h-8 w-24" aria-label="Duty per unit" />
+                              <Input name="freight" inputMode="decimal" placeholder={t('Freight, PLN')} className="h-8 w-24" aria-label={t('Freight per unit')} />
+                              <Input name="duty" inputMode="decimal" placeholder={t('Duty, PLN')} className="h-8 w-24" aria-label={t('Duty per unit')} />
                             </div>
-                            <p className="mt-1">Leave the cost empty: it is worked out at the NBP rate of the date.</p>
+                            <p className="mt-1">{t('Leave the cost empty: it is worked out at the NBP rate of the date.')}</p>
                           </details>
                         </ActionForm>
                       </td>
@@ -280,55 +285,55 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
 
       <Card>
         <CardHeader
-          title="Import a purchase invoice"
-          description="Paste the invoice lines (barcode, quantity, unit price). Each product's cost becomes its price in PLN at the NBP rate of the invoice date, plus its share of delivery and extras, from that date on. Press Check first to see the result."
+          title={t('Import a purchase invoice')}
+          description={t('Paste the invoice lines (barcode, quantity, unit price). Each product\'s cost becomes its price in PLN at the NBP rate of the invoice date, plus its share of delivery and extras, from that date on. Press Check first to see the result.')}
         />
         <CardBody>
           <ActionForm action={invoiceCostsAction} className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
             <div className="space-y-2">
-              <Textarea name="lines" rows={9} required placeholder={'8809562191438;3;6.25\n8809151133610;3;5.37\nOr whole rows copied from the invoice table'} />
+              <Textarea name="lines" rows={9} required placeholder={'8809562191438;3;6.25\n8809151133610;3;5.37\n' + t('Or whole rows copied from the invoice table')} />
               <p className="text-xs text-slate-500">
-                One product per line: barcode, SKU or name, then quantity and unit price. A whole table row works too (the barcode column is found; the amount column is ignored).
+                {t('One product per line: barcode, SKU or name, then quantity and unit price. A whole table row works too (the barcode column is found; the amount column is ignored).')}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Invoice date" hint="Costs apply from this day.">
+              <Field label={t('Invoice date')} hint={t('Costs apply from this day.')}>
                 <Input name="effectiveFrom" type="date" required />
               </Field>
-              <Field label="Invoice no. (optional)">
+              <Field label={t('Invoice no. (optional)')}>
                 <Input name="invoiceNumber" />
               </Field>
-              <Field label="Currency">
+              <Field label={t('Currency')}>
                 <Select name="currency" defaultValue="EUR">
                   {['EUR', 'USD', 'PLN', 'GBP', 'CZK', 'HUF', 'CNY'].map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </Select>
               </Field>
-              <Field label="Unit prices are">
+              <Field label={t('Unit prices are')}>
                 <Select name="prices" defaultValue="net">
-                  <option value="net">net (without VAT)</option>
-                  <option value="gross">gross (with VAT)</option>
+                  <option value="net">{t('net (without VAT)')}</option>
+                  <option value="gross">{t('gross (with VAT)')}</option>
                 </Select>
               </Field>
-              <Field label="VAT rate (%)">
+              <Field label={t('VAT rate (%)')}>
                 <Input name="vatRate" inputMode="decimal" defaultValue="23" />
               </Field>
-              <Field label="Delivery charge" hint="In the invoice currency, spread over all pieces.">
+              <Field label={t('Delivery charge')} hint={t('In the invoice currency, spread over all pieces.')}>
                 <Input name="delivery" inputMode="decimal" placeholder="0" />
               </Field>
               <div className="col-span-2">
-                <Checkbox name="deliveryGross" label="The delivery charge includes VAT" />
+                <Checkbox name="deliveryGross" label={t('The delivery charge includes VAT')} />
               </div>
-              <Field label="Customs and other extras, PLN" hint="Net, for the whole delivery." className="col-span-2">
+              <Field label={t('Customs and other extras, PLN')} hint={t('Net, for the whole delivery.')} className="col-span-2">
                 <Input name="extraPln" inputMode="decimal" placeholder="0" />
               </Field>
               <div className="col-span-2 flex flex-wrap gap-2">
                 <SubmitButton variant="secondary" name="mode" value="check">
-                  Check
+                  {t('Check')}
                 </SubmitButton>
                 <SubmitButton name="mode" value="save">
-                  Save costs
+                  {t('Save costs')}
                 </SubmitButton>
               </div>
             </div>
@@ -338,38 +343,38 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card>
-          <CardHeader title="Paste costs" description="One product per line: SKU, EAN or name, then the cost in PLN. Copy two columns from a spreadsheet." />
+          <CardHeader title={t('Paste costs')} description={t('One product per line: SKU, EAN or name, then the cost in PLN. Copy two columns from a spreadsheet.')} />
           <CardBody>
             <ActionForm action={pasteCostsAction} className="space-y-3">
               <Textarea name="lines" rows={6} placeholder={'LUO-MUG-01;18,40\n5901234567890\t22.10\nCOSRX Snail Mucin 96 Essence 100 ml;31.50'} />
-              <Field label="Valid from" hint="Empty = for all past and future sales.">
+              <Field label={t('Valid from')} hint={t('Empty = for all past and future sales.')}>
                 <Input name="effectiveFrom" type="date" />
               </Field>
-              <SubmitButton>Import</SubmitButton>
+              <SubmitButton>{t('Import')}</SubmitButton>
             </ActionForm>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="From the Luora Analytics sheet" description="Reads the cost tab (landed cost per unit) through its Apps Script and matches each row to a product by name." />
+          <CardHeader title={t('From the Luora Analytics sheet')} description={t('Reads the cost tab (landed cost per unit) through its Apps Script and matches each row to a product by name.')} />
           <CardBody>
             <ActionForm action={sheetCostsAction} className="space-y-3">
-              <Field label="Apps Script URL">
+              <Field label={t('Apps Script URL')}>
                 <Input name="url" defaultValue={LUORA_ANALYTICS_SHEET} />
               </Field>
-              <Field label="Valid from" hint="Empty = for all past and future sales.">
+              <Field label={t('Valid from')} hint={t('Empty = for all past and future sales.')}>
                 <Input name="effectiveFrom" type="date" />
               </Field>
-              <SubmitButton pendingText="Importing…">Import from sheet</SubmitButton>
+              <SubmitButton pendingText={t('Importing…')}>{t('Import from sheet')}</SubmitButton>
             </ActionForm>
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="From Shopify" description="Uses each variant's “Cost per item”, converted to PLN at today's NBP rate." />
+          <CardHeader title={t('From Shopify')} description={t('Uses each variant\'s “Cost per item”, converted to PLN at today\'s NBP rate.')} />
           <CardBody>
             <ActionForm action={shopifyCostsAction} className="space-y-3">
-              <Checkbox name="overwrite" label="Also replace costs already set here (as a new entry from today)" />
+              <Checkbox name="overwrite" label={t('Also replace costs already set here (as a new entry from today)')} />
               <div>
-                <SubmitButton pendingText="Importing…">Import from Shopify</SubmitButton>
+                <SubmitButton pendingText={t('Importing…')}>{t('Import from Shopify')}</SubmitButton>
               </div>
             </ActionForm>
           </CardBody>

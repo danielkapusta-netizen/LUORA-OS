@@ -12,6 +12,7 @@ import { normalizeEan } from '@/lib/sku';
 import { getMarketplaceAdapter } from './accounts';
 import { plnRateOn, today } from './fx';
 import { createMatcher, isClearSuggestion } from './matching';
+import { msg } from '@/lib/i18n/msg';
 
 // ---------------------------------------------------------------- settings
 
@@ -49,7 +50,7 @@ export async function loadAnalyticsSettings(): Promise<Required<AnalyticsSetting
 export async function saveAnalyticsSettings(settings: AnalyticsSettings): Promise<void> {
   const { healthyMargin, thinMargin, criticalMargin } = { ...DEFAULT_ANALYTICS_SETTINGS, ...settings };
   if (!(criticalMargin < thinMargin && thinMargin < healthyMargin)) {
-    throw new Error('Margin bands must rise: critical < thin < healthy');
+    throw new Error(msg('Margin bands must rise: critical < thin < healthy'));
   }
   await getDb()
     .insert(analyticsSettings)
@@ -85,7 +86,7 @@ export interface CostInput {
 /** Landed cost in PLN: purchase price at the NBP rate of the day, plus freight and duty. */
 export async function landedCost(input: CostInput, day: string): Promise<number> {
   if (input.unitCost != null) return input.unitCost;
-  if (input.purchasePrice == null) throw new Error('Enter the unit cost, or the purchase price');
+  if (input.purchasePrice == null) throw new Error(msg('Enter the unit cost, or the purchase price'));
   const currency = (input.purchaseCurrency || 'PLN').toUpperCase();
   const rate = await plnRateOn(currency, day);
   if (rate === null) throw new Error(`No NBP rate for ${currency} on ${day}; enter the cost in PLN`);
@@ -96,9 +97,9 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function setProductCost(productId: string, input: CostInput, userId: string | null, source = 'manual'): Promise<ProductCost> {
   const effectiveFrom = input.effectiveFrom?.trim() || '2000-01-01';
-  if (!DAY.test(effectiveFrom)) throw new Error('The date must look like 2026-10-01');
+  if (!DAY.test(effectiveFrom)) throw new Error(msg('The date must look like 2026-10-01'));
   const unitCost = await landedCost(input, effectiveFrom === '2000-01-01' ? today() : effectiveFrom);
-  if (!(unitCost >= 0)) throw new Error('The cost cannot be negative');
+  if (!(unitCost >= 0)) throw new Error(msg('The cost cannot be negative'));
   const values = {
     unitCost: unitCost.toFixed(4),
     purchasePrice: input.purchasePrice != null ? String(input.purchasePrice) : null,
@@ -310,9 +311,9 @@ export interface InvoiceResult {
  * invoice day) plus its share of the delivery charge and extra costs becomes its landed cost from that day on.
  */
 export async function importInvoice(input: InvoiceInput, userId: string | null): Promise<InvoiceResult> {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) throw new Error('Enter the invoice date');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) throw new Error(msg('Enter the invoice date'));
   const parsed = parseInvoiceLines(input.lines);
-  if (parsed.length === 0) throw new Error('No lines with a product, a quantity and a price were found');
+  if (parsed.length === 0) throw new Error(msg('No lines with a product, a quantity and a price were found'));
   const currency = (input.currency || 'PLN').toUpperCase();
   const rate = await plnRateOn(currency, input.effectiveFrom);
   if (rate === null) throw new Error(`No NBP rate for ${currency} on ${input.effectiveFrom}`);
@@ -361,16 +362,16 @@ export async function importInvoice(input: InvoiceInput, userId: string | null):
  */
 export async function importCostsFromSheet(url: string, options: { effectiveFrom?: string; userId: string | null }): Promise<ImportResult> {
   const endpoint = new URL(url.trim());
-  if (endpoint.protocol !== 'https:') throw new Error('The sheet URL must start with https://');
+  if (endpoint.protocol !== 'https:') throw new Error(msg('The sheet URL must start with https://'));
   endpoint.searchParams.set('action', 'productCosts');
   const { data } = await request<string>(endpoint.toString(), { responseType: 'text', timeoutMs: 30_000 });
   let rows: unknown;
   try {
     rows = JSON.parse(data);
   } catch {
-    throw new Error('The sheet answered with a page instead of data. Check the Apps Script URL (it ends with /exec).');
+    throw new Error(msg('The sheet answered with a page instead of data. Check the Apps Script URL (it ends with /exec).'));
   }
-  if (!Array.isArray(rows)) throw new Error('The sheet returned no cost rows');
+  if (!Array.isArray(rows)) throw new Error(msg('The sheet returned no cost rows'));
   const lines = rows
     .map((r: { sku?: unknown; totalCost?: unknown }) => ({ key: String(r.sku ?? '').trim(), cost: parseAmount(r.totalCost) }))
     .filter((l): l is ImportLine => Boolean(l.key) && l.cost !== null && l.cost > 0);
@@ -387,7 +388,7 @@ export async function importCostsFromSheet(url: string, options: { effectiveFrom
 export async function importCostsFromShopify(options: { userId: string | null; overwrite?: boolean }): Promise<ImportResult & { skipped: number }> {
   const db = getDb();
   const accounts = await db.select().from(marketplaceAccounts).where(and(eq(marketplaceAccounts.type, 'shopify'), eq(marketplaceAccounts.enabled, true)));
-  if (!accounts.length) throw new Error('No Shopify account is connected');
+  if (!accounts.length) throw new Error(msg('No Shopify account is connected'));
   const known = await currentCosts();
   const variants = await db.select({ id: products.id, variantId: products.shopifyVariantId }).from(products);
   const byVariant = new Map(variants.filter((v) => v.variantId).map((v) => [v.variantId!, v.id]));

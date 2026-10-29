@@ -2,6 +2,7 @@
 
 import { Minus, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { useT } from '@/lib/i18n/client';
 import { cn } from '@/lib/utils';
 
 /** A table row with a +/− button in its first cell that shows `details` in a full-width row below. */
@@ -10,7 +11,7 @@ export function ExpandableRow({
   details,
   colSpan,
   className,
-  label = 'order details',
+  label,
   stack = false,
 }: {
   children: React.ReactNode;
@@ -21,7 +22,9 @@ export function ExpandableRow({
   /** On a phone, show the row as a card: its cells stack and the +/− button moves to the corner. The table around it must be block too. */
   stack?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
+  const what = label ?? t('order details');
   const Icon = open ? Minus : Plus;
   return (
     <>
@@ -31,7 +34,7 @@ export function ExpandableRow({
             type="button"
             onClick={() => setOpen(!open)}
             aria-expanded={open}
-            aria-label={open ? `Hide ${label}` : `Show ${label}`}
+            aria-label={open ? t('Hide {what}', { what }) : t('Show {what}', { what })}
             className={cn('flex size-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800', stack && 'max-md:size-11 max-md:rounded-xl max-md:border-0 max-md:bg-transparent')}
           >
             <Icon className="size-3.5" />

@@ -6,6 +6,7 @@ import { AvatarStack } from './avatars';
 import { DueChip, PriorityFlag, ProjectChip, TagChip } from './chips';
 import { DoneToggle } from './done-toggle';
 import { TaskMenu } from './task-menu';
+import { getT } from '@/lib/i18n/server';
 
 export interface CardProps {
   card: TaskCard;
@@ -22,7 +23,8 @@ export interface CardProps {
   showProject?: boolean;
 }
 
-function Meta({ card, tagHref, showProject }: Pick<CardProps, 'card' | 'tagHref' | 'showProject'>) {
+async function Meta({ card, tagHref, showProject }: Pick<CardProps, 'card' | 'tagHref' | 'showProject'>) {
+  const t = await getT();
   const hasProject = showProject && card.project;
   if (!hasProject && card.tags.length === 0 && card.progress.total === 0 && card.commentCount === 0 && !card.customer && !card.order) return null;
   return (
@@ -33,13 +35,13 @@ function Meta({ card, tagHref, showProject }: Pick<CardProps, 'card' | 'tagHref'
       ))}
       {card.tags.length > 3 && <span>+{card.tags.length - 3}</span>}
       {card.progress.total > 0 && (
-        <span className="inline-flex items-center gap-1" title="Checklist">
+        <span className="inline-flex items-center gap-1" title={t('Checklist')}>
           <ListChecks className="size-3.5" aria-hidden />
           {card.progress.done}/{card.progress.total}
         </span>
       )}
       {card.commentCount > 0 && (
-        <span className="inline-flex items-center gap-1" title="Comments">
+        <span className="inline-flex items-center gap-1" title={t('Comments')}>
           <MessageSquare className="size-3.5" aria-hidden />
           {card.commentCount}
         </span>

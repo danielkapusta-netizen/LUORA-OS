@@ -2,6 +2,7 @@ import { Card, CardBody } from '@/components/ui';
 import { dayLabel, dayParts, today as warsawToday } from '@/lib/tasks/dates';
 import { cn } from '@/lib/utils';
 import type { Productivity } from '@/server/services/tasks';
+import { getT } from '@/lib/i18n/server';
 
 /** A small ring that fills to `value` (0 to 1). */
 function Ring({ value }: { value: number | null }) {
@@ -29,19 +30,20 @@ function Figure({ value, label, note }: { value: number | null; label: string; n
 }
 
 /** Today's progress, how punctual the team is, and a bar for each of the last seven days. */
-export function ProductivityCard({ data, now = warsawToday() }: { data: Productivity; now?: string }) {
+export async function ProductivityCard({ data, now = warsawToday() }: { data: Productivity; now?: string }) {
+  const t = await getT();
   const max = Math.max(1, ...data.perDay.map((d) => d.count));
   return (
     <Card>
       <CardBody className="grid gap-6 sm:grid-cols-[13rem_minmax(0,1fr)]">
         <div className="space-y-5">
-          <Figure value={data.doneToday} label="daily tasks done" note={data.plannedToday ? `${data.plannedToday} planned for today` : 'nothing planned for today'} />
-          <Figure value={data.onTime} label="finished on time" note="last 30 days" />
+          <Figure value={data.doneToday} label={t('daily tasks done')} note={data.plannedToday ? t('{n} planned for today', { n: data.plannedToday }) : t('nothing planned for today')} />
+          <Figure value={data.onTime} label={t('finished on time')} note={t('last 30 days')} />
         </div>
         <div>
-          <div className="flex h-28 items-end gap-2" role="img" aria-label={`Tasks finished per day over the last seven days: ${data.perDay.map((d) => d.count).join(', ')}`}>
+          <div className="flex h-28 items-end gap-2" role="img" aria-label={t('Tasks finished per day over the last seven days: {counts}', { counts: data.perDay.map((d) => d.count).join(', ') })}>
             {data.perDay.map((d) => (
-              <div key={d.day} className="flex h-full flex-1 flex-col justify-end" title={`${dayLabel(d.day, now)}: ${d.count} finished`}>
+              <div key={d.day} className="flex h-full flex-1 flex-col justify-end" title={`${dayLabel(d.day, now, t)}: ${t('{n} finished', { n: d.count })}`}>
                 <div
                   className={cn('w-full rounded-sm', d.count === 0 ? 'bg-slate-200' : d.day === now ? 'bg-brand-600' : 'bg-slate-900')}
                   style={{ height: `${d.count === 0 ? 4 : Math.max(10, (d.count / max) * 100)}%` }}
@@ -52,12 +54,12 @@ export function ProductivityCard({ data, now = warsawToday() }: { data: Producti
           <div className="mt-1.5 flex gap-2 text-[11px] text-slate-400">
             {data.perDay.map((d) => (
               <span key={d.day} className={cn('flex-1 text-center', d.day === now && 'font-medium text-slate-700')}>
-                {dayParts(d.day).weekday.slice(0, 1)}
+                {dayParts(d.day, t).weekday.slice(0, 1)}
               </span>
             ))}
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            {data.completedWeek} {data.completedWeek === 1 ? 'task' : 'tasks'} finished in the last 7 days
+            {t.plural(data.completedWeek, '{n} task finished in the last 7 days', '{n} tasks finished in the last 7 days')}
           </p>
         </div>
       </CardBody>

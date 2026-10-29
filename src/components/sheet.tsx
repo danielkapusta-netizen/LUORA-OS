@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useT } from '@/lib/i18n/client';
 import { isSettled, MOMENTUM, rubberband, shouldDismiss, SMOOTH, stepSpring, velocityFrom, type Sample, type SpringConfig } from '@/lib/spring';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +44,7 @@ export function Sheet({
   children: ReactNode;
   staticFromXl?: boolean;
 }) {
+  const t = useT();
   const panel = useRef<HTMLDivElement>(null);
   const scrim = useRef<HTMLDivElement>(null);
   const offset = useRef(0); // px below fully open; the live, on-screen value
@@ -254,7 +256,7 @@ export function Sheet({
               type="button"
               onClick={() => dismiss()}
               onPointerDown={(e) => e.stopPropagation()}
-              aria-label="Close"
+              aria-label={t('Close')}
               className="press flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-900/8 text-slate-600"
             >
               <X className="size-4" aria-hidden />

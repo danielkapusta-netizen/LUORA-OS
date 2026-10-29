@@ -14,19 +14,24 @@ import { syncNowAction } from './actions';
 import { OrderPanel } from './order-panel';
 import { OrderSheet, OrderSheetProvider } from './order-sheet';
 import { OrdersTable, type OrderRow } from './orders-table';
+import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
-export const metadata: Metadata = { title: 'Orders' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Orders') };
+}
 
 const TABS: { value: OrderStatus | 'open' | 'all'; label: string; hint?: string }[] = [
-  { value: 'open', label: 'To do' },
-  { value: 'new', label: 'New' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'label_created', label: 'Label created', hint: 'Labels made, parcel not packed yet. They also stay on their own tab until you press Packed.' },
-  { value: 'on_hold', label: 'On hold' },
-  { value: 'shipped', label: 'Shipped' },
-  { value: 'delivered', label: 'Delivered' },
-  { value: 'cancelled', label: 'Cancelled' },
-  { value: 'all', label: 'All' },
+  { value: 'open', label: msg('To do') },
+  { value: 'new', label: msg('New') },
+  { value: 'processing', label: msg('Processing') },
+  { value: 'label_created', label: msg('Label created'), hint: msg('Labels made, parcel not packed yet. They also stay on their own tab until you press Packed.') },
+  { value: 'on_hold', label: msg('On hold') },
+  { value: 'shipped', label: msg('Shipped') },
+  { value: 'delivered', label: msg('Delivered') },
+  { value: 'cancelled', label: msg('Cancelled') },
+  { value: 'all', label: msg('All') },
 ];
 
 type Search = Record<string, string | undefined>;
@@ -39,6 +44,7 @@ function hrefWith(params: Search, patch: Search): string {
 }
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
+  const t = await getT();
   await requireUser();
   const params = await searchParams;
   const status = params.status ?? 'open';
@@ -102,7 +108,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {params.status && <input type="hidden" name="status" value={params.status} />}
       {params.q && <input type="hidden" name="q" value={params.q} />}
       <Select name="marketplace" defaultValue={params.marketplace ?? ''}>
-        <option value="">All marketplaces</option>
+        <option value="">{t('All marketplaces')}</option>
         {Object.entries(MARKETPLACE_LABELS).map(([value, label]) => (
           <option key={value} value={value}>
             {label}
@@ -110,7 +116,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         ))}
       </Select>
       <Select name="account" defaultValue={params.account ?? ''}>
-        <option value="">All accounts</option>
+        <option value="">{t('All accounts')}</option>
         {accounts.map((a) => (
           <option key={a.id} value={a.id}>
             {a.name}
@@ -118,7 +124,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         ))}
       </Select>
       <Select name="assignee" defaultValue={params.assignee ?? ''}>
-        <option value="">Anyone</option>
+        <option value="">{t('Anyone')}</option>
         {users.map((u) => (
           <option key={u.id} value={u.id}>
             {u.name}
@@ -126,18 +132,18 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         ))}
       </Select>
       <Select name="tag" defaultValue={params.tag ?? ''}>
-        <option value="">Any tag</option>
-        {tags.map((t) => (
-          <option key={t} value={t}>
-            {t}
+        <option value="">{t('Any tag')}</option>
+        {tags.map((item) => (
+          <option key={item} value={item}>
+            {item}
           </option>
         ))}
       </Select>
       <Select name="invoice" defaultValue={params.invoice ?? ''} className="col-span-2">
-        <option value="">Invoice requested or not</option>
-        <option value="requested">Invoice requested</option>
+        <option value="">{t('Invoice requested or not')}</option>
+        <option value="requested">{t('Invoice requested')}</option>
       </Select>
-      <div className="col-span-2 flex flex-wrap gap-1.5" role="group" aria-label="Placed">
+      <div className="col-span-2 flex flex-wrap gap-1.5" role="group" aria-label={t('Placed')}>
         {quickRanges().map((r) => {
           const on = params.from === r.from && params.to === r.to;
           return (
@@ -152,13 +158,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           );
         })}
       </div>
-      <Input type="date" name="from" defaultValue={params.from} aria-label="Placed from" />
-      <Input type="date" name="to" defaultValue={params.to} aria-label="Placed until" />
+      <Input type="date" name="from" defaultValue={params.from} aria-label={t('Placed from')} />
+      <Input type="date" name="to" defaultValue={params.to} aria-label={t('Placed until')} />
       <div className="col-span-2 flex items-center justify-end gap-3">
         <Link href={hrefWith({ status: params.status }, {})} className="text-sm text-slate-500 hover:text-slate-800">
-          Clear
+          {t('Clear')}
         </Link>
-        <button className={buttonClass('primary', 'sm')}>Apply</button>
+        <button className={buttonClass('primary', 'sm')}>{t('Apply')}</button>
       </div>
     </form>
   );
@@ -166,7 +172,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <>
       {params.status && <input type="hidden" name="status" value={params.status} />}
       <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-slate-400" />
-      <Input name="q" defaultValue={params.q} placeholder="Search number, buyer, SKU, tracking…" className="w-full rounded-full bg-white pl-10 md:w-72" enterKeyHint="search" type="search" />
+      <Input name="q" defaultValue={params.q} placeholder={t('Search number, buyer, SKU, tracking…')} className="w-full rounded-full bg-white pl-10 md:w-72" enterKeyHint="search" type="search" />
     </>
   );
   const pill = 'shrink-0 snap-start rounded-full border px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors max-md:flex max-md:min-h-10 max-md:items-center';
@@ -175,16 +181,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <OrderSheetProvider>
       <div className="mb-4 flex items-end justify-between gap-3 md:mb-6 md:flex-wrap md:items-center">
         <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight">Orders</h1>
-          <p className="mt-1 text-sm text-slate-500">All marketplaces in one list · last sync {timeAgo(lastSync)}</p>
+          <h1 className="text-3xl font-semibold tracking-tight">{t('Orders')}</h1>
+          <p className="mt-1 text-sm text-slate-500">{t('All marketplaces in one list · last sync {when}', { when: timeAgo(lastSync, t) })}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <form action="/orders" className="relative hidden md:block">
             {searchBox}
           </form>
           <form action={syncNowAction}>
-            <SubmitButton variant="secondary" pendingText="Syncing…">
-              <RefreshCw className="size-4" /> Sync now
+            <SubmitButton variant="secondary" pendingText={t('Syncing…')}>
+              <RefreshCw className="size-4" /> {t('Sync now')}
             </SubmitButton>
           </form>
         </div>
@@ -197,7 +203,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </form>
         <details open={filtersActive}>
           <summary className={cn(buttonClass('secondary'), 'cursor-pointer list-none')}>
-            <SlidersHorizontal className="size-4" /> Filters{filtersActive ? ' •' : ''}
+            <SlidersHorizontal className="size-4" /> {t('Filters')}{filtersActive ? ' •' : ''}
           </summary>
           {filtersForm('absolute inset-x-0 top-full z-20 mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-black/5 bg-white p-4 shadow-lg')}
         </details>
@@ -207,9 +213,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <div className="mb-4 space-y-2">
           {errors.map((a) => (
             <Alert key={a.id} tone="red">
-              <strong>{a.name}:</strong> last sync failed – {a.lastError}{' '}
+              <strong>{a.name}:</strong> {t('last sync failed –')} {a.lastError}{' '}
               <Link href="/settings/integrations" className="underline">
-                Check settings
+                {t('Check settings')}
               </Link>
             </Alert>
           ))}
@@ -226,10 +232,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               key={tab.label}
               href={hrefWith(params, { status: tab.value === 'open' ? undefined : tab.value, page: undefined, order: undefined })}
               aria-current={active ? 'true' : undefined}
-              title={tab.hint}
+              title={tab.hint ? t(tab.hint) : undefined}
               className={cn(pill, 'press', active ? 'border-brand-600 bg-brand-600 text-white' : 'border-black/10 bg-white text-slate-600 hover:border-black/20 hover:text-slate-900')}
             >
-              {tab.label}
+              {t(tab.label)}
               {count ? <span className={cn('ml-1.5 text-xs', active ? 'text-white/80' : 'text-slate-400')}>{count}</span> : null}
             </Link>
           );
@@ -239,12 +245,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           className={cn(pill, 'press', params.returning === '1' ? 'border-violet-600 bg-violet-600 text-white' : 'border-violet-200 bg-violet-50 text-violet-800 hover:border-violet-300')}
           aria-pressed={params.returning === '1'}
         >
-          Returning customers
+          {t('Returning customers')}
         </Link>
         {(
           [
-            { value: '1', label: 'With notes', on: 'border-slate-700 bg-slate-700 text-white', off: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300' },
-            { value: 'important', label: 'Important notes', on: 'border-amber-500 bg-amber-500 text-white', off: 'border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300' },
+            { value: '1', label: msg('With notes'), on: 'border-slate-700 bg-slate-700 text-white', off: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300' },
+            { value: 'important', label: msg('Important notes'), on: 'border-amber-500 bg-amber-500 text-white', off: 'border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300' },
           ] as const
         ).map((p) => (
           <Link
@@ -253,12 +259,12 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             className={cn(pill, 'press', params.notes === p.value ? p.on : p.off)}
             aria-pressed={params.notes === p.value}
           >
-            {p.label}
+            {t(p.label)}
           </Link>
         ))}
         <details className="relative ml-auto hidden md:block" open={filtersActive}>
           <summary className={cn(buttonClass('secondary', 'sm'), 'cursor-pointer list-none')}>
-            <SlidersHorizontal className="size-3.5" /> Filters{filtersActive ? ' •' : ''}
+            <SlidersHorizontal className="size-3.5" /> {t('Filters')}{filtersActive ? ' •' : ''}
           </summary>
           {filtersForm('absolute right-0 z-20 mt-2 grid w-[min(92vw,34rem)] grid-cols-2 gap-2 rounded-2xl border border-black/5 bg-white p-4 shadow-lg')}
         </details>
@@ -273,16 +279,16 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             statuses={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))}
           />
           <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
-            <span>{total === 0 ? 'No orders' : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}</span>
+            <span>{total === 0 ? t('No orders') : t('{from}–{to} of {total}', { from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, total), total })}</span>
             <div className="flex gap-2">
               {page > 1 && (
                 <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page - 1), order: undefined })}>
-                  Previous
+                  {t('Previous')}
                 </Link>
               )}
               {page * pageSize < total && (
                 <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page + 1), order: undefined })}>
-                  Next
+                  {t('Next')}
                 </Link>
               )}
             </div>

@@ -5,6 +5,7 @@ import { canModifyNote, NOTE_MAX, noteExcerpt } from '../../lib/notes';
 import { chunk, getDb } from '../db/client';
 import { orderEvents, tasks, users } from '../db/schema';
 import { logEvent } from './events';
+import { msg } from '@/lib/i18n/msg';
 
 export interface NoteTask {
   id: string;
@@ -30,14 +31,14 @@ const isNote = and(eq(orderEvents.type, 'note'), isNull(orderEvents.deletedAt));
 
 function clean(text: string): string {
   const note = (text ?? '').trim();
-  if (!note) throw new Error('Write the note first');
+  if (!note) throw new Error(msg('Write the note first'));
   if (note.length > NOTE_MAX) throw new Error(`A note can have at most ${NOTE_MAX} characters`);
   return note;
 }
 
 async function loadNote(noteId: string) {
   const [row] = await getDb().select().from(orderEvents).where(and(eq(orderEvents.id, noteId), isNote));
-  if (!row) throw new Error('This note no longer exists');
+  if (!row) throw new Error(msg('This note no longer exists'));
   return row;
 }
 
@@ -93,7 +94,7 @@ export async function addNote(orderId: string, userId: string, text: string, imp
 export async function editNote(noteId: string, actor: Actor, text: string): Promise<{ orderId: string }> {
   const message = clean(text);
   const note = await loadNote(noteId);
-  if (!canModifyNote(note.userId, actor)) throw new Error('Only the author or an admin can change this note');
+  if (!canModifyNote(note.userId, actor)) throw new Error(msg('Only the author or an admin can change this note'));
   if (message === note.message) return { orderId: note.orderId };
   const db = getDb();
   await db.update(orderEvents).set({ message, editedAt: new Date() }).where(eq(orderEvents.id, noteId));
@@ -103,7 +104,7 @@ export async function editNote(noteId: string, actor: Actor, text: string): Prom
 
 export async function deleteNote(noteId: string, actor: Actor): Promise<{ orderId: string }> {
   const note = await loadNote(noteId);
-  if (!canModifyNote(note.userId, actor)) throw new Error('Only the author or an admin can delete this note');
+  if (!canModifyNote(note.userId, actor)) throw new Error(msg('Only the author or an admin can delete this note'));
   const db = getDb();
   await db.update(orderEvents).set({ deletedAt: new Date(), pinned: false }).where(eq(orderEvents.id, noteId));
   await logEvent(db, note.orderId, 'edit', `Deleted a note: “${noteExcerpt(note.message, 160)}”`, { userId: actor.id });

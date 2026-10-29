@@ -2,6 +2,7 @@
 import { segmentCustomers, type Scored, type SegmentKey } from '@/lib/crm/segments';
 import type { Customer } from '../db/schema';
 import { allCustomers } from './customers';
+import { msg } from '@/lib/i18n/msg';
 
 export interface CustomerFilter {
   q?: string;
@@ -17,10 +18,10 @@ export interface CustomerRow {
 }
 
 export const CUSTOMER_SORTS = [
-  { value: 'last', label: 'Last order' },
-  { value: 'revenue', label: 'Lifetime revenue' },
-  { value: 'profit', label: 'Lifetime profit' },
-  { value: 'orders', label: 'Orders' },
+  { value: 'last', label: msg('Last order') },
+  { value: 'revenue', label: msg('Lifetime revenue') },
+  { value: 'profit', label: msg('Lifetime profit') },
+  { value: 'orders', label: msg('Orders') },
 ];
 
 export async function customerRows(filter: CustomerFilter = {}, now = new Date()): Promise<{ rows: CustomerRow[]; all: CustomerRow[] }> {

@@ -7,8 +7,10 @@ import { requireUser } from '@/server/auth';
 import { listTasks } from '@/server/services/tasks';
 import { statusColumns } from '../columns';
 import { getActiveProjects, getPeople, getTagCounts, link, resolveScope, type TaskParams } from '../params';
+import { getT } from '@/lib/i18n/server';
 
 export default async function BoardPage({ searchParams }: { searchParams: Promise<TaskParams> }) {
+  const t = await getT();
   const user = await requireUser();
   const params = await searchParams;
   const now = warsawToday();
@@ -20,8 +22,9 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     getActiveProjects(),
     getTagCounts(),
   ]);
-  const dialog = { people, projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((t) => t.tag), meId: user.id };
+  const dialog = { people, projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((item) => item.tag), meId: user.id };
   const columns = statusColumns({
+    t,
     cards,
     today: now,
     me: { id: user.id, role: user.role },
@@ -35,12 +38,12 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       <TaskFilterBar path="/tasks/board" params={params} people={people} projects={dialog.projects} meId={user.id} />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
         <p>
-          {cards.length} {cards.length === 1 ? 'task' : 'tasks'} · {STATUS_LABEL.done} shows the last 7 days.{' '}
+          {t.plural(cards.length, '{n} task', '{n} tasks')} · {t('{status} shows the last 7 days.', { status: t(STATUS_LABEL.done) })}{' '}
           <Link href={link('/tasks/board', params, { done: allDone ? undefined : 'all' })} className="font-medium text-brand-700 hover:underline">
-            {allDone ? 'Show only the last week' : 'Show every finished task'}
+            {allDone ? t('Show only the last week') : t('Show every finished task')}
           </Link>
         </p>
-        <p>Drag a card to another column to change its status.</p>
+        <p>{t('Drag a card to another column to change its status.')}</p>
       </div>
       <Board columns={columns} />
     </>

@@ -14,6 +14,7 @@
  */
 
 import type { Granularity } from './types'
+import type { T } from '@/lib/i18n/translate'
 
 export type PeriodKey =
   | 'today'
@@ -302,4 +303,20 @@ export function isWithin(date: Date | null, from: Date, to: Date): boolean {
   if (!date) return false
   const time = date.getTime()
   return time >= from.getTime() && time <= to.getTime()
+}
+
+/** The comparison phrase ("vs yesterday", "vs previous 30 days") in the reader's language. */
+export function comparisonText(period: { key: PeriodKey; days: number }, t: T): string {
+  switch (period.key) {
+    case 'all':
+      return t('no prior window')
+    case 'today':
+      return t('vs yesterday')
+    case 'yesterday':
+      return t('vs the day before')
+    case 'lastweek':
+      return t('vs the week before')
+    default:
+      return t.plural(period.days, 'vs previous {n} day', 'vs previous {n} days')
+  }
 }

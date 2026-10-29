@@ -37,8 +37,12 @@ import {
 } from '../actions';
 import { LabelForm } from './label-form';
 import { ImportantNotes, OrderNotes } from '../order-notes';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Order' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Order') };
+}
 
 const EVENT_DOT: Record<string, string> = {
   status: 'bg-violet-500',
@@ -53,6 +57,7 @@ const EVENT_DOT: Record<string, string> = {
 };
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getT();
   const user = await requireUser();
   const { id } = await params;
   const detail = await getOrderDetail(id);
@@ -76,28 +81,28 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     <>
       <AutoRefresh active={pending} />
       <Link href="/orders" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800">
-        <ArrowLeft className="size-4" /> Orders
+        <ArrowLeft className="size-4" /> {t('Orders')}
       </Link>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">Order {order.externalNumber}</h1>
+            <h1 className="text-xl font-semibold tracking-tight">{t('Order {number}', { number: order.externalNumber })}</h1>
             <StatusBadge status={order.status} />
             <MarketplaceBadge marketplace={order.marketplace} />
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            {account.name} · placed {formatDate(order.placedAt)} · marketplace status <span className="font-medium">{order.marketplaceStatus}</span>
+            {account.name} · {t('placed {date}', { date: formatDate(order.placedAt, true, t.locale) })} · {t('marketplace status')} <span className="font-medium">{order.marketplaceStatus}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {(order.marketplace === 'empik' || order.marketplace === 'hebe') && order.marketplaceStatus === 'WAITING_ACCEPTANCE' && (
             <ActionForm action={acceptOrderAction.bind(null, order.id)}>
-              <SubmitButton pendingText="Accepting…">Accept order</SubmitButton>
+              <SubmitButton pendingText={t('Accepting…')}>{t('Accept order')}</SubmitButton>
             </ActionForm>
           )}
           <ActionForm action={refreshOrderAction.bind(null, order.id)}>
-            <SubmitButton variant="secondary" pendingText="Refreshing…">
-              Refresh from {account.name}
+            <SubmitButton variant="secondary" pendingText={t('Refreshing…')}>
+              {t('Refresh from {account}', { account: account.name })}
             </SubmitButton>
           </ActionForm>
         </div>
@@ -106,8 +111,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       {!order.readyToShip && order.status !== 'cancelled' && (
         <div className="mb-4">
           <Alert>
-            This order can&apos;t be shipped yet: the marketplace reports <strong>{order.marketplaceStatus}</strong>.
-            {(order.marketplace === 'empik' || order.marketplace === 'hebe') && ` Accept it first, then wait until ${MARKETPLACE_LABELS[order.marketplace]} confirms the payment.`}
+            {t("This order can't be shipped yet: the marketplace reports")} <strong>{order.marketplaceStatus}</strong>.
+            {(order.marketplace === 'empik' || order.marketplace === 'hebe') && ` ${t('Accept it first, then wait until {marketplace} confirms the payment.', { marketplace: MARKETPLACE_LABELS[order.marketplace] })}`}
           </Alert>
         </div>
       )}
@@ -115,7 +120,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <div className="space-y-5 xl:col-span-2">
           <Card>
-            <CardHeader title="Shipping label" description={order.deliveryMethodName ? `Buyer chose: ${order.deliveryMethodName}` : undefined} />
+            <CardHeader title={t('Shipping label')} description={order.deliveryMethodName ? t('Buyer chose: {method}', { method: order.deliveryMethodName }) : undefined} />
             <CardBody className="space-y-4">
               {shipments.map((s) => (
                 <div key={s.id} className={cn('rounded-md border px-3 py-2.5', s.state === 'cancelled' ? 'border-slate-100 opacity-60' : 'border-slate-200')}>
@@ -129,32 +134,32 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                     <div className="flex flex-wrap gap-2">
                       {s.state === 'created' && (
                         <PrintLabelButton className={buttonClass('primary', 'sm')} href={`/api/labels/${s.id}`}>
-                          <Printer className="size-3.5" /> Print label
+                          <Printer className="size-3.5" /> {t('Print label')}
                         </PrintLabelButton>
                       )}
                       {s.trackingUrl && (
                         <a className={buttonClass('secondary', 'sm')} href={s.trackingUrl} target="_blank" rel="noreferrer">
-                          <ExternalLink className="size-3.5" /> Track
+                          <ExternalLink className="size-3.5" /> {t('Track')}
                         </a>
                       )}
                       {(s.state === 'pending' || (s.state === 'created' && s.error)) && (
                         <ActionForm action={pollShipmentAction.bind(null, order.id, s.id)} showOk={false}>
                           <SubmitButton size="sm" variant="secondary">
-                            Check now
+                            {t('Check now')}
                           </SubmitButton>
                         </ActionForm>
                       )}
                       {s.state === 'failed' && !active && (
                         <ActionForm action={retryShipmentAction.bind(null, order.id, s.id)}>
                           <SubmitButton size="sm" variant="secondary">
-                            Try again
+                            {t('Try again')}
                           </SubmitButton>
                         </ActionForm>
                       )}
                       {(s.state === 'created' || s.state === 'failed') && !s.trackingPushedAt && (
                         <ActionForm action={cancelShipmentAction.bind(null, order.id, s.id)}>
-                          <SubmitButton size="sm" variant="danger" confirm="Cancel this label?">
-                            Cancel label
+                          <SubmitButton size="sm" variant="danger" confirm={t('Cancel this label?')}>
+                            {t('Cancel label')}
                           </SubmitButton>
                         </ActionForm>
                       )}
@@ -162,27 +167,27 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   </div>
                   <div className="mt-1.5 space-y-0.5 text-xs text-slate-500">
                     <p>
-                      Parcel {s.parcel.lengthCm}×{s.parcel.widthCm}×{s.parcel.heightCm} cm, {s.parcel.weightKg} kg
-                      {s.options.pickupPointId ? ` · point ${s.options.pickupPointId}` : ''}
-                      {s.options.codAmount ? ` · COD ${formatMoney(s.options.codAmount, order.currency)}` : ''} · {s.labelFormat.toUpperCase()} {s.labelSize} · requested {formatDate(s.createdAt)}
+                      {t('Parcel')} {s.parcel.lengthCm}×{s.parcel.widthCm}×{s.parcel.heightCm} cm, {s.parcel.weightKg} kg
+                      {s.options.pickupPointId ? ` · ${t('point {id}', { id: s.options.pickupPointId })}` : ''}
+                      {s.options.codAmount ? ` · ${t('COD')} ${formatMoney(s.options.codAmount, order.currency)}` : ''} · {s.labelFormat.toUpperCase()} {s.labelSize} · {t('requested {date}', { date: formatDate(s.createdAt, true, t.locale) })}
                     </p>
                     {s.error && <p className="text-red-700">{s.error}</p>}
                     {s.state === 'created' &&
                       (s.trackingPushedAt ? (
-                        <p className="text-emerald-700">Tracking sent to {account.name} {formatDate(s.trackingPushedAt)}</p>
+                        <p className="text-emerald-700">{t('Tracking sent to {account}', { account: account.name })} {formatDate(s.trackingPushedAt, true, t.locale)}</p>
                       ) : s.trackingPushError ? (
                         <div className="flex items-center gap-2 text-red-700">
-                          <span>Tracking not sent: {s.trackingPushError}</span>
+                          <span>{t('Tracking not sent:')} {s.trackingPushError}</span>
                           <ActionForm action={retryTrackingAction.bind(null, order.id, s.id)} showOk={false}>
                             <SubmitButton size="sm" variant="secondary">
-                              Retry
+                              {t('Retry')}
                             </SubmitButton>
                           </ActionForm>
                         </div>
                       ) : (
-                        <p>Sending tracking to {account.name}…</p>
+                        <p>{t('Sending tracking to {account}…', { account: account.name })}</p>
                       ))}
-                    {s.deliveryStatus && <p>Carrier status: {s.deliveryStatus.replace(/_/g, ' ')}</p>}
+                    {s.deliveryStatus && <p>{t('Carrier status:')} {s.deliveryStatus.replace(/_/g, ' ')}</p>}
                   </div>
                 </div>
               ))}
@@ -207,21 +212,21 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                   order={{ codAmount: order.codAmount, pickupPointId: order.pickupPointId, currency: order.currency, totalAmount: order.totalAmount }}
                 />
               )}
-              {!form && shipments.length === 0 && <p className="text-sm text-slate-500">No label for this order.</p>}
+              {!form && shipments.length === 0 && <p className="text-sm text-slate-500">{t('No label for this order.')}</p>}
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Items" />
+            <CardHeader title={t('Items')} />
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className={th}>Product</th>
+                    <th className={th}>{t('Product')}</th>
                     <th className={th}>SKU</th>
-                    <th className={cn(th, 'text-right')}>Qty</th>
-                    <th className={cn(th, 'text-right')}>Price</th>
-                    <th className={cn(th, 'text-right')}>Total</th>
+                    <th className={cn(th, 'text-right')}>{t('Qty')}</th>
+                    <th className={cn(th, 'text-right')}>{t('Price')}</th>
+                    <th className={cn(th, 'text-right')}>{t('Total')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -230,7 +235,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                       <td className={td}>{i.name}</td>
                       <td className={cn(td, 'font-mono text-xs')}>
                         {i.sku ?? '—'}
-                        {i.sku && !i.productId && <span className="ml-1 text-amber-700">(not in inventory)</span>}
+                        {i.sku && !i.productId && <span className="ml-1 text-amber-700">{t('(not in inventory)')}</span>}
                       </td>
                       <td className={cn(td, 'text-right tabular-nums')}>{i.quantity}</td>
                       <td className={cn(td, 'text-right tabular-nums')}>{formatMoney(i.unitPrice, order.currency)}</td>
@@ -241,13 +246,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 <tfoot className="text-sm">
                   <tr>
                     <td colSpan={4} className={cn(td, 'text-right text-slate-500')}>
-                      Shipping
+                      {t('Shipping')}
                     </td>
                     <td className={cn(td, 'text-right tabular-nums')}>{formatMoney(order.shippingAmount, order.currency)}</td>
                   </tr>
                   <tr>
                     <td colSpan={4} className={cn(td, 'text-right font-medium')}>
-                      Total {order.codAmount ? '(cash on delivery)' : ''}
+                      {order.codAmount ? t('Total (cash on delivery)') : t('Total')}
                     </td>
                     <td className={cn(td, 'text-right font-semibold tabular-nums')}>{formatMoney(order.totalAmount, order.currency)}</td>
                   </tr>
@@ -257,7 +262,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </Card>
 
           <Card>
-            <CardHeader title="Buyer and shipping address" description="Edits here are used for new labels; the marketplace is not changed." />
+            <CardHeader title={t('Buyer and shipping address')} description={t('Edits here are used for new labels; the marketplace is not changed.')} />
             <CardBody>
               <p className="mb-3 text-sm text-slate-600">
                 {order.customerId ? (
@@ -267,38 +272,38 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 ) : (
                   order.buyer.name
                 )}
-                {order.buyer.login ? ` (${order.buyer.login})` : ''} · {order.buyer.email ?? 'no email'} · {order.buyer.phone ?? 'no phone'}
+                {order.buyer.login ? ` (${order.buyer.login})` : ''} · {order.buyer.email ?? t('no email')} · {order.buyer.phone ?? t('no phone')}
               </p>
               <ActionForm action={updateAddressAction.bind(null, order.id)} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Recipient">
+                <Field label={t('Recipient')}>
                   <Input name="name" defaultValue={a.name} required />
                 </Field>
-                <Field label="Company">
+                <Field label={t('Company')}>
                   <Input name="company" defaultValue={a.company ?? ''} />
                 </Field>
-                <Field label="Street and number" className="sm:col-span-2">
+                <Field label={t('Street and number')} className="sm:col-span-2">
                   <Input name="street" defaultValue={a.street} required />
                 </Field>
-                <Field label="Postal code">
+                <Field label={t('Postal code')}>
                   <Input name="postalCode" defaultValue={a.postalCode} required />
                 </Field>
-                <Field label="City">
+                <Field label={t('City')}>
                   <Input name="city" defaultValue={a.city} required />
                 </Field>
-                <Field label="Country">
+                <Field label={t('Country')}>
                   <Input name="countryCode" defaultValue={a.countryCode} maxLength={2} />
                 </Field>
-                <Field label="Phone">
+                <Field label={t('Phone')}>
                   <Input name="phone" defaultValue={a.phone ?? ''} />
                 </Field>
-                <Field label="Email">
+                <Field label={t('Email')}>
                   <Input name="email" type="email" defaultValue={a.email ?? ''} />
                 </Field>
-                <Field label="Pickup point (Paczkomat)">
-                  <Input name="pickupPointId" defaultValue={order.pickupPointId ?? ''} placeholder="e.g. KRA010" />
+                <Field label={t('Pickup point (Paczkomat)')}>
+                  <Input name="pickupPointId" defaultValue={order.pickupPointId ?? ''} placeholder={t('e.g. KRA010')} />
                 </Field>
                 <div className="sm:col-span-2">
-                  <SubmitButton variant="secondary">Save address</SubmitButton>
+                  <SubmitButton variant="secondary">{t('Save address')}</SubmitButton>
                 </div>
               </ActionForm>
             </CardBody>
@@ -308,7 +313,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <div className="space-y-5">
           {can(user.role, 'profit') ? (
             <Card>
-              <CardHeader title="Profit" description="After VAT, fees, product cost, shipping and refunds, in PLN." />
+              <CardHeader title={t('Profit')} description={t('After VAT, fees, product cost, shipping and refunds, in PLN.')} />
               <CardBody>
                 <ProfitBreakdown lines={profitLines} />
               </CardBody>
@@ -317,7 +322,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             can(user.role, 'margin') &&
             orderMargin !== null && (
               <Card>
-                <CardHeader title="Margin" description="After VAT, fees, product cost, shipping and refunds." />
+                <CardHeader title={t('Margin')} description={t('After VAT, fees, product cost, shipping and refunds.')} />
                 <CardBody>
                   <p className={cn('text-2xl font-semibold tabular-nums', orderMargin < 0 ? 'text-red-700' : 'text-slate-900')}>{orderMargin.toFixed(1)}%</p>
                 </CardBody>
@@ -325,26 +330,26 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             )
           )}
           <Card>
-            <CardHeader title="Workflow" />
+            <CardHeader title={t('Workflow')} />
             <CardBody className="space-y-4">
               {statusTargets.length > 0 && (
                 <ActionForm action={changeStatusAction.bind(null, order.id)} className="flex items-end gap-2">
-                  <Field label="Move to" className="flex-1">
+                  <Field label={t('Move to')} className="flex-1">
                     <Select name="status" defaultValue={statusTargets[0]}>
                       {statusTargets.map((s) => (
                         <option key={s} value={s}>
-                          {STATUS_LABELS[s]}
+                          {t(STATUS_LABELS[s])}
                         </option>
                       ))}
                     </Select>
                   </Field>
-                  <SubmitButton variant="secondary">Change</SubmitButton>
+                  <SubmitButton variant="secondary">{t('Change')}</SubmitButton>
                 </ActionForm>
               )}
               <ActionForm action={assignAction.bind(null, order.id)} className="space-y-3">
-                <Field label="Assigned to">
+                <Field label={t('Assigned to')}>
                   <Select name="assigneeId" defaultValue={order.assigneeId ?? ''}>
-                    <option value="">Nobody</option>
+                    <option value="">{t('Nobody')}</option>
                     {users.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name}
@@ -352,48 +357,48 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                     ))}
                   </Select>
                 </Field>
-                <Field label="Tags" hint="Comma separated, e.g. gift, priority">
+                <Field label={t('Tags')} hint={t('Comma separated, e.g. gift, priority')}>
                   <Input name="tags" defaultValue={order.tags.join(', ')} />
                 </Field>
-                <SubmitButton variant="secondary">Save</SubmitButton>
+                <SubmitButton variant="secondary">{t('Save')}</SubmitButton>
               </ActionForm>
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader
-              title="Tasks"
-              description="Things to do about this order."
+              title={t('Tasks')}
+              description={t('Things to do about this order.')}
               actions={
                 <NewTaskDialog
                   people={users.map((u) => ({ id: u.id, name: u.name }))}
                   projects={projectCards.map((p) => ({ id: p.project.id, name: p.project.name }))}
-                  tags={tagList.map((t) => t.tag)}
+                  tags={tagList.map((item) => item.tag)}
                   meId={user.id}
-                  label="Add"
+                  label={t('Add')}
                   variant="secondary"
                   size="sm"
-                  defaults={{ orderId: order.id, title: `Order ${order.externalNumber}: ` }}
+                  defaults={{ orderId: order.id, title: `${t('Order {number}', { number: order.externalNumber })}: ` }}
                 />
               }
             />
             <CardBody>
               {orderTasks.length === 0 ? (
-                <p className="text-sm text-slate-500">No tasks for this order.</p>
+                <p className="text-sm text-slate-500">{t('No tasks for this order.')}</p>
               ) : (
                 <ul className="space-y-3">
-                  {orderTasks.map((t) => (
-                    <li key={t.id} className="flex items-start gap-2.5">
-                      <DoneToggle id={t.id} done={t.status === 'done'} title={t.title} />
+                  {orderTasks.map((item) => (
+                    <li key={item.id} className="flex items-start gap-2.5">
+                      <DoneToggle id={item.id} done={item.status === 'done'} title={item.title} />
                       <div className="min-w-0 flex-1">
-                        <Link href={`/tasks/${t.id}`} className={cn('text-sm font-medium hover:underline', t.status === 'done' && 'text-slate-400 line-through')}>
-                          {t.title}
+                        <Link href={`/tasks/${item.id}`} className={cn('text-sm font-medium hover:underline', item.status === 'done' && 'text-slate-400 line-through')}>
+                          {item.title}
                         </Link>
                         <div className="mt-1">
-                          <DueChip task={t} today={todayKey} />
+                          <DueChip task={item} today={todayKey} />
                         </div>
                       </div>
-                      <AvatarStack people={t.assignees} size="sm" />
+                      <AvatarStack people={item.assignees} size="sm" />
                     </li>
                   ))}
                 </ul>
@@ -402,7 +407,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </Card>
 
           <Card>
-            <CardHeader title="Notes" description="Internal, for the team. Mark one important to show it before shipping." />
+            <CardHeader title={t('Notes')} description={t('Internal, for the team. Mark one important to show it before shipping.')} />
             <CardBody>
               <ImportantNotes notes={notes.filter((n) => n.pinned)} className="mb-3" />
               <OrderNotes
@@ -410,13 +415,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                 orderNumber={order.externalNumber}
                 notes={notes}
                 viewer={user}
-                taskDialog={{ people: users.map((u) => ({ id: u.id, name: u.name })), projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((t) => t.tag) }}
+                taskDialog={{ people: users.map((u) => ({ id: u.id, name: u.name })), projects: projectCards.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((item) => item.tag) }}
               />
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader title="Activity" />
+            <CardHeader title={t('Activity')} />
             <CardBody className="space-y-4">
               <ol className="space-y-3">
                 {events.filter(({ event }) => event.type !== 'note').map(({ event, userName }) => (
@@ -427,7 +432,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
                         {event.message}
                       </p>
                       <p className="text-xs text-slate-400">
-                        {formatDate(event.createdAt)}
+                        {formatDate(event.createdAt, true, t.locale)}
                         {userName ? ` · ${userName}` : ''}
                       </p>
                     </div>

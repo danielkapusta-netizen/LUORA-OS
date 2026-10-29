@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 
 import { formatBucket, formatValue, INK, SERIES, STATUS, type ValueFormat } from './format';
+import { useT } from '@/lib/i18n/client';
 
 function ChartTooltip({ active, payload, label, format, granularity }: Partial<TooltipContentProps<number, string>> & { format: ValueFormat; granularity?: string }) {
   if (!active || !payload?.length) return null;
@@ -144,10 +145,11 @@ export function MetricChart({
 
 /** Two small charts side by side for a product's month-by-month history (never two axes on one). */
 export function HistoryCharts({ data }: { data: { month: string; marginPct: number; units: number; orders: number }[] }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div>
-        <p className="mb-1 text-xs font-medium text-slate-500">Margin over time</p>
+        <p className="mb-1 text-xs font-medium text-slate-500">{t('Margin over time')}</p>
         <ResponsiveContainer width="100%" height={160}>
           <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke={INK.grid} />
@@ -160,7 +162,7 @@ export function HistoryCharts({ data }: { data: { month: string; marginPct: numb
         </ResponsiveContainer>
       </div>
       <div>
-        <p className="mb-1 text-xs font-medium text-slate-500">Units sold</p>
+        <p className="mb-1 text-xs font-medium text-slate-500">{t('Units sold')}</p>
         <ResponsiveContainer width="100%" height={160}>
           <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke={INK.grid} />
@@ -177,10 +179,11 @@ export function HistoryCharts({ data }: { data: { month: string; marginPct: numb
 
 /** Unit price and margin of each sale, for the pricing page (two charts, one axis each). */
 export function PriceCharts({ prices, margins }: { prices: { date: string; price: number }[]; margins: { date: string; marginPct: number }[] }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div>
-        <p className="mb-1 text-xs font-medium text-slate-500">Price per unit, each sale</p>
+        <p className="mb-1 text-xs font-medium text-slate-500">{t('Price per unit, each sale')}</p>
         <ResponsiveContainer width="100%" height={160}>
           <LineChart data={prices} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke={INK.grid} />
@@ -192,7 +195,7 @@ export function PriceCharts({ prices, margins }: { prices: { date: string; price
         </ResponsiveContainer>
       </div>
       <div>
-        <p className="mb-1 text-xs font-medium text-slate-500">Margin by month</p>
+        <p className="mb-1 text-xs font-medium text-slate-500">{t('Margin by month')}</p>
         <ResponsiveContainer width="100%" height={160}>
           <LineChart data={margins} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke={INK.grid} />

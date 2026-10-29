@@ -27,6 +27,7 @@ import { applyOrderStock, scheduleStockPush, stockCoversOrder } from './inventor
 import { resolveCustomers } from './customers';
 import { refreshProfit } from './profit';
 import { awaitingPacking, changeStatus } from './workflow';
+import { msg } from '@/lib/i18n/msg';
 
 /** A day typed or linked as `YYYY-MM-DD`; anything else is ignored rather than failing the page. */
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -374,7 +375,7 @@ export async function refreshOrder(orderId: string): Promise<void> {
   const order = await loadOrder(orderId);
   const account = await loadMarketplaceAccount(order.accountId);
   const fresh = await getMarketplaceAdapter(account).getOrder(order.externalId);
-  if (!fresh) throw new Error('The marketplace no longer returns this order');
+  if (!fresh) throw new Error(msg('The marketplace no longer returns this order'));
   await upsertOrders(account, [fresh]);
 }
 
@@ -470,7 +471,7 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
 
 export async function loadOrder(orderId: string): Promise<Order> {
   const [order] = await getDb().select().from(orders).where(eq(orders.id, orderId));
-  if (!order) throw new Error('Order not found');
+  if (!order) throw new Error(msg('Order not found'));
   return order;
 }
 

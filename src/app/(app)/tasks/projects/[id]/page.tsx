@@ -16,10 +16,15 @@ import { getProject, listTasks } from '@/server/services/tasks';
 import { archiveProjectAction, deleteProjectAction } from '../../actions';
 import { statusColumns } from '../../columns';
 import { getActiveProjects, getPeople, getTagCounts, link, resolveScope, type TaskParams } from '../../params';
+import { getT } from '@/lib/i18n/server';
 
-export const metadata: Metadata = { title: 'Project' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Project') };
+}
 
 export default async function ProjectPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<TaskParams> }) {
+  const t = await getT();
   const user = await requireUser();
   const { id } = await params;
   const query = await searchParams;
@@ -38,8 +43,9 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   const total = open + done;
   const color = projectColor(project.color);
   const path = `/tasks/projects/${id}`;
-  const dialog = { people, projects: active.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((t) => t.tag), meId: user.id };
+  const dialog = { people, projects: active.map((p) => ({ id: p.project.id, name: p.project.name })), tags: tagList.map((item) => item.tag), meId: user.id };
   const columns = statusColumns({
+    t,
     cards,
     today: now,
     me: { id: user.id, role: user.role },
@@ -52,7 +58,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
   return (
     <>
       <Link href="/tasks/projects" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-800">
-        ← All projects
+        {t('← All projects')}
       </Link>
       <div className="mb-5 overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <span className={cn('block h-1.5 w-full', color.bar)} aria-hidden />
@@ -60,12 +66,12 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
           <div className="min-w-0 max-w-2xl space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-semibold tracking-tight text-slate-900">{project.name}</h2>
-              {project.archivedAt && <Badge>Archived</Badge>}
+              {project.archivedAt && <Badge>{t('Archived')}</Badge>}
             </div>
             {project.description && <p className="whitespace-pre-wrap text-sm text-slate-600">{project.description}</p>}
             <p className="text-xs text-slate-500">
-              {owner ? `Owner: ${owner.name}` : 'No owner'}
-              {nextDue && ` · next due ${shortDay(nextDue, now)}`}
+              {owner ? t('Owner: {name}', { name: owner.name }) : t('No owner')}
+              {nextDue && ` · ${t('next due {date}', { date: shortDay(nextDue, now, t) })}`}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -78,8 +84,8 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
             </form>
             {total === 0 && (
               <ActionForm action={deleteProjectAction.bind(null, id)}>
-                <SubmitButton variant="danger" pendingText="Deleting…" confirm="Delete this project?">
-                  Delete
+                <SubmitButton variant="danger" pendingText={t('Deleting…')} confirm={t('Delete this project?')}>
+                  {t('Delete')}
                 </SubmitButton>
               </ActionForm>
             )}
@@ -87,31 +93,31 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         </div>
         <div className="grid grid-cols-2 gap-4 border-t border-slate-100 px-5 py-4 sm:grid-cols-4">
           <div>
-            <p className="text-xs text-slate-500">Progress</p>
+            <p className="text-xs text-slate-500">{t('Progress')}</p>
             <p className="mt-0.5 text-lg font-semibold tabular-nums">{total ? `${Math.round((done / total) * 100)}%` : '—'}</p>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
               <div className={cn('h-full rounded-full', color.bar)} style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
             </div>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Open</p>
+            <p className="text-xs text-slate-500">{t('Open')}</p>
             <p className="mt-0.5 text-lg font-semibold tabular-nums">{open}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">Overdue</p>
+            <p className="text-xs text-slate-500">{t('Overdue')}</p>
             <p className={cn('mt-0.5 text-lg font-semibold tabular-nums', overdue > 0 && 'text-red-700')}>{overdue}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500">People</p>
-            <div className="mt-1.5">{members.length ? <AvatarStack people={members} max={5} /> : <span className="text-sm text-slate-400">Nobody yet</span>}</div>
+            <p className="text-xs text-slate-500">{t('People')}</p>
+            <div className="mt-1.5">{members.length ? <AvatarStack people={members} max={5} /> : <span className="text-sm text-slate-400">{t('Nobody yet')}</span>}</div>
           </div>
         </div>
       </div>
       <TaskFilterBar path={path} params={query} people={people} meId={user.id} />
       <div className="mb-3 text-xs text-slate-500">
-        Finished tasks from the last 14 days.{' '}
+        {t('Finished tasks from the last 14 days.')}{' '}
         <Link href={link(path, query, { done: allDone ? undefined : 'all' })} className="font-medium text-brand-700 hover:underline">
-          {allDone ? 'Show only recent ones' : 'Show every finished task'}
+          {allDone ? t('Show only recent ones') : t('Show every finished task')}
         </Link>
       </div>
       <Board columns={columns} />

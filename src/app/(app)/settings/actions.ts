@@ -29,6 +29,8 @@ import {
   testCarrierConnection,
   testMarketplaceConnection,
 } from '@/server/services/settings';
+import { msg } from '@/lib/i18n/msg';
+import { getT } from '@/lib/i18n/server';
 
 const text = (fd: FormData, name: string) => String(fd.get(name) ?? '').trim();
 const bool = (fd: FormData, name: string) => fd.get(name) === 'on';
@@ -119,7 +121,7 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
   let savedId = id;
   const result = await attempt(async () => {
     const name = text(fd, 'name');
-    if (!name) throw new Error('Give the account a name');
+    if (!name) throw new Error(msg('Give the account a name'));
     savedId = await saveMarketplaceAccount({
       id: id ?? undefined,
       type,
@@ -131,7 +133,7 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
       stockDryRun: bool(fd, 'stockDryRun'),
     });
     revalidatePath('/settings/integrations');
-    return 'Saved';
+    return msg('Saved');
   });
   if (!id && savedId && result?.ok) redirect(`/settings/integrations/marketplace/${savedId}`);
   return result;
@@ -161,7 +163,7 @@ export async function refreshMiraklOfferFieldsAction(id: string): Promise<Action
   return attempt(async () => {
     const fields = await miraklOfferFields(id, true);
     revalidatePath(`/settings/integrations/marketplace/${id}`);
-    return `Loaded ${fields.length} offer field(s) from the marketplace`;
+    return (await getT()).plural(fields.length, 'Loaded {n} offer field from the marketplace', 'Loaded {n} offer fields from the marketplace');
   });
 }
 
@@ -170,20 +172,20 @@ export async function refreshMiraklCarriersAction(id: string): Promise<ActionRes
   return attempt(async () => {
     const carriers = await miraklCarriers(id, true);
     revalidatePath(`/settings/integrations/marketplace/${id}`);
-    return `Loaded ${carriers.length} carrier(s) from the marketplace`;
+    return (await getT()).plural(carriers.length, 'Loaded {n} carrier from the marketplace', 'Loaded {n} carriers from the marketplace');
   });
 }
 
 export async function testMarketplaceAction(id: string): Promise<ActionResult> {
   await requireUser();
-  return attempt(async () => `Connected: ${await testMarketplaceConnection(id)}`);
+  return attempt(async () => (await getT())('Connected: {detail}', { detail: await testMarketplaceConnection(id) }));
 }
 
 export async function syncAccountAction(id: string): Promise<ActionResult> {
   await requireUser();
   return attempt(async () => {
     await enqueue(JOBS.syncAccount, { accountId: id }, { singletonKey: id });
-    return 'Sync queued';
+    return msg('Sync queued');
   });
 }
 
@@ -191,7 +193,7 @@ export async function importListingsAction(id: string): Promise<ActionResult> {
   await requireUser();
   return attempt(async () => {
     await enqueue(JOBS.listingsImport, { accountId: id }, { singletonKey: id });
-    return 'Listing import queued; see the Inventory page';
+    return msg('Listing import queued; see the Inventory page');
   });
 }
 
@@ -202,7 +204,7 @@ export async function removeDemoDataAction(): Promise<ActionResult> {
     revalidatePath('/settings/integrations');
     revalidatePath('/settings/shipping');
     revalidatePath('/orders');
-    return `Removed ${removed.accounts} demo marketplace account(s), ${removed.carriers} demo carrier(s) and ${removed.orders} demo order(s). Next: check your real carriers and add shipping rules.`;
+    return (await getT())('Removed {accounts} demo marketplace account(s), {carriers} demo carrier(s) and {orders} demo order(s). Next: check your real carriers and add shipping rules.', { accounts: removed.accounts, carriers: removed.carriers, orders: removed.orders });
   });
 }
 
@@ -238,13 +240,13 @@ export async function saveCarrierAction(id: string | null, _prev: ActionResult, 
 
   let savedId = id;
   const result = await attempt(async () => {
-    if (!text(fd, 'name')) throw new Error('Give the account a name');
+    if (!text(fd, 'name')) throw new Error(msg('Give the account a name'));
     if (!sender.name || !sender.street || !sender.city || !sender.postalCode || !sender.phone || !sender.email) {
-      throw new Error('Fill in the whole sender address, phone and email');
+      throw new Error(msg('Fill in the whole sender address, phone and email'));
     }
-    if (type === 'allegro_shipping' && !text(fd, 'marketplaceAccountId')) throw new Error('Choose the Allegro account to ship with');
+    if (type === 'allegro_shipping' && !text(fd, 'marketplaceAccountId')) throw new Error(msg('Choose the Allegro account to ship with'));
     if (type === 'inpost' && settings.sendingMethod === 'parcel_locker' && !settings.dropoffPoint) {
-      throw new Error('Enter the drop-off point: the Paczkomat where you drop parcels (e.g. ZOF01M)');
+      throw new Error(msg('Enter the drop-off point: the Paczkomat where you drop parcels (e.g. ZOF01M)'));
     }
     savedId = await saveCarrierAccount({
       id: id ?? undefined,
@@ -257,7 +259,7 @@ export async function saveCarrierAction(id: string | null, _prev: ActionResult, 
       enabled: bool(fd, 'enabled'),
     });
     revalidatePath('/settings/integrations');
-    return 'Saved';
+    return msg('Saved');
   });
   if (!id && savedId && result?.ok) redirect(`/settings/integrations/carrier/${savedId}`);
   return result;
@@ -276,7 +278,7 @@ export async function deleteCarrierAction(id: string): Promise<void> {
 
 export async function testCarrierAction(id: string): Promise<ActionResult> {
   await requireUser();
-  return attempt(async () => `Connected: ${await testCarrierConnection(id)}`);
+  return attempt(async () => (await getT())('Connected: {detail}', { detail: await testCarrierConnection(id) }));
 }
 
 // ---------------------------------------------------------------- rules & presets
@@ -292,7 +294,7 @@ export async function saveRuleAction(id: string | null, _prev: ActionResult, fd:
   // "route" is "<carrier account id>|<service id>" from one combined select.
   const [carrierAccountId, service] = text(fd, 'route').split('|');
   return attempt(async () => {
-    if (!text(fd, 'name') || !carrierAccountId || !service) throw new Error('Name, carrier and service are required');
+    if (!text(fd, 'name') || !carrierAccountId || !service) throw new Error(msg('Name, carrier and service are required'));
     await saveRule({
       id: id ?? undefined,
       name: text(fd, 'name'),
@@ -304,7 +306,7 @@ export async function saveRuleAction(id: string | null, _prev: ActionResult, fd:
       packagePresetId: text(fd, 'packagePresetId') || null,
     });
     revalidatePath('/settings/shipping');
-    return 'Rule saved';
+    return msg('Rule saved');
   });
 }
 
@@ -313,7 +315,7 @@ export async function deleteRuleAction(id: string): Promise<ActionResult> {
   return attempt(async () => {
     await deleteRule(id);
     revalidatePath('/settings/shipping');
-    return 'Rule deleted';
+    return msg('Rule deleted');
   });
 }
 
@@ -332,7 +334,7 @@ export async function savePresetAction(id: string | null, _prev: ActionResult, f
     const dims = ['lengthCm', 'widthCm', 'heightCm'].map((k) => Number(text(fd, k)));
     const weight = Number(text(fd, 'weightKg').replace(',', '.'));
     if (!text(fd, 'name') || dims.some((d) => !Number.isInteger(d) || d <= 0) || !(weight > 0)) {
-      throw new Error('Name, whole-centimetre dimensions and a weight are required');
+      throw new Error(msg('Name, whole-centimetre dimensions and a weight are required'));
     }
     await savePreset({
       id: id ?? undefined,
@@ -345,7 +347,7 @@ export async function savePresetAction(id: string | null, _prev: ActionResult, f
       isDefault: bool(fd, 'isDefault'),
     });
     revalidatePath('/settings/shipping');
-    return 'Package saved';
+    return msg('Package saved');
   });
 }
 
@@ -354,7 +356,7 @@ export async function deletePresetAction(id: string): Promise<ActionResult> {
   return attempt(async () => {
     await deletePreset(id);
     revalidatePath('/settings/shipping');
-    return 'Package deleted';
+    return msg('Package deleted');
   });
 }
 
@@ -365,7 +367,7 @@ export async function createUserAction(_prev: ActionResult, fd: FormData): Promi
   return attempt(async () => {
     await createUser({ email: text(fd, 'email'), name: text(fd, 'name'), password: String(fd.get('password') ?? ''), role: isRole(text(fd, 'role')) ? (text(fd, 'role') as Role) : 'logistics' });
     revalidatePath('/settings/users');
-    return 'User created';
+    return msg('User created');
   });
 }
 
@@ -373,20 +375,20 @@ export async function setRoleAction(id: string, _prev: ActionResult, fd: FormDat
   await requireAdmin();
   return attempt(async () => {
     const role = text(fd, 'role');
-    if (!isRole(role)) throw new Error('Unknown role');
+    if (!isRole(role)) throw new Error(msg('Unknown role'));
     await setUserRole(id, role);
     revalidatePath('/settings/users');
-    return 'Role changed';
+    return msg('Role changed');
   });
 }
 
 export async function deleteUserAction(id: string): Promise<ActionResult> {
   const me = await requireAdmin();
   return attempt(async () => {
-    if (me.id === id) throw new Error("You can't delete yourself");
+    if (me.id === id) throw new Error(msg("You can't delete yourself"));
     await deleteUser(id);
     revalidatePath('/settings/users');
-    return 'User deleted';
+    return msg('User deleted');
   });
 }
 
@@ -394,7 +396,7 @@ export async function resetPasswordAction(id: string, _prev: ActionResult, fd: F
   await requireAdmin();
   return attempt(async () => {
     await resetPassword(id, String(fd.get('password') ?? ''));
-    return 'Password changed';
+    return msg('Password changed');
   });
 }
 
@@ -405,7 +407,7 @@ export async function startHistoryAction(accountId: string, _prev: ActionResult,
   return attempt(async () => {
     await startHistoryImport(accountId, { restart: fd.get('restart') === '1' });
     revalidatePath(`/settings/integrations/marketplace/${accountId}`);
-    return 'The import of past orders has started; it runs in the background. Reload this page to see its progress.';
+    return msg('The import of past orders has started; it runs in the background. Reload this page to see its progress.');
   });
 }
 
@@ -414,7 +416,7 @@ export async function stopHistoryAction(accountId: string): Promise<ActionResult
   return attempt(async () => {
     await stopHistoryImport(accountId);
     revalidatePath(`/settings/integrations/marketplace/${accountId}`);
-    return 'Stopped. “Resume” continues where it stopped.';
+    return msg('Stopped. “Resume” continues where it stopped.');
   });
 }
 
@@ -424,6 +426,6 @@ export async function syncFeesAction(accountId: string, _prev: ActionResult, fd:
     if (fd.get('fromStart') === '1') await resetFeeCursor(accountId);
     await enqueue(JOBS.feesSync, { accountId }, { singletonKey: accountId });
     revalidatePath(`/settings/integrations/marketplace/${accountId}`);
-    return 'Fees are being read in the background.';
+    return msg('Fees are being read in the background.');
   });
 }

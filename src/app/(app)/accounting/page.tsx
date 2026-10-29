@@ -11,40 +11,48 @@ import type { Invoice } from '@/server/db/schema';
 import type { InvoiceRequest } from '@/server/integrations/types';
 import { accountingCounts, invoiceRequestFor, listInvoices, loadAccounting, ordersAwaitingInvoice, uploadEnabled, type AccountingTab } from '@/server/services/invoicing';
 import { createInvoiceAction, markInvoicedElsewhereAction, retryInvoiceAction, undoInvoicedElsewhereAction } from './actions';
+import { getT } from '@/lib/i18n/server';
+import { msg } from '@/lib/i18n/msg';
 
-export const metadata: Metadata = { title: 'Accounting' };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('Accounting') };
+}
 
 const TABS: { value: AccountingTab; label: string }[] = [
-  { value: 'to_issue', label: 'To issue' },
-  { value: 'issued', label: 'Issued' },
-  { value: 'attention', label: 'Needs attention' },
-  { value: 'all', label: 'All invoices' },
+  { value: 'to_issue', label: msg('To issue') },
+  { value: 'issued', label: msg('Issued') },
+  { value: 'attention', label: msg('Needs attention') },
+  { value: 'all', label: msg('All invoices') },
 ];
 
-function Buyer({ req }: { req: InvoiceRequest | null }) {
+async function Buyer({ req }: { req: InvoiceRequest | null }) {
+  const t = await getT();
   if (!req) return <span className="text-slate-400">—</span>;
   return (
     <>
       <p className="font-medium">{req.name}</p>
       <p className="text-xs text-slate-500">
-        {req.taxId ? `NIP ${req.euPrefix && req.euPrefix !== 'PL' ? req.euPrefix : ''}${req.taxId}` : 'Private buyer'} · {req.city}, {req.countryCode}
+        {req.taxId ? `NIP ${req.euPrefix && req.euPrefix !== 'PL' ? req.euPrefix : ''}${req.taxId}` : t('Private buyer')} · {req.city}, {req.countryCode}
       </p>
     </>
   );
 }
 
-function InvoiceState({ invoice, cancelled }: { invoice: Invoice; cancelled: boolean }) {
-  if (invoice.state === 'pending') return <Badge tone="blue">Being issued</Badge>;
-  if (invoice.state === 'failed') return <Badge tone="red">Not issued</Badge>;
-  if (invoice.state === 'manual') return <Badge tone="amber">Issue by hand</Badge>;
-  if (invoice.state === 'external') return <Badge tone="gray">Invoiced outside Luora</Badge>;
-  return cancelled ? <Badge tone="red">Order cancelled</Badge> : <Badge tone="green">Issued</Badge>;
+async function InvoiceState({ invoice, cancelled }: { invoice: Invoice; cancelled: boolean }) {
+  const t = await getT();
+  if (invoice.state === 'pending') return <Badge tone="blue">{t('Being issued')}</Badge>;
+  if (invoice.state === 'failed') return <Badge tone="red">{t('Not issued')}</Badge>;
+  if (invoice.state === 'manual') return <Badge tone="amber">{t('Issue by hand')}</Badge>;
+  if (invoice.state === 'external') return <Badge tone="gray">{t('Invoiced outside Luora')}</Badge>;
+  return cancelled ? <Badge tone="red">{t('Order cancelled')}</Badge> : <Badge tone="green">{t('Issued')}</Badge>;
 }
 
 export default async function AccountingPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const t = await getT();
   await requireUser();
   const { tab: tabParam } = await searchParams;
-  const tab = (TABS.find((t) => t.value === tabParam)?.value ?? 'to_issue') as AccountingTab;
+  const tab = (TABS.find((item) => item.value === tabParam)?.value ?? 'to_issue') as AccountingTab;
   const [accounting, counts] = await Promise.all([loadAccounting(), accountingCounts()]);
   const awaiting = tab === 'to_issue' ? await ordersAwaitingInvoice() : [];
   const rows = tab === 'to_issue' ? [] : await listInvoices(tab);
@@ -59,43 +67,43 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
     <>
       <AutoRefresh active={busy} />
       <PageHeader
-        title="Accounting"
-        description="Invoices from ifirma for Allegro, Empik and HEBE orders whose buyer asked for one. They're attached to the marketplace order, and companies' invoices go to KSeF."
+        title={t('Accounting')}
+        description={t('Invoices from ifirma for Allegro, Empik and HEBE orders whose buyer asked for one. They\'re attached to the marketplace order, and companies\' invoices go to KSeF.')}
       />
       {(!accounting.enabled || !accounting.configured) && (
         <div className="mb-4">
           <Alert>
-            {!accounting.configured ? 'ifirma is not connected yet.' : 'Invoicing is switched off.'}{' '}
+            {!accounting.configured ? t('ifirma is not connected yet.') : t('Invoicing is switched off.')}{' '}
             <Link href="/settings/accounting" className="font-medium underline">
-              Open Settings → Accounting
+              {t('Open Settings → Accounting')}
             </Link>
           </Alert>
         </div>
       )}
       {accounting.enabled && (
         <p className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-          <Badge tone={accounting.settings.autoOnShipped ? 'green' : 'gray'}>Mode: {accounting.settings.autoOnShipped ? 'Automatic' : 'Manual'}</Badge>
-          {accounting.settings.autoOnShipped ? 'Invoices are issued when a requested order becomes Shipped.' : 'Press “Create invoice” on each order.'}
+          <Badge tone={accounting.settings.autoOnShipped ? 'green' : 'gray'}>{t('Mode:')} {accounting.settings.autoOnShipped ? t('Automatic') : t('Manual')}</Badge>
+          {accounting.settings.autoOnShipped ? t('Invoices are issued when a requested order becomes Shipped.') : t('Press “Create invoice” on each order.')}
           <Link href="/settings/accounting" className="font-medium text-brand-700 underline underline-offset-2">
-            Change
+            {t('Change')}
           </Link>
         </p>
       )}
 
       <div className="mb-4 flex flex-wrap gap-2">
-        {TABS.map((t) => {
-          const count = t.value === 'to_issue' ? counts.toIssue : t.value === 'attention' ? counts.attention : undefined;
+        {TABS.map((item) => {
+          const count = item.value === 'to_issue' ? counts.toIssue : item.value === 'attention' ? counts.attention : undefined;
           return (
             <Link
-              key={t.value}
-              href={t.value === 'to_issue' ? '/accounting' : `/accounting?tab=${t.value}`}
+              key={item.value}
+              href={item.value === 'to_issue' ? '/accounting' : `/accounting?tab=${item.value}`}
               className={cn(
                 'rounded-full border px-4 py-1.5 text-sm font-medium',
-                tab === t.value ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                tab === item.value ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
               )}
             >
-              {t.label}
-              {count ? <span className={cn('ml-1.5', tab === t.value ? 'text-white/80' : t.value === 'attention' ? 'text-red-600' : 'text-slate-400')}>{count}</span> : null}
+              {t(item.label)}
+              {count ? <span className={cn('ml-1.5', tab === item.value ? 'text-white/80' : item.value === 'attention' ? 'text-red-600' : 'text-slate-400')}>{count}</span> : null}
             </Link>
           );
         })}
@@ -104,15 +112,15 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
       <Card>
         {tab === 'to_issue' ? (
           awaiting.length === 0 ? (
-            <EmptyState title="Nothing to invoice">Orders whose buyer asks for an invoice appear here.</EmptyState>
+            <EmptyState title={t('Nothing to invoice')}>{t('Orders whose buyer asks for an invoice appear here.')}</EmptyState>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-100">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className={th}>Invoice for</th>
-                    <th className={th}>Order</th>
-                    <th className={cn(th, 'text-right')}>Amount</th>
+                    <th className={th}>{t('Invoice for')}</th>
+                    <th className={th}>{t('Order')}</th>
+                    <th className={cn(th, 'text-right')}>{t('Amount')}</th>
                     <th className={cn(th, 'text-right')} />
                   </tr>
                 </thead>
@@ -130,23 +138,23 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                           </Link>
                           <StatusBadge status={order.status} />
                         </div>
-                        <p className="mt-0.5 text-xs text-slate-500">placed {formatDate(order.placedAt, false)}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{t('placed {date}', { date: formatDate(order.placedAt, false, t.locale) })}</p>
                       </td>
                       <td className={cn(td, 'text-right tabular-nums whitespace-nowrap')}>{formatMoney(order.totalAmount, order.currency)}</td>
                       <td className={cn(td, 'text-right')}>
                         <div className="flex flex-wrap justify-end gap-1.5">
                           <ActionForm action={markInvoicedElsewhereAction.bind(null, order.id)}>
                             <SubmitButton size="sm" variant="secondary" pendingText="…">
-                              <Check className="size-3.5" /> Already invoiced
+                              <Check className="size-3.5" /> {t('Already invoiced')}
                             </SubmitButton>
                           </ActionForm>
                           <ActionForm action={createInvoiceAction.bind(null, order.id)}>
-                            <SubmitButton size="sm" pendingText="Requesting…">
-                              <FileText className="size-3.5" /> Create invoice
+                            <SubmitButton size="sm" pendingText={t('Requesting…')}>
+                              <FileText className="size-3.5" /> {t('Create invoice')}
                             </SubmitButton>
                           </ActionForm>
                         </div>
-                        {!['shipped', 'delivered'].includes(order.status) && <p className="mt-1 text-xs text-slate-400">Not shipped yet</p>}
+                        {!['shipped', 'delivered'].includes(order.status) && <p className="mt-1 text-xs text-slate-400">{t('Not shipped yet')}</p>}
                       </td>
                     </tr>
                   ))}
@@ -155,17 +163,17 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
             </div>
           )
         ) : rows.length === 0 ? (
-          <EmptyState title={tab === 'attention' ? 'Nothing needs attention' : 'No invoices yet'} />
+          <EmptyState title={tab === 'attention' ? t('Nothing needs attention') : t('No invoices yet')} />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className={th}>Invoice</th>
-                  <th className={th}>Invoice for</th>
-                  <th className={th}>Order</th>
-                  <th className={cn(th, 'text-right')}>Amount</th>
-                  <th className={th}>Marketplace / KSeF</th>
+                  <th className={th}>{t('Invoice')}</th>
+                  <th className={th}>{t('Invoice for')}</th>
+                  <th className={th}>{t('Order')}</th>
+                  <th className={cn(th, 'text-right')}>{t('Amount')}</th>
+                  <th className={th}>{t('Marketplace / KSeF')}</th>
                   <th className={cn(th, 'text-right')} />
                 </tr>
               </thead>
@@ -179,10 +187,10 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                         <p className="font-medium">{i.number ?? (i.externalId ? `ifirma #${i.externalId}` : '—')}</p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           <InvoiceState invoice={i} cancelled={cancelled} />
-                          <span className="text-xs text-slate-500">{i.kind === 'oss' ? 'OSS' : 'Domestic'} · {formatDate(i.createdAt)}</span>
+                          <span className="text-xs text-slate-500">{i.kind === 'oss' ? 'OSS' : t('Domestic')} · {formatDate(i.createdAt, true, t.locale)}</span>
                         </div>
                         {i.error && <p className="mt-1 max-w-96 text-xs text-red-700">{i.error}</p>}
-                        {cancelled && i.state === 'issued' && <p className="mt-1 max-w-96 text-xs text-red-700">Issue a correction invoice in ifirma.</p>}
+                        {cancelled && i.state === 'issued' && <p className="mt-1 max-w-96 text-xs text-red-700">{t('Issue a correction invoice in ifirma.')}</p>}
                       </td>
                       <td className={td}>
                         <Buyer req={invoiceRequestFor(order)} />
@@ -202,17 +210,17 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                         ) : (
                           <>
                             {i.uploadedAt ? (
-                              <p className="text-emerald-700">Sent to {accountName}</p>
+                              <p className="text-emerald-700">{t('Sent to {account}', { account: accountName })}</p>
                             ) : !uploadEnabled(order.marketplace, accounting.settings) ? (
-                              <p className="text-slate-500">PDF only{order.marketplace === 'shopify' ? ' (Shopify can’t receive invoices)' : ''}</p>
+                              <p className="text-slate-500">{order.marketplace === 'shopify' ? t('PDF only (Shopify can’t receive invoices)') : t('PDF only')}</p>
                             ) : i.uploadError ? (
-                              <p className="max-w-72 text-red-700">Not sent to {accountName}: {i.uploadError}</p>
+                              <p className="max-w-72 text-red-700">{t('Not sent to {account}:', { account: accountName })} {i.uploadError}</p>
                             ) : (
-                              <p className="text-slate-500">Sending to {accountName}…</p>
+                              <p className="text-slate-500">{t('Sending to {account}…', { account: accountName })}</p>
                             )}
                             {order.invoiceRequest?.taxId && i.kind === 'domestic' && (
                               <p className={cn('mt-0.5', i.ksefError ? 'text-red-700' : 'text-slate-500')}>
-                                KSeF: {i.ksefError ? i.ksefError : i.ksefStatus ?? (i.ksefSentAt ? 'sent' : 'not sent yet')}
+                                {t('KSeF:')} {i.ksefError ? i.ksefError : i.ksefStatus ?? (i.ksefSentAt ? t('sent') : t('not sent yet'))}
                               </p>
                             )}
                           </>
@@ -228,14 +236,14 @@ export default async function AccountingPage({ searchParams }: { searchParams: P
                           {i.state === 'external' && (
                             <ActionForm action={undoInvoicedElsewhereAction.bind(null, i.id)}>
                               <SubmitButton size="sm" variant="secondary" pendingText="…">
-                                <Undo2 className="size-3.5" /> Undo
+                                <Undo2 className="size-3.5" /> {t('Undo')}
                               </SubmitButton>
                             </ActionForm>
                           )}
                           {retry && !cancelled && (
                             <ActionForm action={retryInvoiceAction.bind(null, i.id)}>
                               <SubmitButton size="sm" variant="secondary" pendingText="…">
-                                {i.state === 'failed' || i.state === 'manual' ? 'Try again' : 'Retry'}
+                                {i.state === 'failed' || i.state === 'manual' ? t('Try again') : t('Retry')}
                               </SubmitButton>
                             </ActionForm>
                           )}

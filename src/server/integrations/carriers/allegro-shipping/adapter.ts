@@ -6,6 +6,7 @@ import { parseRetryAfter } from '../../../http';
 import { describeAllegroErrors, type AllegroClient } from '../../marketplaces/allegro/client';
 import type { LabelFormat, LabelSize } from '../../types';
 import { inpostTrackingUrl, type CarrierAdapter, type CarrierService, type DeliveryStatus, type ShipmentRequest, type ShipmentStatus } from '../types';
+import { msg } from '@/lib/i18n/msg';
 
 /** Service id meaning "use the delivery method from the Allegro order". */
 export const BUYER_CHOICE = 'buyer_choice';
@@ -90,7 +91,7 @@ export function allegroReferenceNumber(reference: string): string {
  */
 export function buildCreateCommand(req: ShipmentRequest, settings: CarrierSettings, commandId: string, requireIban = false) {
   const deliveryMethodId = req.service === BUYER_CHOICE ? req.deliveryMethodId : req.service;
-  if (!deliveryMethodId) throw new Error('The Allegro order has no delivery method to ship with');
+  if (!deliveryMethodId) throw new Error(msg('The Allegro order has no delivery method to ship with'));
   const dim = (value: number) => ({ value, unit: 'CENTIMETER' });
 
   return {
@@ -185,7 +186,7 @@ export class AllegroShippingAdapter implements CarrierAdapter {
   async refreshShipment(ref: { externalId: string | null; commandId: string | null }): Promise<ShipmentStatus> {
     let shipmentId = ref.externalId;
     if (!shipmentId) {
-      if (!ref.commandId) throw new Error('Allegro shipment has neither a shipment id nor a command id');
+      if (!ref.commandId) throw new Error(msg('Allegro shipment has neither a shipment id nor a command id'));
       const response = await this.client.callWithHeaders<CreateCommandStatus>(
         'GET',
         `/shipment-management/shipments/create-commands/${ref.commandId}`,

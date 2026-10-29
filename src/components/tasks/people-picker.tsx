@@ -1,8 +1,12 @@
-import { Avatar } from './avatars';
+'use client';
+
+import { useT } from '@/lib/i18n/client';
+import { Avatar } from './avatar';
 
 /** One tick-able pill per person (checkboxes named `name`), for choosing who a task is for. */
 export function PeoplePicker({ people, name = 'assigneeIds', selected = [] }: { people: { id: string; name: string }[]; name?: string; selected?: string[] }) {
-  if (people.length === 0) return <p className="text-sm text-slate-500">There are no users to assign yet.</p>;
+  const t = useT();
+  if (people.length === 0) return <p className="text-sm text-slate-500">{t('There are no users to assign yet.')}</p>;
   return (
     <div className="flex flex-wrap gap-2">
       {people.map((p) => (
