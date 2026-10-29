@@ -8,6 +8,15 @@ describe('splitStreet', () => {
     ['Aleja 3 Maja 12A', 'Aleja 3 Maja', '12A'],
     ['Długa 5 m. 3', 'Długa', '5/3'],
     ['os. Kosmonautów 7 lok. 12', 'os. Kosmonautów', '7/12'],
+    // A flat given as a letter, which InPost's courier API refused for want of a building number.
+    ['Malinowskiego 38/E', 'Malinowskiego', '38/E'],
+    ['Kościuszki 7 lok. B', 'Kościuszki', '7/B'],
+    ['Główna 45 B', 'Główna', '45B'],
+    ['Plac Zbawiciela 3/5/7', 'Plac Zbawiciela', '3/5/7'],
+    ['ul. Polna 12 / 4', 'ul. Polna', '12/4'],
+    ['Rynek 1-3', 'Rynek', '1-3'],
+    ['Długa 10M', 'Długa', '10M'],
+    ['ul. 11 Listopada 5', 'ul. 11 Listopada', '5'],
   ])('%s', (line, street, buildingNumber) => {
     expect(splitStreet(line)).toEqual({ street, buildingNumber });
   });

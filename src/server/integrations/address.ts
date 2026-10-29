@@ -3,15 +3,18 @@
 
 /**
  * Splits "ul. Marszałkowska 10/5" into { street: "ul. Marszałkowska", buildingNumber: "10/5" }.
+ * The number may carry a flat after a slash, dash, "m." or "lok." (digits or a letter: "38/E", "7 lok. B",
+ * "3/5/7") or a letter after a space ("45 B" → "45B").
  * When no number can be found the whole line stays in `street`.
  */
 export function splitStreet(line: string): { street: string; buildingNumber: string } {
   const value = line.replace(/\s+/g, ' ').trim();
-  const match = value.match(/^(.*?\D)\s*(\d+[A-Za-z]?(?:\s*[/\\-]\s*\d+[A-Za-z]?)?(?:\s*(?:m\.?|lok\.?)\s*\d+[A-Za-z]?)?)\s*$/i);
+  const match = value.match(/^(.*?\D)\s*(\d+[A-Za-z]?(?:\s*[/\\-]\s*[\dA-Za-z]+)*)(?:\s*(?:m\.?|lok\.?)\s*([\dA-Za-z]+)|\s+([A-Za-z]))?\s*$/i);
   if (!match) return { street: value, buildingNumber: '' };
+  const [, street, number, flat, letter] = match;
   return {
-    street: match[1].replace(/[\s,]+$/, '').trim(),
-    buildingNumber: match[2].replace(/\s+/g, '').replace(/(m\.?|lok\.?)/i, '/').replace('//', '/'),
+    street: street.replace(/[\s,]+$/, '').trim(),
+    buildingNumber: number.replace(/\s+/g, '') + (flat ? `/${flat}` : '') + (letter ?? ''),
   };
 }
 
