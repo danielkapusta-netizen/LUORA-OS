@@ -71,16 +71,15 @@ function notesLabel(notes: { count: number; important: number }, t: T): string {
 
 const SHOWN = 4;
 
-/** What was bought, one product per line. The more lines, the smaller the type, so the cell stays the same height. */
+/** What was bought, one product per line, in the same small type as the time under the date. */
 function ProductList({ products }: { products: OrderRow['products'] }) {
   const t = useT();
   if (!products.length) return <span className="text-slate-400">—</span>;
-  const size = products.length === 1 ? 'text-sm' : products.length <= 3 ? 'text-xs' : 'text-[11px] leading-tight';
   return (
-    <ul className={cn('w-48 space-y-0.5 2xl:w-60', size)} title={products.map((p) => `${p.quantity}× ${p.name}`).join('\n')}>
+    <ul className={cn('w-44 space-y-0.5 text-xs text-slate-500 2xl:w-52', products.length > 3 && 'leading-tight')} title={products.map((p) => `${p.quantity}× ${p.name}`).join('\n')}>
       {products.slice(0, SHOWN).map((p, i) => (
-        <li key={i} className="flex gap-1 text-ink">
-          {p.quantity > 1 && <span className="shrink-0 font-mono font-medium tabular-nums">{p.quantity}×</span>}
+        <li key={i} className="flex gap-1">
+          {p.quantity > 1 && <span className="shrink-0 font-medium tabular-nums text-slate-700">{p.quantity}×</span>}
           <span className={cn('min-w-0', products.length === 1 ? 'line-clamp-2' : 'truncate')}>{p.name}</span>
         </li>
       ))}
