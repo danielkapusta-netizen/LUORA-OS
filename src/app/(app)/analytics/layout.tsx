@@ -9,8 +9,11 @@ export default async function AnalyticsLayout({ children }: { children: ReactNod
   await requireCapability('analytics');
   return (
     <>
-      <PageHeader title={t('Analytics')} description={t('Sales, profit and margins from every marketplace, worked out from the orders, their fees and your product costs.')} />
-      <Suspense>
+      <PageHeader
+        title={t('Analytics')}
+        description={t('Sales, profit and margins from every marketplace, worked out from the orders, their fees and your product costs.')}
+      />
+      <Suspense fallback={<div className="mb-6 h-11" aria-hidden />}>
         <AnalyticsTabs />
       </Suspense>
       {children}

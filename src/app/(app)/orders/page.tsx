@@ -2,7 +2,7 @@ import { RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/forms';
-import { Alert, buttonClass, Card, Input, Select } from '@/components/ui';
+import { Alert, buttonClass, Card, Eyebrow, Input, Select } from '@/components/ui';
 import { quickRanges } from '@/lib/analytics/window';
 import { CARRIER_LABELS, cn, MARKETPLACE_LABELS, timeAgo } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
@@ -151,7 +151,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               key={r.label}
               href={hrefWith(params, { from: r.from, to: r.to, page: undefined })}
               aria-current={on ? 'true' : undefined}
-              className={cn('rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap max-md:py-2 max-md:text-sm', on ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')}
+              className={cn('rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap max-md:py-2 max-md:text-sm', on ? 'bg-ink text-white' : 'bg-black/[0.04] text-slate-700 hover:bg-black/[0.07]')}
             >
               {r.label}
             </Link>
@@ -161,7 +161,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <Input type="date" name="from" defaultValue={params.from} aria-label={t('Placed from')} />
       <Input type="date" name="to" defaultValue={params.to} aria-label={t('Placed until')} />
       <div className="col-span-2 flex items-center justify-end gap-3">
-        <Link href={hrefWith({ status: params.status }, {})} className="text-sm text-slate-500 hover:text-slate-800">
+        <Link href={hrefWith({ status: params.status }, {})} className="text-sm text-slate-500 hover:text-ink">
           {t('Clear')}
         </Link>
         <button className={buttonClass('primary', 'sm')}>{t('Apply')}</button>
@@ -172,17 +172,18 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     <>
       {params.status && <input type="hidden" name="status" value={params.status} />}
       <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-slate-400" />
-      <Input name="q" defaultValue={params.q} placeholder={t('Search number, buyer, SKU, tracking…')} className="w-full rounded-full bg-white pl-10 md:w-72" enterKeyHint="search" type="search" />
+      <Input name="q" defaultValue={params.q} placeholder={t('Search number, buyer, SKU, tracking…')} aria-label={t('Search orders')} className="w-full rounded-full border-black/[0.08] bg-white pl-10 md:w-72" enterKeyHint="search" type="search" />
     </>
   );
-  const pill = 'shrink-0 snap-start rounded-full border px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors max-md:flex max-md:min-h-10 max-md:items-center';
+  const tab = 'shrink-0 snap-start rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors max-md:flex max-md:min-h-10 max-md:items-center';
+  const chip = 'inline-flex shrink-0 snap-start items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors max-md:min-h-10';
 
   return (
     <OrderSheetProvider>
-      <div className="mb-4 flex items-end justify-between gap-3 md:mb-6 md:flex-wrap md:items-center">
+      <div className="mb-6 flex items-end justify-between gap-3 md:mb-8 md:flex-wrap">
         <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight">{t('Orders')}</h1>
-          <p className="mt-1 text-sm text-slate-500">{t('All marketplaces in one list · last sync {when}', { when: timeAgo(lastSync, t) })}</p>
+          <Eyebrow className="mb-2">{t('All marketplaces in one list · last sync {when}', { when: timeAgo(lastSync, t) })}</Eyebrow>
+          <h1 className="font-display text-4xl leading-tight font-semibold tracking-tight text-ink md:text-5xl">{t('Orders')}</h1>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <form action="/orders" className="relative hidden md:block">
@@ -205,7 +206,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           <summary className={cn(buttonClass('secondary'), 'cursor-pointer list-none')}>
             <SlidersHorizontal className="size-4" /> {t('Filters')}{filtersActive ? ' •' : ''}
           </summary>
-          {filtersForm('absolute inset-x-0 top-full z-20 mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-black/5 bg-white p-4 shadow-lg')}
+          {filtersForm('absolute inset-x-0 top-full z-20 mt-2 grid grid-cols-2 gap-2 rounded-3xl border border-black/[0.06] bg-white p-4 shadow-[0_16px_40px_-16px_rgba(28,27,25,0.25)]')}
         </details>
       </div>
 
@@ -223,71 +224,69 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       )}
 
       {/* One scrolling row on a phone (it fades out at the edge to show there is more); wrapped on a desktop. */}
-      <div className="-mx-4 mb-4 flex scroll-px-4 snap-x items-center gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] max-md:scrollbar-none md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]">
-        {TABS.map((tab) => {
-          const count = tab.value === 'open' ? openCount : tab.value === 'label_created' ? labelReady : tab.value !== 'all' ? counts[tab.value] : undefined;
-          const active = status === tab.value;
-          return (
-            <Link
-              key={tab.label}
-              href={hrefWith(params, { status: tab.value === 'open' ? undefined : tab.value, page: undefined, order: undefined })}
-              aria-current={active ? 'true' : undefined}
-              title={tab.hint ? t(tab.hint) : undefined}
-              className={cn(pill, 'press', active ? 'border-brand-600 bg-brand-600 text-white' : 'border-black/10 bg-white text-slate-600 hover:border-black/20 hover:text-slate-900')}
-            >
-              {t(tab.label)}
-              {count ? <span className={cn('ml-1.5 text-xs', active ? 'text-white/80' : 'text-slate-400')}>{count}</span> : null}
-            </Link>
-          );
-        })}
-        <Link
-          href={hrefWith(params, { returning: params.returning === '1' ? undefined : '1', page: undefined, order: undefined })}
-          className={cn(pill, 'press', params.returning === '1' ? 'border-violet-600 bg-violet-600 text-white' : 'border-violet-200 bg-violet-50 text-violet-800 hover:border-violet-300')}
-          aria-pressed={params.returning === '1'}
-        >
-          {t('Returning customers')}
-        </Link>
+      <div className="fade-end -mx-4 mb-5 flex scroll-px-4 snap-x items-center gap-1 overflow-x-auto px-4 pb-1 max-md:scrollbar-none md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]">
+        <nav aria-label={t('Order status')} className="flex items-center gap-0.5 rounded-full bg-black/[0.04] p-1 max-md:shrink-0 md:flex-wrap md:rounded-3xl">
+          {TABS.map((item) => {
+            const count = item.value === 'open' ? openCount : item.value === 'label_created' ? labelReady : item.value !== 'all' ? counts[item.value] : undefined;
+            const active = status === item.value;
+            return (
+              <Link
+                key={item.label}
+                href={hrefWith(params, { status: item.value === 'open' ? undefined : item.value, page: undefined, order: undefined })}
+                aria-current={active ? 'true' : undefined}
+                title={item.hint ? t(item.hint) : undefined}
+                className={cn(tab, 'press', active ? 'bg-white font-medium text-ink shadow-[0_1px_2px_rgba(28,27,25,0.08)]' : 'text-slate-600 hover:text-ink')}
+              >
+                {t(item.label)}
+                {count ? <span className={cn('ml-1.5 font-mono text-xs tabular-nums', active ? 'text-slate-500' : 'text-slate-400')}>{count}</span> : null}
+              </Link>
+            );
+          })}
+        </nav>
+        <span className="mx-2 hidden h-6 w-px shrink-0 bg-black/[0.08] md:block" aria-hidden />
         {(
           [
-            { value: '1', label: msg('With notes'), on: 'border-slate-700 bg-slate-700 text-white', off: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300' },
-            { value: 'important', label: msg('Important notes'), on: 'border-amber-500 bg-amber-500 text-white', off: 'border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-300' },
+            { key: 'returning', on: params.returning === '1', next: { returning: params.returning === '1' ? undefined : '1' }, label: msg('Returning customers'), dot: 'bg-violet-500' },
+            { key: 'notes', on: params.notes === '1', next: { notes: params.notes === '1' ? undefined : '1' }, label: msg('With notes'), dot: 'bg-slate-500' },
+            { key: 'important', on: params.notes === 'important', next: { notes: params.notes === 'important' ? undefined : 'important' }, label: msg('Important notes'), dot: 'bg-amber-500' },
           ] as const
-        ).map((p) => (
+        ).map((c) => (
           <Link
-            key={p.value}
-            href={hrefWith(params, { notes: params.notes === p.value ? undefined : p.value, page: undefined, order: undefined })}
-            className={cn(pill, 'press', params.notes === p.value ? p.on : p.off)}
-            aria-pressed={params.notes === p.value}
+            key={c.key}
+            href={hrefWith(params, { ...c.next, page: undefined, order: undefined })}
+            className={cn(chip, 'press', c.on ? 'border-ink bg-ink text-white' : 'border-black/[0.08] bg-white text-slate-700 hover:border-black/20 hover:text-ink')}
+            aria-pressed={c.on}
           >
-            {t(p.label)}
+            <span className={cn('size-1.5 rounded-full', c.on ? 'bg-white' : c.dot)} aria-hidden />
+            {t(c.label)}
           </Link>
         ))}
         <details className="relative ml-auto hidden md:block" open={filtersActive}>
           <summary className={cn(buttonClass('secondary', 'sm'), 'cursor-pointer list-none')}>
             <SlidersHorizontal className="size-3.5" /> {t('Filters')}{filtersActive ? ' •' : ''}
           </summary>
-          {filtersForm('absolute right-0 z-20 mt-2 grid w-[min(92vw,34rem)] grid-cols-2 gap-2 rounded-2xl border border-black/5 bg-white p-4 shadow-lg')}
+          {filtersForm('absolute right-0 z-20 mt-2 grid w-[min(92vw,34rem)] grid-cols-2 gap-2 rounded-3xl border border-black/[0.06] bg-white p-4 shadow-[0_16px_40px_-16px_rgba(28,27,25,0.25)]')}
         </details>
       </div>
 
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
-        <Card className="overflow-hidden">
+        <Card className="max-md:border-0 max-md:bg-transparent md:overflow-clip">
           <OrdersTable
             rows={tableRows}
             selectedId={selectedId}
             users={users.map((u) => ({ id: u.id, name: u.name }))}
             statuses={Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))}
           />
-          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
+          <div className="flex items-center justify-between border-black/[0.04] py-3 text-sm text-slate-500 md:border-t md:px-5">
             <span>{total === 0 ? t('No orders') : t('{from}–{to} of {total}', { from: (page - 1) * pageSize + 1, to: Math.min(page * pageSize, total), total })}</span>
             <div className="flex gap-2">
               {page > 1 && (
-                <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page - 1), order: undefined })}>
+                <Link className={buttonClass('ghost', 'sm')} href={hrefWith(params, { page: String(page - 1), order: undefined })}>
                   {t('Previous')}
                 </Link>
               )}
               {page * pageSize < total && (
-                <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page + 1), order: undefined })}>
+                <Link className={buttonClass('ghost', 'sm')} href={hrefWith(params, { page: String(page + 1), order: undefined })}>
                   {t('Next')}
                 </Link>
               )}

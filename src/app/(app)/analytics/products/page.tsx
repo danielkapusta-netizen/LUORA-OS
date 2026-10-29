@@ -2,7 +2,7 @@ import { Minus, Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { hrefWith, InsightCard, Pills } from '@/components/analytics/blocks';
-import { HistoryCharts } from '@/components/analytics/charts';
+import { HistoryCharts } from '@/components/analytics/lazy-charts';
 import { formatBucket, formatValue } from '@/components/analytics/format';
 import { Badge, Card, CardBody, EmptyState, Input, td, th } from '@/components/ui';
 import { buildCatalogue, buildCatalogueHistory, scoreCatalogueRow, type CatalogueDimension, type CatalogueRow } from '@/lib/analytics/catalogue';
@@ -68,7 +68,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
           <EmptyState title={t('Nothing sold in this period')} />
         ) : (
           <table className="w-full">
-            <thead className="border-b border-slate-100 bg-slate-50/60">
+            <thead className="border-b border-black/[0.06]">
               <tr>
                 <th className="w-10" />
                 <th className={th}>{DIMENSIONS.find((d) => d.value === dimension)?.label.replace(/s$/, '')}</th>
@@ -80,12 +80,12 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                 {view.showProfit && <th className={cn(th, 'text-right')}>{t('Share of profit')}</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-black/[0.04]">
               {rows.map((r) => {
                 const open = params.open === r.key;
                 const Icon = open ? Minus : Plus;
                 return [
-                  <tr key={r.key} id={`row-${r.key}`} className={open ? 'bg-slate-50' : undefined}>
+                  <tr key={r.key} id={`row-${r.key}`} className={open ? 'bg-sidebar' : undefined}>
                     <td className="py-3 pr-0 pl-4 align-top">
                       <Link
                         href={`${link({ open: open ? undefined : r.key })}#row-${r.key}`}
@@ -114,7 +114,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
                     {view.showProfit && <td className={cn(td, 'text-right tabular-nums')}>{Math.round(r.marginShare * 100)}%</td>}
                   </tr>,
                   open && (
-                    <tr key={`${r.key}-detail`} className="bg-slate-50">
+                    <tr key={`${r.key}-detail`} className="bg-sidebar">
                       <td colSpan={8} className="px-4 pb-5">
                         <RowDetail row={r} view={view} dimension={dimension} />
                       </td>
@@ -201,7 +201,7 @@ async function RowDetail({ row, view, dimension }: { row: CatalogueRow; view: An
               <th className={cn(th, 'text-right')}>{t('Margin')}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-black/[0.04]">
             {[...history].reverse().map((h) => (
               <tr key={h.date}>
                 <td className={td}>{formatBucket(h.date, 'month', t.locale)}</td>

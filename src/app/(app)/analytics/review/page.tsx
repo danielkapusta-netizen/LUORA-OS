@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { scrubDeep, scrubProfitText, withoutProfitFigures } from '@/lib/analytics/redact';
-import { Heatmap, hrefWith, Pills, SectionTitle } from '@/components/analytics/blocks';
-import { MetricChart } from '@/components/analytics/charts';
+import { HealthCard, Heatmap, hrefWith, Pills, QuestionCard, SectionTitle } from '@/components/analytics/blocks';
+import { MetricChart } from '@/components/analytics/lazy-charts';
 import { formatBucket, formatValue } from '@/components/analytics/format';
-import { Card, CardBody, EmptyState, td, th } from '@/components/ui';
+import { Card, CardBody, EmptyState, MetricTile, td, th } from '@/components/ui';
 import { buildAnalyticsSeries, buildHeatmap, METRIC_DEFINITIONS, type AnalyticsMetric } from '@/lib/analytics/analytics';
 import { buildSeries } from '@/lib/analytics/metrics';
 import { buildBusinessReview } from '@/lib/analytics/review';
+import { buildExecutiveQuestions } from '@/lib/analytics/questions';
 import { cn } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analyticsView, type ViewParams } from '@/server/analytics/view';
@@ -61,6 +62,8 @@ export default async function BusinessReviewPage({
   const page = Math.max(1, Number(params.page) || 1);
   const pages = Math.max(1, Math.ceil(daily.length / PAGE));
   const heatmap = buildHeatmap(data.orders, heat, 'revenue');
+  // Questions and Health moved here from the Dashboard; without profit rights they are scrubbed the same way.
+  const questions = view.showProfit ? buildExecutiveQuestions(snapshot) : withoutProfitFigures(buildExecutiveQuestions(view.fullSnapshot).map((q) => scrubDeep(q)));
 
   return (
     <div className="space-y-8">
@@ -68,21 +71,17 @@ export default async function BusinessReviewPage({
 
       <section>
         <SectionTitle title={`${t('Business review')} · ${review.periodLabel}`} />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
           {review.summary.map((s) => (
-            <Card key={s.label} className="px-4 py-3">
-              <p className="text-xs font-medium text-slate-500">{t(s.label)}</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{s.value}</p>
-              <p className="text-xs text-slate-500">{s.caption}</p>
-            </Card>
+            <MetricTile key={s.label} label={t(s.label)} value={s.value} caption={s.caption} />
           ))}
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-4 md:gap-5 lg:grid-cols-2">
         <Card>
-          <CardBody className="space-y-3">
-            <p className="text-sm font-semibold">{t('The period in words')}</p>
+          <CardBody className="space-y-3 p-6">
+            <p className="text-[15px] font-semibold">{t('The period in words')}</p>
             {review.narrative.map((p) => (
               <p key={p} className="text-sm leading-relaxed text-slate-700">
                 {p}
@@ -91,11 +90,11 @@ export default async function BusinessReviewPage({
           </CardBody>
         </Card>
         <Card>
-          <CardBody className="space-y-2">
-            <p className="text-sm font-semibold">{t('Observations')}</p>
+          <CardBody className="space-y-2.5 p-6">
+            <p className="text-[15px] font-semibold">{t('Observations')}</p>
             {review.insights.length === 0 && <p className="text-sm text-slate-500">{t('Nothing stands out in this period.')}</p>}
             {review.insights.map((i) => (
-              <p key={i.statement} className={cn('border-l-4 pl-3 text-sm text-slate-700', TONE[i.tone])}>
+              <p key={i.statement} className={cn('border-l-2 pl-3 text-sm text-slate-700', TONE[i.tone])}>
                 <span className="font-medium text-slate-900">{i.topic}: </span>
                 {i.statement}
               </p>
@@ -103,6 +102,31 @@ export default async function BusinessReviewPage({
           </CardBody>
         </Card>
       </div>
+
+      <HealthCard health={snapshot.health} />
+
+      {questions.length > 0 && (
+        <section>
+          <SectionTitle title={t('Questions worth asking')} description={t('Answered from your own numbers; a card only appears when the data supports an answer.')} />
+          <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2 xl:grid-cols-3">
+            {questions.slice(0, 3).map((q) => (
+              <QuestionCard key={q.id} answer={q} />
+            ))}
+          </div>
+          {questions.length > 3 && (
+            <details className="group mt-3">
+              <summary className="inline-flex cursor-pointer list-none items-center rounded-full border border-black/[0.08] bg-white px-4 py-2 text-sm text-slate-700 hover:text-ink group-open:hidden">
+                {t('Show all {n} questions', { n: questions.length })}
+              </summary>
+              <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                {questions.slice(3).map((q) => (
+                  <QuestionCard key={q.id} answer={q} />
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
+      )}
 
       <section>
         <SectionTitle
@@ -164,31 +188,31 @@ export default async function BusinessReviewPage({
         <SectionTitle title={t('Day by day')} />
         <Card className="overflow-x-auto">
           <table className="w-full">
-            <thead className="border-b border-slate-100 bg-slate-50/60">
+            <thead className="border-b border-black/[0.06]">
               <tr>
-                <th className={th}>{t('Date')}</th>
+                <th className={cn(th, 'pl-5')}>{t('Date')}</th>
                 <th className={cn(th, 'text-right')}>{t('Orders')}</th>
                 <th className={cn(th, 'text-right')}>{t('Units')}</th>
                 <th className={cn(th, 'text-right')}>{t('Revenue')}</th>
                 {view.showProfit && <th className={cn(th, 'text-right')}>{t('Profit')}</th>}
-                <th className={cn(th, 'text-right')}>{t('Margin')}</th>
+                <th className={cn(th, 'pr-5 text-right')}>{t('Margin')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-black/[0.04]">
               {daily.slice((page - 1) * PAGE, page * PAGE).map((d) => (
-                <tr key={d.date} className={d.orders === 0 ? 'text-slate-400' : undefined}>
-                  <td className={td}>{formatBucket(d.date, 'day', t.locale)}</td>
+                <tr key={d.date} className={d.orders === 0 ? 'text-slate-500' : undefined}>
+                  <td className={cn(td, 'pl-5')}>{formatBucket(d.date, 'day', t.locale)}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{d.orders}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{d.units}</td>
                   <td className={cn(td, 'text-right tabular-nums')}>{formatValue(d.revenuePLN, 'pln', false, t.locale)}</td>
                   {view.showProfit && <td className={cn(td, 'text-right tabular-nums', d.marginPLN < 0 && 'text-red-700')}>{formatValue(d.marginPLN, 'pln', false, t.locale)}</td>}
-                  <td className={cn(td, 'text-right tabular-nums')}>{d.orders ? formatValue(d.marginPct, 'percent', false, t.locale) : '—'}</td>
+                  <td className={cn(td, 'pr-5 text-right tabular-nums')}>{d.orders ? formatValue(d.marginPct, 'percent', false, t.locale) : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {pages > 1 && (
-            <div className="flex justify-end gap-2 border-t border-slate-100 px-4 py-2 text-sm">
+            <div className="flex items-center justify-end gap-3 border-t border-black/[0.05] px-5 py-3 text-sm">
               {page > 1 && <Link href={link({ page: String(page - 1) })}>{t('← Newer')}</Link>}
               <span className="text-slate-500">
                 {t('Page {page} of {pages}', { page, pages })}

@@ -202,7 +202,7 @@ export function Calculator({
       {saved.length > 0 && (
         <div className="overflow-x-auto rounded-2xl border border-black/5 bg-white">
           <table className="w-full text-sm">
-            <thead className="border-b border-slate-100 bg-slate-50/60">
+            <thead className="border-b border-black/[0.06]">
               <tr>
                 {[t('Product'), t('Marketplace'), t('Landed cost'), t('Price'), t('Margin'), t('Verdict'), ''].map((h, idx) => (
                   <th key={idx} className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -211,7 +211,7 @@ export function Calculator({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-black/[0.04]">
               {saved.map((c) => {
                 const r = evaluateCandidate(c, { rates });
                 return (

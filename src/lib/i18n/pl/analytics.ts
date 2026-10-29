@@ -77,7 +77,6 @@ export const analytics: Record<string, string> = {
   "Nothing shipped in this period.": "Nic nie wysłano w tym okresie.",
   "oldest {date}": "najstarsze {date}",
   "Open right now": "Otwarte teraz",
-  "Operations:": "Operacje:",
   "Orders": "Zamówienia",
   "orders by placement date, cancelled orders excluded": "zamówienia według daty złożenia, bez anulowanych",
   "Period": "Okres",
@@ -202,4 +201,5 @@ export const analytics: Record<string, string> = {
   "Weekday rhythm": "Rytm tygodnia",
   "Weekly": "Tygodniowo",
   "Yearly": "Rocznie",
+  "Show all {n} questions": "Pokaż wszystkie pytania ({n})",
 };

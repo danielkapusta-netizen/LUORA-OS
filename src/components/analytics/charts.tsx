@@ -29,7 +29,7 @@ function ChartTooltip({ active, payload, label, format, granularity }: Partial<T
   const rows = payload.filter((p) => p.value !== null && p.value !== undefined);
   if (!rows.length) return null;
   return (
-    <div className="rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-md">
+    <div className="rounded-xl border border-black/[0.06] bg-white px-3 py-2 text-xs shadow-[0_8px_24px_-12px_rgba(28,27,25,0.25)]">
       <p className="mb-1 text-slate-500">{typeof label === 'string' ? formatBucket(label, granularity) : label}</p>
       {rows.map((p) => (
         <p key={String(p.dataKey)} className="flex items-center gap-2">
@@ -46,21 +46,6 @@ const axisProps = {
   x: { tickLine: false, axisLine: { stroke: INK.axis }, tick: { fill: INK.muted, fontSize: 11 }, minTickGap: 20 },
   y: { tickLine: false, axisLine: false, tick: { fill: INK.muted, fontSize: 11 }, width: 64 },
 } as const;
-
-/** A tiny trend line for KPI tiles (no axes; the tile states the value). */
-export function Sparkline({ values, color = SERIES.revenue, label }: { values: number[]; color?: string; label: string }) {
-  if (values.length < 2) return null;
-  const data = values.map((v, i) => ({ i, v }));
-  return (
-    <div className="h-10 w-full" role="img" aria-label={label}>
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 4, right: 2, left: 2, bottom: 4 }}>
-          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
 
 export interface PulsePoint {
   date: string;
@@ -87,7 +72,7 @@ export function PulseChart({ data, metric, granularity, showProfit = true }: { d
             <ReferenceLine y={0} stroke={INK.axis} />
           </>
         ) : (
-          <Bar dataKey="orders" name="Orders" fill={SERIES.revenue} maxBarSize={18} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          <Bar dataKey="orders" name="Orders" fill={SERIES.revenue} maxBarSize={18} radius={[6, 6, 0, 0]} isAnimationActive={false} />
         )}
       </ComposedChart>
     </ResponsiveContainer>
@@ -168,8 +153,8 @@ export function HistoryCharts({ data }: { data: { month: string; marginPct: numb
             <CartesianGrid vertical={false} stroke={INK.grid} />
             <XAxis dataKey="month" {...axisProps.x} tickFormatter={(d: string) => formatBucket(d, 'month')} />
             <YAxis {...axisProps.y} width={36} allowDecimals={false} />
-            <Tooltip content={<ChartTooltip format="number" granularity="month" />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
-            <Bar dataKey="units" name="Units" fill={SERIES.revenue} maxBarSize={18} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+            <Tooltip content={<ChartTooltip format="number" granularity="month" />} cursor={{ fill: 'rgba(28,27,25,0.04)' }} />
+            <Bar dataKey="units" name="Units" fill={SERIES.revenue} maxBarSize={18} radius={[6, 6, 0, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -258,10 +243,10 @@ export function Waterfall({ steps }: { steps: WaterfallStep[] }) {
         <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: INK.axis }} tick={<WrappedTick />} interval={0} height={36} />
         <YAxis {...axisProps.y} width={52} tickFormatter={(v: number) => formatValue(v, 'pln', true)} />
         <Tooltip
-          cursor={{ fill: 'rgba(11,11,11,0.04)' }}
+          cursor={{ fill: 'rgba(28,27,25,0.04)' }}
           content={({ active, payload }) =>
             active && payload?.[0] ? (
-              <div className="rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-md">
+              <div className="rounded-xl border border-black/[0.06] bg-white px-3 py-2 text-xs shadow-[0_8px_24px_-12px_rgba(28,27,25,0.25)]">
                 <p className="text-slate-500">{String(payload[0].payload.label)}</p>
                 <p className="font-semibold tabular-nums">{formatValue(Number(payload[0].payload.value), 'pln')}</p>
               </div>
@@ -269,7 +254,7 @@ export function Waterfall({ steps }: { steps: WaterfallStep[] }) {
           }
         />
         <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
-        <Bar dataKey="size" stackId="w" maxBarSize={44} radius={[4, 4, 0, 0]} isAnimationActive={false}>
+        <Bar dataKey="size" stackId="w" maxBarSize={44} radius={[6, 6, 0, 0]} isAnimationActive={false}>
           {data.map((d) => (
             <Cell key={d.label} fill={color(d.kind, d.value)} />
           ))}
@@ -288,8 +273,8 @@ export function WeekdayBars({ data }: { data: { label: string; value: number }[]
         <CartesianGrid vertical={false} stroke={INK.grid} />
         <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: INK.axis }} tick={{ fill: INK.secondary, fontSize: 12 }} />
         <YAxis {...axisProps.y} tickFormatter={(v: number) => formatValue(v, 'pln', true)} />
-        <Tooltip content={<ChartTooltip format="pln" />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
-        <Bar dataKey="value" name="Average revenue" fill={SERIES.revenue} maxBarSize={36} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+        <Tooltip content={<ChartTooltip format="pln" />} cursor={{ fill: 'rgba(28,27,25,0.04)' }} />
+        <Bar dataKey="value" name="Average revenue" fill={SERIES.revenue} maxBarSize={36} radius={[6, 6, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer>
   );

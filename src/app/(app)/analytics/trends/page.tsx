@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Delta, hrefWith, Pills, SectionTitle } from '@/components/analytics/blocks';
-import { MetricChart, WeekdayBars } from '@/components/analytics/charts';
+import { MetricChart, WeekdayBars } from '@/components/analytics/lazy-charts';
 import { formatValue } from '@/components/analytics/format';
 import { Card, CardBody, EmptyState } from '@/components/ui';
 import { availableGranularities, buildAnalyticsSeries, METRIC_DEFINITIONS, METRIC_ORDER, type AnalyticsMetric, type OverlayKey } from '@/lib/analytics/analytics';
@@ -93,7 +93,7 @@ export default async function TrendsPage({ searchParams }: { searchParams: Promi
                         key={o.key}
                         href={toggle(o.key)}
                         aria-pressed={on}
-                        className={cn('rounded-full border px-3 py-1 text-xs font-medium', on ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}
+                        className={cn('rounded-full border px-3 py-1 text-xs font-medium', on ? 'border-ink bg-ink text-white' : 'border-black/[0.08] bg-white text-slate-600 hover:text-ink')}
                       >
                         {t(o.label)}
                       </Link>

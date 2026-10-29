@@ -2,13 +2,12 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, CheckCircle2, Lightbulb, ShieldAlert, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Badge, Card, CardBody } from '@/components/ui';
+import { Badge, Card, CardBody, MetricTile } from '@/components/ui';
 import type { ExecutiveBrief } from '@/lib/analytics/brief';
 import { channelName } from '@/lib/analytics/insights';
 import type { QuestionAnswer } from '@/lib/analytics/questions';
 import type { ChannelPerformance, HealthScore, Insight, Kpi } from '@/lib/analytics/types';
 import { cn } from '@/lib/utils';
-import { Sparkline } from './charts';
 import { formatBucket, formatValue, MARKETPLACE_COLORS, SERIES } from './format';
 import { getT } from '@/lib/i18n/server';
 import { msg } from '@/lib/i18n/msg';
@@ -26,15 +25,15 @@ export function hrefWith(path: string, current: Record<string, string | undefine
 export async function Pills({ options, active, href, label }: { options: { value: string; label: string }[]; active: string; href: (value: string) => string; label: string }) {
   const t = await getT();
   return (
-    <nav aria-label={label} className="inline-flex flex-wrap gap-1 rounded-full border border-slate-200 bg-white p-1">
+    <nav aria-label={label} className="inline-flex flex-wrap gap-0.5 rounded-full bg-black/[0.04] p-1">
       {options.map((o) => (
         <Link
           key={o.value}
           href={href(o.value)}
           aria-current={o.value === active ? 'true' : undefined}
           className={cn(
-            'rounded-full px-3 py-1 text-xs font-medium',
-            o.value === active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
+            'rounded-full px-3 py-1 text-xs font-medium transition-colors max-md:py-2',
+            o.value === active ? 'bg-white text-ink shadow-[0_1px_2px_rgba(28,27,25,0.08)]' : 'text-slate-600 hover:text-ink',
           )}
         >
           {t(o.label)}
@@ -46,9 +45,9 @@ export async function Pills({ options, active, href, label }: { options: { value
 
 export function SectionTitle({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">{title}</h2>
         {description && <p className="mt-0.5 max-w-3xl text-sm text-slate-500">{description}</p>}
       </div>
       {actions}
@@ -73,29 +72,40 @@ export async function Delta({ value, unit = '%', higherIsBetter = true }: { valu
   );
 }
 
+/** A tiny trend line for KPI tiles, drawn as plain SVG on the server: no chart library, nothing to load. */
+export function Sparkline({ values, color = SERIES.revenue, label }: { values: number[]; color?: string; label: string }) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const span = Math.max(...values) - min || 1;
+  const points = values.map((v, i) => `${(i / (values.length - 1)) * 100},${36 - ((v - min) / span) * 32}`).join(' ');
+  return (
+    <svg viewBox="0 0 100 40" preserveAspectRatio="none" className="mt-3 h-9 w-full" role="img" aria-label={label}>
+      <polyline points={points} fill="none" stroke={color} strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 export async function KpiCard({ kpi, comparisonLabel, granularity = 'day' }: { kpi: Kpi; comparisonLabel: string; granularity?: string }) {
   const t = await getT();
   const color = kpi.key === 'profit' || kpi.key === 'margin' ? SERIES.profit : SERIES.revenue;
   const change = kpi.isRate ? (kpi.previous === null ? null : kpi.value - kpi.previous) : kpi.changePct;
   return (
-    <Card>
-      <CardBody className="space-y-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500" title={t(kpi.hint)}>
-          {t(kpi.label)}
-        </p>
-        <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatValue(kpi.value, kpi.format, false, t.locale)}</p>
-        <div className="flex items-center gap-1.5">
-          <Delta value={change} unit={kpi.isRate ? 'pp' : '%'} higherIsBetter={kpi.higherIsBetter ?? true} />
-          {change !== null && <span className="text-xs text-slate-400">{comparisonLabel}</span>}
-        </div>
-        <Sparkline values={kpi.series} color={color} label={t('{label} over the period', { label: t(kpi.label) })} />
-        {kpi.peak && (
-          <p className="text-xs text-slate-500">
-            {t('Best {when}: {value}', { when: /^\d{4}-\d{2}-\d{2}$/.test(kpi.peak.label) ? formatBucket(kpi.peak.label, granularity, t.locale) : kpi.peak.label, value: formatValue(kpi.peak.value, kpi.format, false, t.locale) })}
-          </p>
-        )}
-      </CardBody>
-    </Card>
+    <MetricTile
+      label={t(kpi.label)}
+      hint={t(kpi.hint)}
+      value={formatValue(kpi.value, kpi.format, false, t.locale)}
+      caption={
+        kpi.peak
+          ? t('Best {when}: {value}', { when: /^\d{4}-\d{2}-\d{2}$/.test(kpi.peak.label) ? formatBucket(kpi.peak.label, granularity, t.locale) : kpi.peak.label, value: formatValue(kpi.peak.value, kpi.format, false, t.locale) })
+          : undefined
+      }
+    >
+      <div className="mt-1 flex flex-wrap items-center gap-x-1.5">
+        <Delta value={change} unit={kpi.isRate ? 'pp' : '%'} higherIsBetter={kpi.higherIsBetter ?? true} />
+        {change !== null && <span className="text-xs text-slate-500">{comparisonLabel}</span>}
+      </div>
+      <Sparkline values={kpi.series} color={color} label={t('{label} over the period', { label: t(kpi.label) })} />
+    </MetricTile>
   );
 }
 
@@ -160,11 +170,11 @@ export async function HealthCard({ health }: { health: HealthScore }) {
   const band = BANDS[health.band];
   return (
     <Card>
-      <CardBody className="grid grid-cols-1 gap-6 md:grid-cols-[220px_1fr]">
+      <CardBody className="grid grid-cols-1 gap-8 p-6 md:grid-cols-[220px_1fr]">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{t('Business health')}</p>
-          <p className="mt-1 text-5xl font-semibold tabular-nums text-slate-900">{Math.round(health.score)}</p>
-          <p className={cn('text-sm font-semibold', band.className)}>{t(band.label)}</p>
+          <p className="text-xs font-medium tracking-[0.12em] text-slate-500 uppercase">{t('Business health')}</p>
+          <p className="mt-3 font-mono text-6xl leading-none font-medium tabular-nums text-ink">{Math.round(health.score)}</p>
+          <p className={cn('mt-2 text-sm font-semibold', band.className)}>{t(band.label)}</p>
           <p className="mt-2 text-sm text-slate-600">{health.headline}</p>
         </div>
         <ul className="space-y-3">
@@ -176,8 +186,8 @@ export async function HealthCard({ health }: { health: HealthScore }) {
                 </span>
                 <span className="tabular-nums text-slate-600">{c.value}</span>
               </div>
-              <div className="mt-1 h-1.5 rounded-full bg-slate-100" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(c.score)} aria-label={c.label}>
-                <div className={cn('h-1.5 rounded-full', c.score >= 65 ? 'bg-emerald-500' : c.score >= 50 ? 'bg-amber-500' : 'bg-red-500')} style={{ width: `${Math.max(2, c.score)}%` }} />
+              <div className="mt-1.5 h-1 rounded-full bg-black/[0.06]" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(c.score)} aria-label={c.label}>
+                <div className={cn('h-1 rounded-full', c.score >= 65 ? 'bg-emerald-500' : c.score >= 50 ? 'bg-amber-500' : 'bg-red-500')} style={{ width: `${Math.max(2, c.score)}%` }} />
               </div>
               <p className="mt-0.5 text-xs text-slate-500">{c.detail}</p>
             </li>
@@ -191,20 +201,20 @@ export async function HealthCard({ health }: { health: HealthScore }) {
 export async function BriefCard({ brief, atStake }: { brief: ExecutiveBrief; atStake: number }) {
   const t = await getT();
   return (
-    <Card className="border-brand-100 bg-gradient-to-br from-white to-brand-50/50">
-      <CardBody className="space-y-2 py-5">
-        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-brand-700">
+    <Card>
+      <CardBody className="space-y-2 p-6">
+        <p className="flex items-center gap-1.5 text-xs font-medium tracking-[0.12em] text-slate-500 uppercase">
           <Sparkles className="size-3.5" aria-hidden /> {brief.greeting} · {brief.scope}
         </p>
-        <p className="text-lg font-semibold text-slate-900">{brief.verdict}</p>
+        <p className="font-display text-xl leading-snug font-semibold text-ink md:text-2xl">{brief.verdict}</p>
         {brief.body.map((line) => (
-          <p key={line} className="text-sm text-slate-700">
+          <p key={line} className="max-w-3xl text-sm leading-relaxed text-slate-600">
             {line}
           </p>
         ))}
         {brief.attentionCount > 0 && (
           <p className="flex items-center gap-1.5 pt-1 text-sm text-slate-600">
-            <AlertTriangle className="size-4 text-amber-600" aria-hidden />
+            <AlertTriangle className="size-4 text-butter-ink" aria-hidden />
             {t.plural(brief.attentionCount, '{n} finding needs a decision', '{n} findings need a decision')}
             {atStake > 0 && <> · {t('about {amount} at stake', { amount: formatValue(atStake, 'pln', false, t.locale) })}</>}.
           </p>
@@ -214,7 +224,7 @@ export async function BriefCard({ brief, atStake }: { brief: ExecutiveBrief; atS
   );
 }
 
-const TONES = { positive: 'text-emerald-700', negative: 'text-red-700', neutral: 'text-slate-900', opportunity: 'text-blue-700' } as const;
+const TONES = { positive: 'text-emerald-700', negative: 'text-red-700', neutral: 'text-ink', opportunity: 'text-sky-ink' } as const;
 
 export async function QuestionCard({ answer }: { answer: QuestionAnswer }) {
   const t = await getT();
@@ -223,7 +233,7 @@ export async function QuestionCard({ answer }: { answer: QuestionAnswer }) {
       <CardBody className="space-y-1.5">
         <p className="text-xs font-medium text-slate-500">{answer.question}</p>
         <p className="text-sm font-semibold text-slate-900">{answer.headline}</p>
-        <p className={cn('text-2xl font-semibold tabular-nums', TONES[answer.tone])}>{answer.metric}</p>
+        <p className={cn('font-mono text-2xl font-medium tabular-nums', TONES[answer.tone])}>{answer.metric}</p>
         <p className="text-xs text-slate-500">{answer.metricCaption}</p>
         <p className="text-sm text-slate-600">{answer.explanation}</p>
         {answer.recommendation && (
@@ -246,15 +256,15 @@ export async function ChannelBars({ channels }: { channels: ChannelPerformance[]
         <li key={c.source}>
           <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
             <span className="flex items-center gap-2 font-medium text-slate-900">
-              <span className="inline-block size-2.5 rounded-sm" style={{ background: MARKETPLACE_COLORS[c.source] }} aria-hidden />
+              <span className="inline-block size-2 rounded-full" style={{ background: MARKETPLACE_COLORS[c.source] }} aria-hidden />
               {channelName(c.source)}
             </span>
             <span className="tabular-nums text-slate-600">
               {formatValue(c.revenuePLN, 'pln', false, t.locale)} · {t.plural(c.orders, '{n} order', '{n} orders')} · {t('margin {value}', { value: formatValue(c.marginPct, 'percent', false, t.locale) })} · {t('basket {value}', { value: formatValue(c.avgOrderValuePLN, 'pln', false, t.locale) })}
             </span>
           </div>
-          <div className="mt-1.5 h-2 rounded-full bg-slate-100">
-            <div className="h-2 rounded-full" style={{ width: `${Math.max(1, c.revenueShare * 100)}%`, background: MARKETPLACE_COLORS[c.source] }} />
+          <div className="mt-1.5 h-1.5 rounded-full bg-black/[0.06]">
+            <div className="h-1.5 rounded-full" style={{ width: `${Math.max(1, c.revenueShare * 100)}%`, background: MARKETPLACE_COLORS[c.source] }} />
           </div>
           <p className="mt-0.5 text-xs text-slate-500">{t('{pct}% of revenue', { pct: Math.round(c.revenueShare * 100) })}</p>
         </li>
@@ -304,7 +314,7 @@ export function Heatmap({
                   <td
                     key={c}
                     className="rounded px-2 py-1.5 text-right tabular-nums"
-                    style={{ background: i > 0 ? `rgba(42,120,214,${0.08 + i * 0.72})` : '#f8f8f6', color: i > 0.55 ? '#fff' : '#0b0b0b' }}
+                    style={{ background: i > 0 ? `rgba(42,120,214,${0.08 + i * 0.72})` : '#f6f4ef', color: i > 0.55 ? '#fff' : '#1c1b19' }}
                     title={`${r}, ${c}: ${cell ? format(cell.value) : '—'}`}
                   >
                     {cell && cell.value ? format(cell.value) : ''}
@@ -323,7 +333,7 @@ export function Heatmap({
 export async function CoverageNote({ costCoverage, estimatedFeeLines, totalLines, lastOrder }: { costCoverage: number; estimatedFeeLines: number; totalLines: number; lastOrder: Date | null }) {
   const t = await getT();
   return (
-    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-200 pt-4 text-xs text-slate-500">
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-black/[0.06] pt-4 text-xs text-slate-500">
       <span className="inline-flex items-center gap-1">
         <CheckCircle2 className="size-3.5" aria-hidden /> {t('{pct}% of revenue has a known product cost', { pct: Math.round(costCoverage * 100) })}
       </span>

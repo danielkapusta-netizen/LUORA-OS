@@ -2,11 +2,11 @@ import { Minus, Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { hrefWith, Pills, SectionTitle } from '@/components/analytics/blocks';
-import { PriceCharts, Waterfall } from '@/components/analytics/charts';
+import { PriceCharts, Waterfall } from '@/components/analytics/lazy-charts';
 import { formatValue } from '@/components/analytics/format';
 import { RangeControl } from '@/components/analytics/period-control';
 import { PriceSimulator } from '@/components/analytics/price-simulator';
-import { Badge, Card, CardBody, EmptyState, Input, td, th } from '@/components/ui';
+import { Badge, Card, CardBody, EmptyState, Input, MetricTile, td, th } from '@/components/ui';
 import { brandOf } from '@/lib/analytics/orders';
 import { parseCustomRange } from '@/lib/analytics/period';
 import { buildMarginHistory, buildPriceHistory, buildPricingWorkspace, buildWaterfall, PRICING_PERIODS, type PricingPeriodKey, type PricingRow } from '@/lib/analytics/pricing';
@@ -69,11 +69,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           [t('Thin'), String(s.tenToFifteen), t('margin 10–15%')],
           [t('Unhealthy'), String(s.belowTenPct), t('margin below 10%')],
         ].map(([label, value, caption]) => (
-          <Card key={label} className="px-4 py-3">
-            <p className="text-xs font-medium text-slate-500">{label}</p>
-            <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
-            <p className="text-xs text-slate-500">{caption}</p>
-          </Card>
+          <MetricTile key={label} label={label} value={value} caption={caption} />
         ))}
       </div>
 
@@ -82,7 +78,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           <EmptyState title={t('No sales in this window')} />
         ) : (
           <table className="w-full">
-            <thead className="border-b border-slate-100 bg-slate-50/60">
+            <thead className="border-b border-black/[0.06]">
               <tr>
                 <th className="w-10" />
                 <th className={th}>{dimension === 'brand' ? 'Brand' : 'Product'}</th>
@@ -94,12 +90,12 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                 <th className={cn(th, 'text-right')}>{t('Monthly revenue')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-black/[0.04]">
               {rows.map((r) => {
                 const open = params.open === r.key;
                 const Icon = open ? Minus : Plus;
                 return [
-                  <tr key={r.key} id={`row-${r.key}`} className={open ? 'bg-slate-50' : undefined}>
+                  <tr key={r.key} id={`row-${r.key}`} className={open ? 'bg-sidebar' : undefined}>
                     <td className="py-3 pr-0 pl-4 align-top">
                       <Link
                         href={`${link({ open: open ? undefined : r.key })}#row-${r.key}`}
@@ -128,7 +124,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(r.monthlyRevenuePLN, 'pln', false, t.locale)}</td>
                   </tr>,
                   open && (
-                    <tr key={`${r.key}-detail`} className="bg-slate-50">
+                    <tr key={`${r.key}-detail`} className="bg-sidebar">
                       <td colSpan={8} className="px-4 pb-5">
                         <PricingDetail row={r} showProfit={view.showProfit} />
                       </td>
@@ -146,7 +142,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
           <SectionTitle title={t('Margin at risk')} description={t('Margin has fallen at least two months in a row.')} />
           <Card className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b border-slate-100 bg-slate-50/60">
+              <thead className="border-b border-black/[0.06]">
                 <tr>
                   <th className={th}>{t('Product')}</th>
                   <th className={cn(th, 'text-right')}>{t('Margin now')}</th>
@@ -155,7 +151,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                   <th className={cn(th, 'text-right')}>{t('Cost a month')}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-black/[0.04]">
                 {risky.map((r) => (
                   <tr key={r.key}>
                     <td className={td}>

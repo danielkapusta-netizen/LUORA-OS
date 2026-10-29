@@ -113,7 +113,6 @@ export const shared: Record<string, string> = {
   "Whose tasks": "Czyje zadania",
   "{n} more": "jeszcze {n}",
   "Show {day}": "Pokaż dzień {day}",
-  "All tasks →": "Wszystkie zadania →",
   "My tasks": "Moje zadania",
   "There are no users to assign yet.": "Nie ma jeszcze użytkowników do przypisania.",
   "{n} finished": "zakończonych: {n}",
@@ -306,4 +305,5 @@ export const shared: Record<string, string> = {
   "Shopify adapter is not available (demo mode?)": "Adapter Shopify jest niedostępny (tryb demo?)",
   "This is not a Von Halsky account": "To nie jest konto Von Halsky",
   "The order changed meanwhile; reload and try again": "Zamówienie w międzyczasie się zmieniło; odśwież i spróbuj ponownie",
+  "View all": "Zobacz wszystko",
 };
