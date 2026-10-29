@@ -106,7 +106,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </>
       ) : (
         <>
-          <BriefCard brief={brief} atStake={atStake} />
+          {/* Tasks sit next to the brief, above the fold, so open tasks are the first thing you see. */}
+          <div className="grid grid-cols-1 items-start gap-4 md:gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <BriefCard brief={brief} atStake={atStake} />
+            <TasksPanel tasks={tasks} today={todayKey} limit={TASK_LIMIT} />
+          </div>
 
           <section>
             <SectionTitle
@@ -193,7 +197,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </div>
 
             <div className="space-y-4 md:space-y-5">
-              <TasksPanel tasks={tasks} today={todayKey} limit={TASK_LIMIT} />
               {customers}
               <Card>
                 <CardHeader icon={Store} title={t('Where you sell')} />

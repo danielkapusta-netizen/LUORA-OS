@@ -23,20 +23,21 @@ export function StatusBadge({ status }: { status: OrderStatus }) {
   return <Badge tone={s.tone}>{t(s.label)}</Badge>;
 }
 
-// Same hues as the analytics charts, so a marketplace keeps one colour across the app.
-const MARKETPLACE_DOTS: Record<string, string> = {
-  shopify: 'bg-[#2a78d6]',
-  allegro: 'bg-[#eb6834]',
-  empik: 'bg-[#1baf7a]',
-  vonhalsky: 'bg-[#d4a017]',
-  hebe: 'bg-[#d6338a]',
+// Same hues as the analytics charts, deepened so white text keeps 4.5:1 across the whole gradient.
+const MARKETPLACE_FILLS: Record<string, string> = {
+  shopify: 'from-[#2a6cc6] to-[#1d4f94]',
+  allegro: 'from-[#c94a1c] to-[#a93c12]',
+  empik: 'from-[#0f7a50] to-[#0b5e3e]',
+  vonhalsky: 'from-[#8a6400] to-[#6e5000]',
+  hebe: 'from-[#c92f7f] to-[#a3225f]',
 };
 
-/** A quiet chip: the marketplace's colour as a dot, the name in ink. */
+/** The marketplace as a filled chip in its own colour, so the source reads at a glance. */
 export function MarketplaceBadge({ marketplace }: { marketplace: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-2 py-0.5 text-xs font-medium whitespace-nowrap text-slate-700">
-      <span className={`size-1.5 rounded-full ${MARKETPLACE_DOTS[marketplace] ?? 'bg-slate-400'}`} aria-hidden />
+    <span
+      className={`inline-flex items-center rounded-full bg-gradient-to-br px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ${MARKETPLACE_FILLS[marketplace] ?? 'from-slate-500 to-slate-700'}`}
+    >
       {MARKETPLACE_LABELS[marketplace] ?? marketplace}
     </span>
   );

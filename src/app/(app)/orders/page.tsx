@@ -79,13 +79,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // The details panel shows the chosen order, or the first one on the page.
   const selectedId = params.order ?? rows[0]?.order.id ?? null;
 
-  const tableRows: OrderRow[] = rows.map(({ order, accountName, assigneeName, itemCount, shipment, returning, notes }) => ({
+  const tableRows: OrderRow[] = rows.map(({ order, accountName, assigneeName, itemCount, products, shipment, returning, notes }) => ({
     id: order.id,
     number: order.externalNumber,
     marketplace: order.marketplace,
     accountName,
     placedAt: order.placedAt.toISOString(),
     buyer: order.buyer.name,
+    customerId: order.customerId,
+    products,
     city: order.shippingAddress.city,
     itemCount,
     total: order.totalAmount,
@@ -95,7 +97,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     readyToShip: order.readyToShip,
     marketplaceStatus: order.marketplaceStatus,
     assignee: assigneeName,
-    courier: shipment && shipment.state !== 'failed' ? (CARRIER_LABELS[shipment.carrier] ?? shipment.carrier) : order.deliveryMethodName,
+    // What the buyer chose (e.g. "Allegro Paczkomaty InPost"); the label's carrier only when the marketplace gave no name.
+    courier: order.deliveryMethodName ?? (shipment && shipment.state !== 'failed' ? (CARRIER_LABELS[shipment.carrier] ?? shipment.carrier) : null),
     returning: returning ? { orderNumber: returning.orderNumber, since: returning.firstOrderAt.toISOString() } : null,
     notes,
     shipment: shipment
