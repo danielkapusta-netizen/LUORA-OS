@@ -18,7 +18,7 @@ import {
 // marketplace everywhere, so a filter never repaints a series.
 export const MARKETPLACE_COLORS: Record<string, string> = { shopify: '#2a78d6', allegro: '#eb6834', empik: '#1baf7a', vonhalsky: '#d4a017', hebe: '#d6338a' };
 const NAMES: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', vonhalsky: 'Von Halsky', hebe: 'HEBE' };
-const INK = { secondary: '#52514e', muted: '#898781', grid: '#e1e0d9', axis: '#c3c2b7' };
+const INK = { secondary: '#52514e', muted: '#898781', grid: '#ece9e2', axis: '#ddd9d0' };
 const SINGLE = '#2a78d6';
 
 const whole = (v: number) => new Intl.NumberFormat('pl-PL', { maximumFractionDigits: 0 }).format(v);
@@ -26,7 +26,7 @@ const whole = (v: number) => new Intl.NumberFormat('pl-PL', { maximumFractionDig
 function ChartTooltip({ active, payload, label, unit, format = whole }: Partial<TooltipContentProps<number, string>> & { unit?: string; format?: (v: number) => string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-md border border-black/10 bg-white px-3 py-2 text-xs shadow-md">
+    <div className="rounded-xl border border-black/[0.06] bg-white px-3 py-2 text-xs shadow-[0_8px_24px_-12px_rgba(28,27,25,0.25)]">
       <p className="mb-1 text-slate-500">{label}</p>
       {payload.map((p) => (
         <p key={String(p.dataKey)} className="flex items-center gap-2">
@@ -50,7 +50,7 @@ export function RevenueByDay({ data, marketplaces, currency }: { data: Record<st
         <CartesianGrid vertical={false} stroke={INK.grid} />
         <XAxis dataKey="day" tickLine={false} axisLine={{ stroke: INK.axis }} tick={{ fill: INK.muted, fontSize: 11 }} minTickGap={16} />
         <YAxis tickLine={false} axisLine={false} tick={{ fill: INK.muted, fontSize: 11 }} tickFormatter={whole} width={56} />
-        <Tooltip content={<ChartTooltip unit={currency} />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
+        <Tooltip content={<ChartTooltip unit={currency} />} cursor={{ fill: 'rgba(28,27,25,0.04)' }} />
         <Legend iconType="rect" iconSize={10} formatter={(v: string) => <span style={{ color: INK.secondary, fontSize: 12 }}>{v}</span>} />
         {marketplaces.map((m, i) => (
           <Bar
@@ -64,7 +64,7 @@ export function RevenueByDay({ data, marketplaces, currency }: { data: Record<st
             strokeWidth={2}
             maxBarSize={24}
             isAnimationActive={false}
-            radius={i === marketplaces.length - 1 ? [4, 4, 0, 0] : 0}
+            radius={i === marketplaces.length - 1 ? [6, 6, 0, 0] : 0}
           />
         ))}
       </BarChart>
@@ -91,9 +91,9 @@ export function HorizontalBars({
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 96, left: 0, bottom: 4 }}>
         <XAxis type="number" hide />
         <YAxis type="category" dataKey="label" tickLine={false} axisLine={{ stroke: INK.axis }} tick={{ fill: INK.secondary, fontSize: 12 }} width={120} />
-        <Tooltip content={<ChartTooltip unit={unit} format={format} />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
+        <Tooltip content={<ChartTooltip unit={unit} format={format} />} cursor={{ fill: 'rgba(28,27,25,0.04)' }} />
         {/* No animation: Recharts hides value labels until an animation finishes. */}
-        <Bar dataKey="value" maxBarSize={20} radius={[0, 4, 4, 0]} fill={SINGLE} isAnimationActive={false}>
+        <Bar dataKey="value" maxBarSize={20} radius={[0, 6, 6, 0]} fill={SINGLE} isAnimationActive={false}>
           {byMarketplace && data.map((d) => <Cell key={d.key} fill={MARKETPLACE_COLORS[d.key] ?? SINGLE} />)}
           <LabelList
             dataKey="value"

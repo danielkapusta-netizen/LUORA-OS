@@ -30,7 +30,7 @@ export const PL_PLURALS_ALL: Record<string, PluralForms> = {
   "{n} task": { one: "{n} zadanie", few: "{n} zadania", many: "{n} zadań", other: "{n} zadania" },
   "{n} project": { one: "{n} projekt", few: "{n} projekty", many: "{n} projektów", other: "{n} projektu" },
   "{n} finding needs a decision": { one: "{n} ustalenie wymaga decyzji", few: "{n} ustalenia wymagają decyzji", many: "{n} ustaleń wymaga decyzji", other: "{n} ustalenia wymaga decyzji" },
-  "{n} open task": { one: "{n} otwarte zadanie", few: "{n} otwarte zadania", many: "{n} otwartych zadań", other: "{n} otwartego zadania" },
+  "{n} unit": { one: "{n} sztuka", few: "{n} sztuki", many: "{n} sztuk", other: "{n} sztuki" },
   "{n} task finished in the last 7 days": { one: "{n} zadanie ukończone w ostatnich 7 dniach", few: "{n} zadania ukończone w ostatnich 7 dniach", many: "{n} zadań ukończonych w ostatnich 7 dniach", other: "{n} zadania ukończonego w ostatnich 7 dniach" },
   "{n} task open": { one: "{n} zadanie otwarte", few: "{n} zadania otwarte", many: "{n} zadań otwartych", other: "{n} zadania otwartego" },
   "vs previous {n} day": { one: "vs poprzedni {n} dzień", few: "vs poprzednie {n} dni", many: "vs poprzednie {n} dni", other: "vs poprzednie {n} dnia" },

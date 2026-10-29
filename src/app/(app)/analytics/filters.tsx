@@ -21,12 +21,10 @@ export async function ViewFilters({ view, path, extra = {} }: { view: AnalyticsV
   const current = { ...view.params, ...extra };
   const { period } = view;
   return (
-    <div className="mb-5 space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <PeriodControl path={path} current={current} periodKey={view.periodKey} from={view.params.from} to={view.params.to} />
-        <Pills label={t('Marketplace')} options={MARKETPLACES} active={view.marketplace ?? ''} href={(v) => hrefWith(path, current, { marketplace: v || undefined })} />
-      </div>
-      <p className="text-xs text-slate-500">
+    <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <PeriodControl path={path} current={current} periodKey={view.periodKey} from={view.params.from} to={view.params.to} />
+      <Pills label={t('Marketplace')} options={MARKETPLACES} active={view.marketplace ?? ''} href={(v) => hrefWith(path, current, { marketplace: v || undefined })} />
+      <p className="text-xs text-slate-500 lg:ml-auto">
         {period.key === 'all' ? t('All time') : `${formatDate(period.from, t.locale)} – ${formatDate(period.to, t.locale)}`}
         {period.previous && `, ${t('compared {label}', { label: comparisonText(period, t) })}`}
       </p>

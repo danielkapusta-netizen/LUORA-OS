@@ -40,7 +40,7 @@ export interface OrderRow {
 }
 
 const th = 'px-3 py-3 text-left text-xs font-medium text-slate-500';
-const td = 'px-3 py-3.5 text-sm';
+const td = 'px-3 py-4 text-sm';
 
 function shortDate(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(intlTag(locale), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
@@ -60,11 +60,11 @@ function LabelChip({ row }: { row: OrderRow }) {
   const t = useT();
   if (!row.shipment?.hasLabel || ['shipped', 'delivered', 'cancelled'].includes(row.status)) return null;
   return row.shipment.packed ? (
-    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/20" title={t('Packed; it moves to Shipped once the tracking has reached the marketplace')}>
+    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-emerald-800" title={t('Packed; it moves to Shipped once the tracking has reached the marketplace')}>
       {t('Packed')}
     </span>
   ) : (
-    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-600/20" title={t('The label is made. The order stays here until you press Packed')}>
+    <span className="rounded-full bg-sky-tint px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-sky-ink" title={t('The label is made. The order stays here until you press Packed')}>
       {t('Label ready')}
     </span>
   );
@@ -111,8 +111,9 @@ export function OrdersTable({
   return (
     <>
       {checked.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-brand-100 bg-brand-50 px-5 py-2.5">
-          <span className="text-sm font-medium text-brand-700">{t('{n} selected', { n: checked.size })}</span>
+        // A floating bar that stays in view while the list scrolls under it.
+        <div className="sticky top-[calc(3.75rem+env(safe-area-inset-top))] z-20 m-2 flex flex-wrap items-center gap-3 rounded-3xl border border-black/[0.08] bg-white/95 px-4 py-2.5 shadow-[0_12px_32px_-12px_rgba(28,27,25,0.3)] backdrop-blur md:top-4 md:rounded-full">
+          <span className="text-sm font-medium text-ink">{t('{n} selected', { n: checked.size })}</span>
           <ActionForm action={bulkCreateLabelsAction} showOk={false}>
             <input type="hidden" name="ids" value={ids} />
             <SubmitButton size="sm" pendingText={t('Queuing labels…')}>
@@ -154,27 +155,34 @@ export function OrdersTable({
               {t('Assign')}
             </SubmitButton>
           </ActionForm>
-          <button className="ml-auto text-xs text-brand-700 hover:underline" onClick={() => setChecked(new Set())}>
+          <button className="ml-auto cursor-pointer rounded-full px-2 py-1 text-xs text-slate-600 hover:bg-black/[0.04] hover:text-ink" onClick={() => setChecked(new Set())}>
             {t('Clear selection')}
           </button>
         </div>
       )}
       {/* Phones: one card per order. The whole card opens the details; the checkbox has its own 44 pt target. */}
       <div className="md:hidden">
-        <label className="flex min-h-11 items-center gap-3 border-b border-slate-100 px-4 text-xs font-medium text-slate-500">
-          <input type="checkbox" className="size-5 rounded accent-brand-600" checked={allChecked} onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))} />
+        <label className="flex min-h-11 items-center gap-3 px-1 text-xs font-medium text-slate-500">
+          <input type="checkbox" className="size-5 rounded accent-ink" checked={allChecked} onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))} />
           {t('Select all on this page')}
         </label>
-        <ul>
+        <ul className="space-y-2">
           {rows.map((r) => (
-            <li key={r.id} className={cn('flex items-stretch border-b border-slate-100 last:border-0', r.returning && 'shadow-[inset_3px_0_0_0_theme(colors.violet.500)]', checked.has(r.id) && 'bg-brand-50/60')}>
+            <li
+              key={r.id}
+              className={cn(
+                'flex items-stretch overflow-hidden rounded-3xl border border-black/[0.06] bg-white',
+                r.returning && 'shadow-[inset_3px_0_0_0_theme(colors.violet.500)]',
+                checked.has(r.id) && 'border-ink/30 bg-sidebar',
+              )}
+            >
               <label className="flex w-12 shrink-0 items-center justify-center" aria-label={t('Select order {number}', { number: r.number })}>
-                <input type="checkbox" className="size-5 rounded accent-brand-600" checked={checked.has(r.id)} onChange={() => toggle(r.id)} />
+                <input type="checkbox" className="size-5 rounded accent-ink" checked={checked.has(r.id)} onChange={() => toggle(r.id)} />
               </label>
               <button type="button" onClick={() => open(r.id)} className="press min-w-0 flex-1 py-3.5 pr-4 text-left active:bg-slate-900/[0.04]">
                 <span className="flex items-baseline justify-between gap-3">
-                  <span className="truncate text-base font-semibold text-slate-900">{r.buyer}</span>
-                  <span className="shrink-0 text-base font-semibold tabular-nums">{formatMoney(r.total, r.currency)}</span>
+                  <span className="truncate text-base font-semibold text-ink">{r.buyer}</span>
+                  <span className="shrink-0 text-base font-medium tabular-nums">{formatMoney(r.total, r.currency)}</span>
                 </span>
                 <span className="mt-0.5 flex items-center gap-2 text-sm text-slate-500">
                   <MarketplaceBadge marketplace={r.marketplace} />
@@ -185,13 +193,13 @@ export function OrdersTable({
                 <span className="mt-2 flex flex-wrap items-center gap-1.5">
                   <StatusBadge status={r.status} />
                   <LabelChip row={r} />
-                  {r.cod && <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700">{t('COD')}</span>}
-                  {r.returning && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-800">{t('Returning · {ordinal}', { ordinal: ordinal(r.returning.orderNumber, t.locale) })}</span>}
+                  {r.cod && <span className="rounded-full bg-peach-tint px-2 py-0.5 text-xs font-medium text-peach-ink">{t('COD')}</span>}
+                  {r.returning && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-800">{t('Returning · {ordinal}', { ordinal: ordinal(r.returning.orderNumber, t.locale) })}</span>}
                   {r.notes && (
                     <span
                       className={cn(
-                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold',
-                        r.notes.important > 0 ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300' : 'bg-slate-100 text-slate-600',
+                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+                        r.notes.important > 0 ? 'bg-butter/60 text-butter-ink' : 'bg-black/[0.05] text-slate-600',
                       )}
                       aria-label={notesLabel(r.notes, t)}
                     >
@@ -208,13 +216,13 @@ export function OrdersTable({
       </div>
       <div className="hidden overflow-x-auto md:block">
         <table className="min-w-full">
-          <thead className="border-b border-slate-100">
+          <thead className="border-b border-black/[0.06]">
             <tr>
               <th className={cn(th, 'w-10 pl-5')}>
                 <input
                   type="checkbox"
                   aria-label={t('Select all')}
-                  className="size-4 rounded accent-brand-600"
+                  className="size-4 rounded accent-ink"
                   checked={allChecked}
                   onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((r) => r.id)))}
                 />
@@ -236,30 +244,30 @@ export function OrdersTable({
                   key={r.id}
                   onClick={() => open(r.id)}
                   className={cn(
-                    'cursor-pointer border-b border-slate-50 transition-colors last:border-0',
-                    active ? 'bg-brand-50/70' : checked.has(r.id) ? 'bg-slate-50' : r.returning ? 'bg-violet-50/60 hover:bg-violet-50' : 'hover:bg-slate-50/70',
-                    r.returning && 'shadow-[inset_3px_0_0_0_theme(colors.violet.500)]',
+                    'cursor-pointer border-b border-black/[0.04] transition-colors last:border-0',
+                    active ? 'bg-sidebar shadow-[inset_2px_0_0_0_var(--color-ink)]' : checked.has(r.id) ? 'bg-sidebar/70' : 'hover:bg-canvas',
+                    !active && r.returning && 'shadow-[inset_3px_0_0_0_theme(colors.violet.500)]',
                   )}
                 >
                   <td className={cn(td, 'pl-5')} onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       aria-label={t('Select order {number}', { number: r.number })}
-                      className="size-4 rounded accent-brand-600"
+                      className="size-4 rounded accent-ink"
                       checked={checked.has(r.id)}
                       onChange={() => toggle(r.id)}
                     />
                   </td>
-                  <td className={cn(td, 'font-medium whitespace-nowrap', active && 'text-brand-700')}>
+                  <td className={cn(td, 'font-mono text-[13px] whitespace-nowrap text-ink')}>
                     {r.number}
-                    <div className="text-xs font-normal text-slate-400 2xl:hidden">{shortDate(r.placedAt, t.locale)}</div>
+                    <div className="font-sans text-xs text-slate-500 2xl:hidden">{shortDate(r.placedAt, t.locale)}</div>
                   </td>
                   <td className={td}>
-                    <div className="flex items-center gap-1.5 font-medium whitespace-nowrap text-slate-800">
+                    <div className="flex items-center gap-1.5 font-medium whitespace-nowrap text-ink">
                       {r.buyer}
                       {r.returning && (
                         <span
-                          className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800"
+                          className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-800"
                           title={t('{ordinal} order · first ordered {date}', { ordinal: ordinal(r.returning.orderNumber, t.locale), date: sinceLabel(r.returning.since, t.locale) })}
                         >
                           {t('Returning · {ordinal}', { ordinal: ordinal(r.returning.orderNumber, t.locale) })}
@@ -269,8 +277,8 @@ export function OrdersTable({
                       {r.notes && (
                         <span
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold',
-                            r.notes.important > 0 ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300' : 'bg-slate-100 text-slate-600',
+                            'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium',
+                            r.notes.important > 0 ? 'bg-butter/60 text-butter-ink' : 'bg-black/[0.05] text-slate-600',
                           )}
                           title={notesLabel(r.notes, t)}
                           aria-label={notesLabel(r.notes, t)}
@@ -280,7 +288,7 @@ export function OrdersTable({
                         </span>
                       )}
                     </div>
-                    <div className="text-xs whitespace-nowrap text-slate-400">
+                    <div className="mt-0.5 text-xs whitespace-nowrap text-slate-500">
                       {r.city} · {t.plural(r.itemCount, '{n} item', '{n} items')}
                     </div>
                   </td>
@@ -288,7 +296,7 @@ export function OrdersTable({
                     <MarketplaceBadge marketplace={r.marketplace} />
                   </td>
                   <td className={cn(td, 'hidden max-w-40 truncate text-slate-600 2xl:table-cell')} title={r.courier ?? undefined}>
-                    {r.courier ?? <span className="text-slate-300">—</span>}
+                    {r.courier ?? <span className="text-slate-400">—</span>}
                   </td>
                   <td className={cn(td, 'hidden whitespace-nowrap text-slate-600 2xl:table-cell')}>{shortDate(r.placedAt, t.locale)}</td>
                   <td className={td}>
@@ -296,9 +304,9 @@ export function OrdersTable({
                     {!r.readyToShip && r.status !== 'cancelled' && <div className="mt-1 text-[11px] text-amber-700">{t('Awaiting marketplace')}</div>}
                     {r.shipment?.state === 'failed' && <div className="mt-1 text-[11px] text-red-700">{t('Label failed')}</div>}
                   </td>
-                  <td className={cn(td, 'pr-5 text-right font-medium whitespace-nowrap tabular-nums')}>
+                  <td className={cn(td, 'pr-5 text-right font-medium whitespace-nowrap tabular-nums text-ink')}>
                     {formatMoney(r.total, r.currency)}
-                    {r.cod && <div className="text-[11px] font-medium text-orange-700">{t('COD')}</div>}
+                    {r.cod && <div className="text-[11px] font-medium text-peach-ink">{t('COD')}</div>}
                   </td>
                 </tr>
               );

@@ -46,44 +46,46 @@ export function Nav(props: Props) {
   return (
     <>
       {/* Wide screens: the sidebar. */}
-      <aside className="no-print hidden w-60 shrink-0 flex-col bg-sidebar text-white md:sticky md:top-0 md:flex md:h-screen">
-        <div className="flex items-center gap-2 px-6 py-6">
+      <aside className="no-print hidden w-60 shrink-0 flex-col border-r border-black/[0.06] bg-sidebar text-ink md:sticky md:top-0 md:flex md:h-screen">
+        <div className="flex items-center gap-2 px-6 pt-6 pb-5">
           {/* eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers */}
-          <img src="/logo-light.png" alt="Luora" className="h-6 w-auto" />
-          {mock && <span className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">{t('Demo')}</span>}
+          <img src="/logo-dark.png" alt="Luora" className="h-6 w-auto" />
+          {mock && <span className="ml-auto rounded-full bg-butter px-2 py-0.5 text-[10px] font-semibold tracking-wide text-butter-ink uppercase">{t('Demo')}</span>}
         </div>
-        <nav className="flex flex-1 flex-col gap-1.5 px-3 pb-3">
-          {items.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors',
-                isActive(pathname, href) ? 'bg-sidebar-active text-white' : 'text-white/70 hover:bg-white/5 hover:text-white',
-              )}
-            >
-              <Icon className="size-4" />
-              {t(label)}
-              {href === '/tasks' && taskBadge > 0 && (
-                <span className="ml-auto rounded-full bg-orange-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white" title={t('Your tasks due today or late')}>
-                  {taskBadge > 99 ? '99+' : taskBadge}
-                </span>
-              )}
-            </Link>
-          ))}
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
+          {items.map(({ href, label, icon: Icon }) => {
+            const active = isActive(pathname, href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors',
+                  active ? 'bg-sidebar-active font-medium text-ink' : 'text-slate-600 hover:bg-black/[0.035] hover:text-ink',
+                )}
+              >
+                <Icon className="size-[18px]" strokeWidth={active ? 2 : 1.75} aria-hidden />
+                {t(label)}
+                {href === '/tasks' && taskBadge > 0 && (
+                  <span className="ml-auto flex min-w-5 items-center justify-center rounded-full bg-ink px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white" title={t('Your tasks due today or late')}>
+                    {taskBadge > 99 ? '99+' : taskBadge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </nav>
-        <div className="border-t border-white/10 px-5 py-4">
-          <LanguageSwitcher tone="dark" className="mb-4" />
-          <div className="flex items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-semibold">{initials(userName)}</span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{userName}</p>
-              <form action={logoutAction}>
-                <button className="inline-flex items-center gap-1.5 text-xs text-white/60 hover:text-white">
-                  <LogOut className="size-3.5" /> {t('Sign out')}
-                </button>
-              </form>
-            </div>
+        <div className="space-y-3 p-3">
+          <LanguageSwitcher className="px-2" />
+          <div className="flex items-center gap-3 rounded-2xl border border-black/[0.06] bg-white px-3 py-2.5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-active text-xs font-semibold text-ink">{initials(userName)}</span>
+            <p className="min-w-0 flex-1 truncate text-sm font-medium">{userName}</p>
+            <form action={logoutAction}>
+              <button className="press flex size-9 cursor-pointer items-center justify-center rounded-full text-slate-500 hover:bg-black/[0.05] hover:text-ink" aria-label={t('Sign out')} title={t('Sign out')}>
+                <LogOut className="size-4" aria-hidden />
+              </button>
+            </form>
           </div>
         </div>
       </aside>
@@ -97,7 +99,7 @@ function Account({ userName, role, logoutAction }: Pick<Props, 'userName' | 'rol
   return (
     <div className="rounded-2xl bg-slate-900/[0.04] p-3">
       <div className="flex items-center gap-3 px-1 py-1">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-sidebar text-sm font-semibold text-white">{initials(userName)}</span>
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-semibold text-white">{initials(userName)}</span>
         <div className="min-w-0">
           <p className="truncate text-base font-semibold">{userName}</p>
           <p className="text-sm text-slate-500">{isRole(role) ? t(ROLE_LABEL[role]) : role}</p>
@@ -131,14 +133,14 @@ function MobileNav({ items, userName, role, mock, taskBadge = 0, logoutAction }:
 
   return (
     <div className="no-print md:hidden">
-      <header className="material-brand sticky top-0 z-30 flex items-center justify-between px-4 pt-[env(safe-area-inset-top)] text-white" style={{ height: 'calc(3.25rem + env(safe-area-inset-top))' }}>
+      <header className="material-brand sticky top-0 z-30 flex items-center justify-between border-b border-black/[0.06] px-4 pt-[env(safe-area-inset-top)] text-ink" style={{ height: 'calc(3.25rem + env(safe-area-inset-top))' }}>
         <Link href="/" aria-label={t('Luora, go to the dashboard')} className="press flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers */}
-          <img src="/logo-light.png" alt="" className="h-5 w-auto" />
-          {mock && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">{t('Demo')}</span>}
+          <img src="/logo-dark.png" alt="" className="h-5 w-auto" />
+          {mock && <span className="rounded-full bg-butter px-2 py-0.5 text-[10px] font-semibold tracking-wide text-butter-ink uppercase">{t('Demo')}</span>}
         </Link>
         <button type="button" onClick={() => setSheet('account')} aria-label={t('Account: {name}', { name: userName })} className="press -mr-1 flex size-11 items-center justify-center">
-          <span className="flex size-8 items-center justify-center rounded-full bg-white/15 text-xs font-semibold ring-1 ring-white/20">{initials(userName)}</span>
+          <span className="flex size-8 items-center justify-center rounded-full bg-white text-xs font-semibold ring-1 ring-black/10">{initials(userName)}</span>
         </button>
       </header>
 
@@ -159,7 +161,7 @@ function MobileNav({ items, userName, role, mock, taskBadge = 0, logoutAction }:
             <button type="button" onClick={() => setSheet('more')} aria-haspopup="dialog" className={cn(tab, 'w-full', moreActive || sheet === 'more' ? 'text-brand-700' : 'text-slate-500')}>
               <span className="relative">
                 <Ellipsis className="size-6" strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden />
-                {tasksInMore && taskBadge > 0 && <span className="absolute -top-0.5 -right-1 size-2.5 rounded-full bg-orange-500 ring-2 ring-white" aria-label={t('{n} tasks due', { n: taskBadge })} />}
+                {tasksInMore && taskBadge > 0 && <span className="absolute -top-0.5 -right-1 size-2.5 rounded-full bg-ink ring-2 ring-white" aria-label={t('{n} tasks due', { n: taskBadge })} />}
               </span>
               {t('More')}
             </button>
@@ -176,7 +178,7 @@ function MobileNav({ items, userName, role, mock, taskBadge = 0, logoutAction }:
                   <Icon className="size-5" aria-hidden />
                 </span>
                 <span className={cn('flex-1 text-base font-medium', isActive(pathname, href) && 'text-brand-700')}>{t(label)}</span>
-                {href === '/tasks' && taskBadge > 0 && <span className="rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-white">{taskBadge > 99 ? '99+' : taskBadge}</span>}
+                {href === '/tasks' && taskBadge > 0 && <span className="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-white">{taskBadge > 99 ? '99+' : taskBadge}</span>}
                 <ChevronRight className="size-4 text-slate-400" aria-hidden />
               </Link>
             </li>

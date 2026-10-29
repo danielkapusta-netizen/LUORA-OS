@@ -31,22 +31,26 @@ export function AnalyticsTabs() {
   }
   const query = kept.toString();
   return (
-    <div className="mb-5 flex gap-1 overflow-x-auto border-b border-slate-200">
-      {TABS.map((item) => {
-        const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.href}
-            href={item.exact || !query ? item.href : `${item.href}?${query}`}
-            className={cn(
-              '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium max-md:px-4 max-md:py-3',
-              active ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:text-slate-800',
-            )}
-          >
-            {t(item.label)}
-          </Link>
-        );
-      })}
-    </div>
+    // One segmented bar; on a phone it scrolls sideways and fades at the edge to show there is more.
+    <nav aria-label={t('Analytics')} className="fade-end -mx-4 mb-6 overflow-x-auto px-4 max-md:scrollbar-none md:mx-0 md:px-0 md:[mask-image:none]">
+      <div className="inline-flex gap-0.5 rounded-full bg-black/[0.04] p-1">
+        {TABS.map((item) => {
+          const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.exact || !query ? item.href : `${item.href}?${query}`}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'press shrink-0 rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors max-md:py-2.5',
+                active ? 'bg-white font-medium text-ink shadow-[0_1px_2px_rgba(28,27,25,0.08)]' : 'text-slate-600 hover:text-ink',
+              )}
+            >
+              {t(item.label)}
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }

@@ -60,25 +60,25 @@ export async function RangeControl({
   const cleared = Object.fromEntries(reset.map((k) => [k, undefined]));
   return (
     <div className="relative inline-block">
-      <nav aria-label={labelText} className="inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-white p-1">
+      <nav aria-label={labelText} className="inline-flex flex-wrap items-center gap-0.5 rounded-full bg-black/[0.04] p-1 max-md:rounded-3xl">
         {presets.map((o) => (
           <Link
             key={o.value}
             href={hrefWith(path, current, { ...cleared, [param]: o.value, from: undefined, to: undefined })}
             aria-current={!custom && o.value === active ? 'true' : undefined}
-            className={cn(pill, !custom && o.value === active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100')}
+            className={cn(pill, !custom && o.value === active ? 'bg-white text-ink shadow-[0_1px_2px_rgba(28,27,25,0.08)]' : 'text-slate-600 hover:text-ink')}
           >
             {t(o.label)}
           </Link>
         ))}
         <details>
           <summary
-            className={cn(pill, 'cursor-pointer list-none', custom ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100')}
+            className={cn(pill, 'cursor-pointer list-none', custom ? 'bg-white text-ink shadow-[0_1px_2px_rgba(28,27,25,0.08)]' : 'text-slate-600 hover:text-ink')}
             aria-label={custom ? t('Custom range: {from} to {to}', { from: shortDay(custom.from, t.locale), to: shortDay(custom.to, t.locale) }) : t('Custom range')}
           >
             {custom ? `${shortDay(custom.from, t.locale)} – ${shortDay(custom.to, t.locale)}` : t('Custom')}
           </summary>
-          <form action={path} className="absolute left-0 z-20 mt-2 w-[min(92vw,22rem)] space-y-3 rounded-2xl border border-black/5 bg-white p-4 text-slate-900 shadow-lg">
+          <form action={path} className="absolute left-0 z-20 mt-2 w-[min(92vw,22rem)] space-y-3 rounded-3xl border border-black/[0.06] bg-white p-4 text-ink shadow-[0_16px_40px_-16px_rgba(28,27,25,0.25)]">
             {kept.map(([k, v]) => (
               <input key={k} type="hidden" name={k} value={v} />
             ))}

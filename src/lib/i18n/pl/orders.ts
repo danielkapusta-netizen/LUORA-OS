@@ -213,4 +213,5 @@ export const orders: Record<string, string> = {
   "Retry failed tracking": "Ponów nieudane numery śledzenia",
   "Select orders and press “Create labels”.": "Zaznacz zamówienia i kliknij „Utwórz etykiety”.",
   "Sending tracking…": "Wysyłanie numeru śledzenia…",
+  "Order status": "Status zamówienia",
 };

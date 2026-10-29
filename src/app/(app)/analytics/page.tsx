@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Card, CardBody, CardHeader, EmptyState, td, th } from '@/components/ui';
+import { Pills } from '@/components/analytics/blocks';
+import { Card, CardBody, CardHeader, EmptyState, MetricTile, td, th } from '@/components/ui';
 import { cn, formatDate, formatMoney, MARKETPLACE_LABELS, SERVICE_LABELS, CARRIER_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { analytics } from '@/server/services/analytics';
@@ -8,7 +9,7 @@ import { STATUS_LABELS } from '@/server/services/workflow';
 import { MARKETPLACE_COLORS } from '@/components/analytics/format';
 import { RangeControl } from '@/components/analytics/period-control';
 import { resolveDayWindow } from '@/lib/analytics/window';
-import { HorizontalBars, RevenueByDay } from './charts';
+import { HorizontalBars, RevenueByDay } from '@/components/analytics/lazy-charts';
 import { getT } from '@/lib/i18n/server';
 import { msg } from '@/lib/i18n/msg';
 
@@ -25,16 +26,6 @@ const RANGES = [
   { value: '365', label: msg('12 months') },
   { value: 'lastweek', label: msg('Last week') },
 ];
-
-function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
-    <Card className="px-4 py-3">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">{value}</p>
-      {note && <p className="mt-0.5 text-xs text-slate-500">{note}</p>}
-    </Card>
-  );
-}
 
 function hours(value: number | null): string {
   if (value === null) return '—';
@@ -77,30 +68,25 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <p className="mb-4 text-sm text-slate-500">
-        {t('Operations:')} {formatDate(from, false, t.locale)} – {formatDate(to, false, t.locale)} · {t('orders by placement date, cancelled orders excluded')}
-      </p>
-
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2">
         <RangeControl path="/analytics" current={{ marketplace }} presets={RANGES} active={win.key} param="days" custom={win.custom} label={t('Period')} />
-        <span className="mx-2 h-5 w-px bg-slate-200" />
-        {[undefined, ...Object.keys(MARKETPLACE_LABELS)].map((m) => (
-          <Link
-            key={m ?? 'all'}
-            href={link({ marketplace: m })}
-            className={cn('rounded-md border px-3 py-1.5 text-sm', marketplace === m ? 'border-brand-600 bg-brand-50 font-medium text-brand-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50')}
-          >
-            {m ? MARKETPLACE_LABELS[m] : t('All marketplaces')}
-          </Link>
-        ))}
+        <Pills
+          label={t('Marketplace')}
+          options={[{ value: '', label: t('All marketplaces') }, ...Object.entries(MARKETPLACE_LABELS).map(([value, label]) => ({ value, label }))]}
+          active={marketplace ?? ''}
+          href={(m) => link({ marketplace: m || undefined })}
+        />
+        <p className="text-xs text-slate-500 lg:ml-auto">
+          {formatDate(from, false, t.locale)} – {formatDate(to, false, t.locale)} · {t('orders by placement date, cancelled orders excluded')}
+        </p>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label={t('Revenue')} value={formatMoney(data.kpis.revenue, currency)} note={mixedCurrency ? t('incl. shipping; {currencies} converted at the NBP rate', { currencies: data.kpis.currencies.filter((c) => c !== 'PLN').join(', ') }) : t('incl. shipping')} />
-        <Stat label={t('Orders')} value={data.kpis.orders.toLocaleString('pl-PL')} note={t('{n} cancelled', { n: data.kpis.cancelled })} />
-        <Stat label={t('Average order')} value={formatMoney(data.kpis.aov, currency)} />
-        <Stat label={t('Shipped')} value={data.kpis.shipped.toLocaleString('pl-PL')} note={data.kpis.orders ? t('{pct}% of orders', { pct: Math.round((data.kpis.shipped / data.kpis.orders) * 100) }) : undefined} />
-        <Stat label={t('Time to ship')} value={hours(data.kpis.avgHoursToShip)} note={t('placed → tracking sent')} />
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <MetricTile label={t('Revenue')} value={formatMoney(data.kpis.revenue, currency)} caption={mixedCurrency ? t('incl. shipping; {currencies} converted at the NBP rate', { currencies: data.kpis.currencies.filter((c) => c !== 'PLN').join(', ') }) : t('incl. shipping')} />
+        <MetricTile label={t('Orders')} value={data.kpis.orders.toLocaleString('pl-PL')} caption={t('{n} cancelled', { n: data.kpis.cancelled })} />
+        <MetricTile label={t('Average order')} value={formatMoney(data.kpis.aov, currency)} />
+        <MetricTile label={t('Shipped')} value={data.kpis.shipped.toLocaleString('pl-PL')} caption={data.kpis.orders ? t('{pct}% of orders', { pct: Math.round((data.kpis.shipped / data.kpis.orders) * 100) }) : undefined} />
+        <MetricTile label={t('Time to ship')} value={hours(data.kpis.avgHoursToShip)} caption={t('placed → tracking sent')} />
       </div>
 
       {data.kpis.orders === 0 ? (
@@ -108,13 +94,13 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
           <EmptyState title={t('No orders in this period')} />
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-4 md:gap-5 xl:grid-cols-3">
           <Card className="xl:col-span-2">
             <CardHeader title={t('Revenue per day ({currency})', { currency })} description={t('Stacked by marketplace')} />
             <CardBody>
               <RevenueByDay data={daily} marketplaces={marketplaces} currency={currency} />
               <details className="mt-2 text-sm">
-                <summary className="cursor-pointer text-xs text-slate-500">{t('Show as table')}</summary>
+                <summary className="cursor-pointer text-xs text-slate-500 hover:text-ink">{t('Show as table')}</summary>
                 <div className="mt-2 max-h-64 overflow-auto">
                   <table className="min-w-full text-xs">
                     <thead>
@@ -130,7 +116,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     <tbody>
                       {daily.map((row) => (
                         <tr key={String(row.day)}>
-                          <td className="px-3 py-1">{row.day}</td>
+                          <td className="px-3 py-1 font-mono">{row.day}</td>
                           {marketplaces.map((m) => (
                             <td key={m} className="px-3 py-1 text-right tabular-nums">
                               {Number(row[m] ?? 0).toLocaleString('pl-PL')}
@@ -161,7 +147,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                   {data.byMarketplace.map((m) => (
                     <tr key={m.marketplace}>
                       <td className={td}>
-                        <span className="mr-2 inline-block size-2.5 rounded-sm" style={{ background: MARKETPLACE_COLORS[m.marketplace] }} />
+                        <span className="mr-2 inline-block size-2 rounded-full" style={{ background: MARKETPLACE_COLORS[m.marketplace] }} />
                         {MARKETPLACE_LABELS[m.marketplace]}
                       </td>
                       <td className={cn(td, 'text-right tabular-nums')}>{m.orders}</td>
@@ -173,26 +159,26 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             </CardBody>
           </Card>
 
-          <Card>
+          <Card className="xl:col-span-2">
             <CardHeader title={t('Top products')} description={t('By units sold')} />
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100">
-                <thead className="bg-slate-50">
+              <table className="mt-2 min-w-full">
+                <thead>
                   <tr>
-                    <th className={th}>{t('Product')}</th>
+                    <th className={cn(th, 'pl-5')}>{t('Product')}</th>
                     <th className={cn(th, 'text-right')}>{t('Units')}</th>
-                    <th className={cn(th, 'text-right')}>{t('Revenue')}</th>
+                    <th className={cn(th, 'pr-5 text-right')}>{t('Revenue')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-black/[0.04] border-t border-black/[0.04]">
                   {data.topSkus.map((s) => (
                     <tr key={s.sku ?? s.name}>
-                      <td className={td}>
+                      <td className={cn(td, 'pl-5')}>
                         <div className="max-w-56 truncate">{s.name}</div>
                         <div className="font-mono text-xs text-slate-500">{s.sku ?? t('no SKU')}</div>
                       </td>
                       <td className={cn(td, 'text-right tabular-nums')}>{s.quantity}</td>
-                      <td className={cn(td, 'text-right tabular-nums')}>{formatMoney(s.revenue, currency)}</td>
+                      <td className={cn(td, 'pr-5 text-right tabular-nums')}>{formatMoney(s.revenue, currency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -200,52 +186,54 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
             </div>
           </Card>
 
-          <Card>
-            <CardHeader title={t('Labels by carrier')} />
-            <CardBody>
-              {data.carriers.length === 0 ? (
-                <p className="text-sm text-slate-500">{t('No labels in this period.')}</p>
-              ) : (
-                <HorizontalBars
-                  unit="labels"
-                  data={data.carriers.map((c) => ({
-                    key: `${c.carrier}-${c.service}`,
-                    label: c.carrier === 'inpost' ? `InPost ${(SERVICE_LABELS[c.service] ?? c.service).toLowerCase()}` : (CARRIER_LABELS[c.carrier] ?? c.carrier),
-                    value: c.shipments,
-                  }))}
-                />
-              )}
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title={t('Time to ship')} description={t('Hours from order to tracking sent')} />
-            <CardBody>
-              {data.shipTime.length === 0 ? (
-                <p className="text-sm text-slate-500">{t('Nothing shipped in this period.')}</p>
-              ) : (
-                <HorizontalBars
-                  byMarketplace
-                  unit="h"
-                  decimals={1}
-                  data={data.shipTime.map((s) => ({ key: s.marketplace, label: `${MARKETPLACE_LABELS[s.marketplace]} (${s.shipped})`, value: s.avgHours }))}
-                />
-              )}
-              <h3 className="mt-4 mb-1 text-xs font-medium text-slate-500">{t('Open right now')}</h3>
-              <ul className="space-y-1 text-sm">
-                {data.backlog.map((b) => (
-                  <li key={b.status} className="flex justify-between">
-                    <Link href={`/orders?status=${b.status}`} className="text-brand-700 hover:underline">
-                      {STATUS_LABELS[b.status as keyof typeof STATUS_LABELS] ?? b.status}
-                    </Link>
-                    <span className="tabular-nums">
-                      {b.orders} <span className="text-xs text-slate-500">{t('oldest {date}', { date: formatDate(b.oldest, false, t.locale) })}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </CardBody>
-          </Card>
+          <div className="space-y-4 md:space-y-5">
+            <Card>
+              <CardHeader title={t('Labels by carrier')} />
+              <CardBody>
+                {data.carriers.length === 0 ? (
+                  <p className="text-sm text-slate-500">{t('No labels in this period.')}</p>
+                ) : (
+                  <HorizontalBars
+                    unit="labels"
+                    data={data.carriers.map((c) => ({
+                      key: `${c.carrier}-${c.service}`,
+                      label: c.carrier === 'inpost' ? `InPost ${(SERVICE_LABELS[c.service] ?? c.service).toLowerCase()}` : (CARRIER_LABELS[c.carrier] ?? c.carrier),
+                      value: c.shipments,
+                    }))}
+                  />
+                )}
+              </CardBody>
+            </Card>
+  
+            <Card>
+              <CardHeader title={t('Time to ship')} description={t('Hours from order to tracking sent')} />
+              <CardBody>
+                {data.shipTime.length === 0 ? (
+                  <p className="text-sm text-slate-500">{t('Nothing shipped in this period.')}</p>
+                ) : (
+                  <HorizontalBars
+                    byMarketplace
+                    unit="h"
+                    decimals={1}
+                    data={data.shipTime.map((s) => ({ key: s.marketplace, label: `${MARKETPLACE_LABELS[s.marketplace]} (${s.shipped})`, value: s.avgHours }))}
+                  />
+                )}
+                <h3 className="mt-5 mb-2 text-xs font-medium text-slate-500">{t('Open right now')}</h3>
+                <ul className="space-y-1.5 text-sm">
+                  {data.backlog.map((b) => (
+                    <li key={b.status} className="flex justify-between">
+                      <Link href={`/orders?status=${b.status}`} className="font-medium text-ink underline-offset-4 hover:underline">
+                        {STATUS_LABELS[b.status as keyof typeof STATUS_LABELS] ?? b.status}
+                      </Link>
+                      <span className="tabular-nums">
+                        {b.orders} <span className="text-xs text-slate-500">{t('oldest {date}', { date: formatDate(b.oldest, false, t.locale) })}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
+          </div>
         </div>
       )}
     </>

@@ -15,7 +15,7 @@ function initials(name: string): string {
 export async function CustomerSummary({ buyerName, recipientName, className }: { buyerName: string; recipientName: string; className?: string }) {
   const t = await getT();
   return (
-    <div className={cn('flex items-center gap-3 rounded-2xl bg-canvas p-4', className)}>
+    <div className={cn('flex items-center gap-3 rounded-2xl bg-sidebar p-4', className)}>
       <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-base font-semibold text-brand-700">
         {initials(buyerName)}
       </span>

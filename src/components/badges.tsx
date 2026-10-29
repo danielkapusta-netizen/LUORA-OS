@@ -7,12 +7,13 @@ import { MARKETPLACE_LABELS } from '@/lib/utils';
 import { Badge, type BadgeTone } from './ui';
 
 const STATUS: Record<OrderStatus, { label: string; tone: BadgeTone }> = {
-  new: { label: msg('New'), tone: 'blue' },
-  processing: { label: msg('Processing'), tone: 'violet' },
-  label_created: { label: msg('Label created'), tone: 'amber' },
+  // Same pastels as the Dashboard tiles for the open statuses.
+  new: { label: msg('New'), tone: 'sky' },
+  processing: { label: msg('Processing'), tone: 'blush' },
+  label_created: { label: msg('Label created'), tone: 'butter' },
   shipped: { label: msg('Shipped'), tone: 'green' },
   delivered: { label: msg('Delivered'), tone: 'gray' },
-  on_hold: { label: msg('On hold'), tone: 'orange' },
+  on_hold: { label: msg('On hold'), tone: 'peach' },
   cancelled: { label: msg('Cancelled'), tone: 'red' },
 };
 
@@ -23,17 +24,19 @@ export function StatusBadge({ status }: { status: OrderStatus }) {
 }
 
 // Same hues as the analytics charts, so a marketplace keeps one colour across the app.
-const MARKETPLACE_TONES: Record<string, string> = {
-  shopify: 'bg-blue-100 text-blue-800',
-  allegro: 'bg-orange-100 text-orange-800',
-  empik: 'bg-emerald-100 text-emerald-800',
-  vonhalsky: 'bg-amber-100 text-amber-900',
-  hebe: 'bg-pink-100 text-pink-800',
+const MARKETPLACE_DOTS: Record<string, string> = {
+  shopify: 'bg-[#2a78d6]',
+  allegro: 'bg-[#eb6834]',
+  empik: 'bg-[#1baf7a]',
+  vonhalsky: 'bg-[#d4a017]',
+  hebe: 'bg-[#d6338a]',
 };
 
+/** A quiet chip: the marketplace's colour as a dot, the name in ink. */
 export function MarketplaceBadge({ marketplace }: { marketplace: string }) {
   return (
-    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold ${MARKETPLACE_TONES[marketplace] ?? 'bg-slate-100'}`}>
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white px-2 py-0.5 text-xs font-medium whitespace-nowrap text-slate-700">
+      <span className={`size-1.5 rounded-full ${MARKETPLACE_DOTS[marketplace] ?? 'bg-slate-400'}`} aria-hidden />
       {MARKETPLACE_LABELS[marketplace] ?? marketplace}
     </span>
   );

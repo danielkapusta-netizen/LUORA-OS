@@ -76,7 +76,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
           <EmptyState title={t('No orders match')} />
         ) : (
           <table className="w-full">
-            <thead className="border-b border-slate-100 bg-slate-50/60">
+            <thead className="border-b border-black/[0.06]">
               <tr>
                 <th className="w-10" />
                 <th className={th}>{t('Date')}</th>
@@ -88,13 +88,13 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                 <th className={cn(th, 'text-right')}>{t('Margin')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-black/[0.04]">
               {shown.map((o) => {
                 const open = params.open === o.id;
                 const Icon = open ? Minus : Plus;
                 const first = o.items[0];
                 return [
-                  <tr key={o.id} id={`o-${o.id}`} className={open ? 'bg-slate-50' : undefined}>
+                  <tr key={o.id} id={`o-${o.id}`} className={open ? 'bg-sidebar' : undefined}>
                     <td className="py-3 pr-0 pl-4 align-top">
                       <Link
                         href={`${link({ open: open ? undefined : o.id })}#o-${o.id}`}
@@ -122,7 +122,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
                     <td className={cn(td, 'text-right tabular-nums')}>{formatValue(o.marginPct, 'percent', false, t.locale)}</td>
                   </tr>,
                   open && (
-                    <tr key={`${o.id}-detail`} className="bg-slate-50">
+                    <tr key={`${o.id}-detail`} className="bg-sidebar">
                       <td colSpan={8} className="px-4 pb-4">
                         <div className="grid grid-cols-1 gap-6 pt-2 lg:grid-cols-2">
                           <table className="w-full text-sm">
@@ -150,7 +150,7 @@ export default async function OrdersProfitPage({ searchParams }: { searchParams:
           </table>
         )}
         {pages > 1 && (
-          <div className="flex justify-end gap-3 border-t border-slate-100 px-4 py-2 text-sm">
+          <div className="flex justify-end gap-3 border-t border-black/[0.05] px-4 py-2 text-sm">
             {page > 1 && <Link href={link({ page: String(page - 1), open: undefined })}>{t('← Newer')}</Link>}
             <span className="text-slate-500">
               {t('Page {page} of {pages}', { page, pages })}
