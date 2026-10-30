@@ -128,7 +128,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         <div className="mt-4 space-y-2">
           {canShip && (
             <ActionForm action={quickLabelAction.bind(null, order.id)}>
-              <SubmitButton className="w-full" pendingText={t('Requesting label…')}>
+              {/* Empik's green, so the main action on the card stands out. */}
+              <SubmitButton className="w-full bg-gradient-to-br from-[#0f7a50] to-[#0b5e3e] hover:from-[#0b5e3e] hover:to-[#0b5e3e]" pendingText={t('Requesting label…')}>
                 <Truck className="size-4" /> {t('Generate shipping label')}
               </SubmitButton>
             </ActionForm>
