@@ -22,16 +22,17 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('Orders') };
 }
 
-const TABS: { value: OrderStatus | 'open' | 'all'; label: string; hint?: string }[] = [
+// Processing, On hold and All are left off the bar to keep it on one line; their links still work and show a tab while open.
+const TABS: { value: OrderStatus | 'open' | 'all'; label: string; hint?: string; hidden?: boolean }[] = [
   { value: 'open', label: msg('To do') },
   { value: 'new', label: msg('New') },
-  { value: 'processing', label: msg('Processing') },
+  { value: 'processing', label: msg('Processing'), hidden: true },
   { value: 'label_created', label: msg('Label created'), hint: msg('Labels made, parcel not packed yet. They also stay on their own tab until you press Packed.') },
-  { value: 'on_hold', label: msg('On hold') },
+  { value: 'on_hold', label: msg('On hold'), hidden: true },
   { value: 'shipped', label: msg('Shipped') },
   { value: 'delivered', label: msg('Delivered') },
   { value: 'cancelled', label: msg('Cancelled') },
-  { value: 'all', label: msg('All') },
+  { value: 'all', label: msg('All'), hidden: true },
 ];
 
 type Search = Record<string, string | undefined>;
@@ -178,20 +179,27 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       <Input name="q" defaultValue={params.q} placeholder={t('Search number, buyer, SKU, tracking…')} aria-label={t('Search orders')} className="w-full rounded-full border-black/[0.08] bg-white pl-10 md:w-72" enterKeyHint="search" type="search" />
     </>
   );
-  const tab = 'shrink-0 snap-start rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors max-md:flex max-md:min-h-10 max-md:items-center';
-  const chip = 'inline-flex shrink-0 snap-start items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm whitespace-nowrap transition-colors max-md:min-h-10';
+  const tab = 'flex min-h-10 shrink-0 snap-start items-center rounded-full px-3.5 text-sm whitespace-nowrap transition-colors 2xl:min-h-9';
+  const chip = 'inline-flex min-h-10 shrink-0 snap-start items-center gap-2 rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors 2xl:min-h-9';
 
   return (
     <OrderSheetProvider>
-      <div className="mb-6 flex items-end justify-between gap-3 md:mb-8 md:flex-wrap">
+      {/* Compact on a tablet so more of the list and the order card fit on one screen. */}
+      <div className="mb-5 flex items-end justify-between gap-3 md:flex-wrap 2xl:mb-8">
         <div className="min-w-0">
-          <Eyebrow className="mb-2">{t('All marketplaces in one list · last sync {when}', { when: timeAgo(lastSync, t) })}</Eyebrow>
-          <h1 className="font-display text-4xl leading-tight font-semibold tracking-tight text-ink md:text-5xl">{t('Orders')}</h1>
+          <Eyebrow className="mb-1.5 2xl:mb-2">{t('All marketplaces in one list · last sync {when}', { when: timeAgo(lastSync, t) })}</Eyebrow>
+          <h1 className="font-display text-4xl leading-tight font-semibold tracking-tight text-ink 2xl:text-5xl">{t('Orders')}</h1>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <form action="/orders" className="relative hidden md:block">
             {searchBox}
           </form>
+          <details className="relative hidden md:block" open={filtersActive}>
+            <summary className={cn(buttonClass('secondary'), 'cursor-pointer list-none')}>
+              <SlidersHorizontal className="size-4" /> {t('Filters')}{filtersActive ? ' •' : ''}
+            </summary>
+            {filtersForm('absolute right-0 z-20 mt-2 grid w-[min(92vw,34rem)] grid-cols-2 gap-2 rounded-3xl border border-black/[0.06] bg-white p-4 shadow-[0_16px_40px_-16px_rgba(28,27,25,0.25)]')}
+          </details>
           <form action={syncNowAction}>
             <SubmitButton variant="secondary" pendingText={t('Syncing…')}>
               <RefreshCw className="size-4" /> {t('Sync now')}
@@ -213,66 +221,62 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         </details>
       </div>
 
-      {errors.length > 0 && (
-        <div className="mb-4 space-y-2">
-          {errors.map((a) => (
-            <Alert key={a.id} tone="red">
-              <strong>{a.name}:</strong> {t('last sync failed –')} {a.lastError}{' '}
-              <Link href="/settings/integrations" className="underline">
-                {t('Check settings')}
-              </Link>
-            </Alert>
+      {/* The grid starts right under the header, so the order card begins level with the tabs, not below them. */}
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="min-w-0">
+        {errors.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {errors.map((a) => (
+              <Alert key={a.id} tone="red">
+                <strong>{a.name}:</strong> {t('last sync failed –')} {a.lastError}{' '}
+                <Link href="/settings/integrations" className="underline">
+                  {t('Check settings')}
+                </Link>
+              </Alert>
+            ))}
+          </div>
+        )}
+
+        {/* One scrolling row on a phone (it fades out at the edge to show there is more); wrapped on a desktop. */}
+        <div className="fade-end -mx-4 mb-5 flex scroll-px-4 snap-x items-center gap-1 overflow-x-auto px-4 pb-1 max-md:scrollbar-none md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]">
+          <nav aria-label={t('Order status')} className="flex items-center gap-0.5 rounded-full bg-black/[0.04] p-1 max-md:shrink-0 md:flex-wrap md:rounded-3xl">
+            {TABS.filter((item) => !item.hidden || status === item.value).map((item) => {
+              const count = item.value === 'open' ? openCount : item.value === 'label_created' ? labelReady : item.value !== 'all' ? counts[item.value] : undefined;
+              const active = status === item.value;
+              return (
+                <Link
+                  key={item.label}
+                  href={hrefWith(params, { status: item.value === 'open' ? undefined : item.value, page: undefined, order: undefined })}
+                  aria-current={active ? 'true' : undefined}
+                  title={item.hint ? t(item.hint) : undefined}
+                  className={cn(tab, 'press', active ? 'bg-white font-medium text-ink shadow-[0_1px_2px_rgba(28,27,25,0.08)]' : 'text-slate-600 hover:text-ink')}
+                >
+                  {t(item.label)}
+                  {count ? <span className={cn('ml-1.5 font-mono text-xs tabular-nums', active ? 'text-slate-500' : 'text-slate-400')}>{count}</span> : null}
+                </Link>
+              );
+            })}
+          </nav>
+          <span className="mx-2 hidden h-6 w-px shrink-0 bg-black/[0.08] md:block" aria-hidden />
+          {(
+            [
+              { key: 'returning', on: params.returning === '1', next: { returning: params.returning === '1' ? undefined : '1' }, label: msg('Returning'), full: msg('Returning customers'), dot: 'bg-violet-500' },
+              { key: 'notes', on: params.notes === '1', next: { notes: params.notes === '1' ? undefined : '1' }, label: msg('Notes'), full: msg('With notes'), dot: 'bg-slate-500' },
+              { key: 'important', on: params.notes === 'important', next: { notes: params.notes === 'important' ? undefined : 'important' }, label: msg('Important'), full: msg('Important notes'), dot: 'bg-amber-500' },
+            ] as const
+          ).map((c) => (
+            <Link
+              key={c.key}
+              href={hrefWith(params, { ...c.next, page: undefined, order: undefined })}
+              className={cn(chip, 'press', c.on ? 'border-ink bg-ink text-white' : 'border-black/[0.08] bg-white text-slate-700 hover:border-black/20 hover:text-ink')}
+              aria-pressed={c.on}
+              title={t(c.full)}
+            >
+              <span className={cn('size-1.5 rounded-full', c.on ? 'bg-white' : c.dot)} aria-hidden />
+              {t(c.label)}
+            </Link>
           ))}
         </div>
-      )}
-
-      {/* One scrolling row on a phone (it fades out at the edge to show there is more); wrapped on a desktop. */}
-      <div className="fade-end -mx-4 mb-5 flex scroll-px-4 snap-x items-center gap-1 overflow-x-auto px-4 pb-1 max-md:scrollbar-none md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0 md:[mask-image:none]">
-        <nav aria-label={t('Order status')} className="flex items-center gap-0.5 rounded-full bg-black/[0.04] p-1 max-md:shrink-0 md:flex-wrap md:rounded-3xl">
-          {TABS.map((item) => {
-            const count = item.value === 'open' ? openCount : item.value === 'label_created' ? labelReady : item.value !== 'all' ? counts[item.value] : undefined;
-            const active = status === item.value;
-            return (
-              <Link
-                key={item.label}
-                href={hrefWith(params, { status: item.value === 'open' ? undefined : item.value, page: undefined, order: undefined })}
-                aria-current={active ? 'true' : undefined}
-                title={item.hint ? t(item.hint) : undefined}
-                className={cn(tab, 'press', active ? 'bg-white font-medium text-ink shadow-[0_1px_2px_rgba(28,27,25,0.08)]' : 'text-slate-600 hover:text-ink')}
-              >
-                {t(item.label)}
-                {count ? <span className={cn('ml-1.5 font-mono text-xs tabular-nums', active ? 'text-slate-500' : 'text-slate-400')}>{count}</span> : null}
-              </Link>
-            );
-          })}
-        </nav>
-        <span className="mx-2 hidden h-6 w-px shrink-0 bg-black/[0.08] md:block" aria-hidden />
-        {(
-          [
-            { key: 'returning', on: params.returning === '1', next: { returning: params.returning === '1' ? undefined : '1' }, label: msg('Returning customers'), dot: 'bg-violet-500' },
-            { key: 'notes', on: params.notes === '1', next: { notes: params.notes === '1' ? undefined : '1' }, label: msg('With notes'), dot: 'bg-slate-500' },
-            { key: 'important', on: params.notes === 'important', next: { notes: params.notes === 'important' ? undefined : 'important' }, label: msg('Important notes'), dot: 'bg-amber-500' },
-          ] as const
-        ).map((c) => (
-          <Link
-            key={c.key}
-            href={hrefWith(params, { ...c.next, page: undefined, order: undefined })}
-            className={cn(chip, 'press', c.on ? 'border-ink bg-ink text-white' : 'border-black/[0.08] bg-white text-slate-700 hover:border-black/20 hover:text-ink')}
-            aria-pressed={c.on}
-          >
-            <span className={cn('size-1.5 rounded-full', c.on ? 'bg-white' : c.dot)} aria-hidden />
-            {t(c.label)}
-          </Link>
-        ))}
-        <details className="relative ml-auto hidden md:block" open={filtersActive}>
-          <summary className={cn(buttonClass('secondary', 'sm'), 'cursor-pointer list-none')}>
-            <SlidersHorizontal className="size-3.5" /> {t('Filters')}{filtersActive ? ' •' : ''}
-          </summary>
-          {filtersForm('absolute right-0 z-20 mt-2 grid w-[min(92vw,34rem)] grid-cols-2 gap-2 rounded-3xl border border-black/[0.06] bg-white p-4 shadow-[0_16px_40px_-16px_rgba(28,27,25,0.25)]')}
-        </details>
-      </div>
-
-      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
         <Card className="max-md:border-0 max-md:bg-transparent md:overflow-clip">
           <OrdersTable
             rows={tableRows}
@@ -296,7 +300,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             </div>
           </div>
         </Card>
-        <aside className="xl:sticky xl:top-6">{selectedId ? <OrderSheet><OrderPanel orderId={selectedId} /></OrderSheet> : null}</aside>
+        </div>
+        {/* The card scrolls on its own, so Packed and Notes never sit below the page fold. */}
+        <aside className="xl:sticky xl:top-[72px] xl:max-h-[calc(100dvh-88px)] xl:overflow-y-auto xl:overscroll-contain xl:rounded-3xl 2xl:top-6 2xl:max-h-[calc(100dvh-48px)]">
+          {selectedId ? (
+            <OrderSheet>
+              <OrderPanel orderId={selectedId} />
+            </OrderSheet>
+          ) : null}
+        </aside>
       </div>
     </OrderSheetProvider>
   );

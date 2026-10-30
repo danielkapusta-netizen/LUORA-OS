@@ -1,9 +1,9 @@
 'use client';
 
-import { BarChart3, Boxes, ChevronRight, Ellipsis, LayoutDashboard, LogOut, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Tag, Truck, Users } from 'lucide-react';
+import { BarChart3, Boxes, ChevronRight, Ellipsis, LayoutDashboard, LogOut, Menu, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Tag, Truck, Users, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '@/lib/i18n/client';
 import { msg } from '@/lib/i18n/msg';
 import { canSeePath, isRole, ROLE_LABEL } from '@/lib/permissions';
@@ -38,59 +38,178 @@ const initials = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-export function Nav(props: Props) {
-  const { userName, role, mock, taskBadge = 0, logoutAction } = props;
+/** The sidebar's contents: logo, links, language and the signed-in user. Shared by the wide-screen sidebar and the tablet drawer. */
+function SidebarContent({ items, userName, mock, taskBadge = 0, logoutAction, trailing }: Props & { items: typeof ITEMS; /** Shown at the end of the logo row (the drawer's close button). */ trailing?: React.ReactNode }) {
   const pathname = usePathname();
   const t = useT();
-  const items = ITEMS.filter((item) => canSeePath(role, item.href));
   return (
     <>
-      {/* Wide screens: the sidebar. */}
-      <aside className="no-print hidden w-60 shrink-0 flex-col border-r border-black/[0.06] bg-sidebar text-ink md:sticky md:top-0 md:flex md:h-screen">
-        <div className="flex items-center gap-2 px-6 pt-6 pb-5">
-          {/* eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers */}
-          <img src="/logo-dark.png" alt="Luora" className="h-6 w-auto" />
-          {mock && <span className="ml-auto rounded-full bg-butter px-2 py-0.5 text-[10px] font-semibold tracking-wide text-butter-ink uppercase">{t('Demo')}</span>}
+      <div className="flex items-center gap-2 px-6 pt-6 pb-5">
+        {/* eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers */}
+        <img src="/logo-dark.png" alt="Luora" className="h-6 w-auto" />
+        {mock && <span className="ml-auto rounded-full bg-butter px-2 py-0.5 text-[10px] font-semibold tracking-wide text-butter-ink uppercase">{t('Demo')}</span>}
+        {trailing && <span className={cn('-my-2 -mr-3', !mock && 'ml-auto')}>{trailing}</span>}
+      </div>
+      <nav aria-label={t('Main')} className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
+        {items.map(({ href, label, icon: Icon }) => {
+          const active = isActive(pathname, href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'press flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors 2xl:min-h-10',
+                active ? 'bg-sidebar-active font-medium text-ink' : 'text-slate-600 hover:bg-black/[0.035] hover:text-ink',
+              )}
+            >
+              <Icon className="size-[18px]" strokeWidth={active ? 2 : 1.75} aria-hidden />
+              {t(label)}
+              {href === '/tasks' && taskBadge > 0 && (
+                <span className="ml-auto flex min-w-5 items-center justify-center rounded-full bg-ink px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white" title={t('Your tasks due today or late')}>
+                  {taskBadge > 99 ? '99+' : taskBadge}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="space-y-3 p-3">
+        <LanguageSwitcher className="px-2" />
+        <div className="flex items-center gap-3 rounded-2xl border border-black/[0.06] bg-white px-3 py-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-active text-xs font-semibold text-ink">{initials(userName)}</span>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium">{userName}</p>
+          <form action={logoutAction}>
+            <button className="press flex size-9 cursor-pointer items-center justify-center rounded-full text-slate-500 hover:bg-black/[0.05] hover:text-ink" aria-label={t('Sign out')} title={t('Sign out')}>
+              <LogOut className="size-4" aria-hidden />
+            </button>
+          </form>
         </div>
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
-          {items.map(({ href, label, icon: Icon }) => {
-            const active = isActive(pathname, href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex min-h-10 items-center gap-3 rounded-xl px-3 text-sm transition-colors',
-                  active ? 'bg-sidebar-active font-medium text-ink' : 'text-slate-600 hover:bg-black/[0.035] hover:text-ink',
-                )}
-              >
-                <Icon className="size-[18px]" strokeWidth={active ? 2 : 1.75} aria-hidden />
-                {t(label)}
-                {href === '/tasks' && taskBadge > 0 && (
-                  <span className="ml-auto flex min-w-5 items-center justify-center rounded-full bg-ink px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white" title={t('Your tasks due today or late')}>
-                    {taskBadge > 99 ? '99+' : taskBadge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="space-y-3 p-3">
-          <LanguageSwitcher className="px-2" />
-          <div className="flex items-center gap-3 rounded-2xl border border-black/[0.06] bg-white px-3 py-2.5">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sidebar-active text-xs font-semibold text-ink">{initials(userName)}</span>
-            <p className="min-w-0 flex-1 truncate text-sm font-medium">{userName}</p>
-            <form action={logoutAction}>
-              <button className="press flex size-9 cursor-pointer items-center justify-center rounded-full text-slate-500 hover:bg-black/[0.05] hover:text-ink" aria-label={t('Sign out')} title={t('Sign out')}>
-                <LogOut className="size-4" aria-hidden />
-              </button>
-            </form>
-          </div>
-        </div>
+      </div>
+    </>
+  );
+}
+
+export function Nav(props: Props) {
+  const items = ITEMS.filter((item) => canSeePath(props.role, item.href));
+  return (
+    <>
+      {/* Wide screens (from 1536 px): the sidebar is always there. */}
+      <aside className="no-print hidden w-60 shrink-0 flex-col border-r border-black/[0.06] bg-sidebar text-ink 2xl:sticky 2xl:top-0 2xl:flex 2xl:h-screen">
+        <SidebarContent {...props} items={items} />
       </aside>
+      <TabletNav {...props} items={items} />
       <MobileNav {...props} items={items} />
     </>
+  );
+}
+
+/**
+ * Tablets and laptops (768–1535 px, e.g. a Surface Pro in landscape): the sidebar is hidden so the page gets
+ * the full width. A slim translucent bar holds a menu button that slides the sidebar in from the left, over a
+ * dimmed page. It leaves the way it came, closes on a link, Esc, a tap outside or a swipe left, and hands focus
+ * back to the button.
+ */
+function TabletNav(props: Props & { items: typeof ITEMS }) {
+  const { userName } = props;
+  const pathname = usePathname();
+  const t = useT();
+  // Like the phone sheets, the drawer belongs to the page it was opened on, so any navigation closes it.
+  const [openedOn, setOpenedOn] = useState<string | null>(null);
+  const open = openedOn === pathname;
+  const button = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const swipe = useRef<number | null>(null);
+  const wasOpen = useRef(false);
+  const close = useCallback(() => setOpenedOn(null), []);
+
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true;
+      panel.current?.querySelector<HTMLElement>('a[aria-current="page"], a')?.focus();
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') close();
+        // Keep Tab inside the drawer while it is open.
+        if (e.key === 'Tab' && panel.current) {
+          const f = [...panel.current.querySelectorAll<HTMLElement>('a[href],button:not([disabled])')];
+          if (!f.length) return;
+          const first = f[0];
+          const last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      };
+      document.addEventListener('keydown', onKey);
+      return () => document.removeEventListener('keydown', onKey);
+    }
+    if (wasOpen.current) {
+      wasOpen.current = false;
+      button.current?.focus({ preventScroll: true });
+    }
+  }, [open, close]);
+
+  return (
+    <div className="no-print hidden md:block 2xl:hidden">
+      <header className="material-bar sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-black/[0.06] px-3">
+        <button
+          ref={button}
+          type="button"
+          onClick={() => setOpenedOn(pathname)}
+          aria-label={t('Menu')}
+          aria-expanded={open}
+          aria-controls="tablet-drawer"
+          className="press flex size-11 cursor-pointer items-center justify-center rounded-full text-ink hover:bg-black/[0.05]"
+        >
+          <Menu className="size-5" aria-hidden />
+        </button>
+        <Link href="/" aria-label={t('Luora, go to the dashboard')} className="press flex items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers */}
+          <img src="/logo-dark.png" alt="" className="h-5 w-auto" />
+        </Link>
+        <span className="ml-auto flex size-9 items-center justify-center rounded-full bg-white text-xs font-semibold ring-1 ring-black/10" title={userName}>
+          {initials(userName)}
+        </span>
+      </header>
+
+      <div
+        className={cn('fixed inset-0 z-40 bg-ink/25 transition-opacity duration-300 motion-reduce:duration-150', open ? 'opacity-100' : 'pointer-events-none opacity-0')}
+        onClick={close}
+        aria-hidden
+      />
+      <div
+        id="tablet-drawer"
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('Menu')}
+        inert={!open}
+        onPointerDown={(e) => (swipe.current = e.clientX)}
+        onPointerUp={(e) => {
+          if (swipe.current !== null && e.clientX - swipe.current < -60) close();
+          swipe.current = null;
+        }}
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-sidebar text-ink',
+          'transition-transform duration-300 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-opacity motion-reduce:duration-150',
+          // The shadow only while open, so a closed drawer leaves no edge on the page.
+          open ? 'translate-x-0 shadow-[0_24px_64px_-24px_rgba(28,27,25,0.45)]' : '-translate-x-full motion-reduce:translate-x-0 motion-reduce:opacity-0',
+        )}
+      >
+        <SidebarContent
+          {...props}
+          trailing={
+            <button type="button" onClick={close} aria-label={t('Close')} className="press flex size-11 cursor-pointer items-center justify-center rounded-full text-slate-500 hover:bg-black/[0.05] hover:text-ink">
+              <X className="size-5" aria-hidden />
+            </button>
+          }
+        />
+      </div>
+    </div>
   );
 }
 

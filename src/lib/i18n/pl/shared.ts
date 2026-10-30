@@ -306,4 +306,5 @@ export const shared: Record<string, string> = {
   "This is not a Von Halsky account": "To nie jest konto Von Halsky",
   "The order changed meanwhile; reload and try again": "Zamówienie w międzyczasie się zmieniło; odśwież i spróbuj ponownie",
   "View all": "Zobacz wszystko",
+  "Menu": "Menu",
 };
