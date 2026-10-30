@@ -6,7 +6,7 @@ import { ShipmentBadge } from '@/components/badges';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { CustomerSummary, OrderItemsList } from '@/components/order-summary';
 import { buttonClass, Card } from '@/components/ui';
-import { CARRIER_LABELS, formatDate, formatMoney, ordinal, SERVICE_LABELS } from '@/lib/utils';
+import { CARRIER_LABELS, formatDate, ordinal, SERVICE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { invoicesForOrder } from '@/server/services/invoicing';
 import { notesForOrders } from '@/server/services/order-notes';
@@ -76,17 +76,13 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
       {/* Card order: customer, what was bought, how it ships (with the label actions), then notes. */}
       <div className="mt-3 rounded-2xl border border-sky/55 bg-sky-tint p-4">
       <p className="text-xs font-medium text-sky-ink">{t('Order items')}</p>
-      <OrderItemsList items={items.slice(0, 3)} currency={order.currency} className="mt-3" highlightQuantity />
+      <OrderItemsList items={items.slice(0, 3)} className="mt-3" highlightQuantity photoFirst />
       {items.length > 3 && (
         <details className="group mt-2">
           <summary className="cursor-pointer list-none text-center text-xs font-medium text-slate-600 hover:text-ink group-open:hidden">{t('Show all {n} items', { n: items.length })}</summary>
-          <OrderItemsList items={items.slice(3)} currency={order.currency} highlightQuantity />
+          <OrderItemsList items={items.slice(3)} className="mt-2.5" highlightQuantity photoFirst />
         </details>
       )}
-      <div className="mt-3 flex items-center justify-between border-t border-sky-ink/10 pt-3">
-        <span className="text-sm text-slate-500">{order.codAmount ? t('Total (cash on delivery)') : t('Total')}</span>
-        <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
-      </div>
       </div>
 
       <div className="mt-3 rounded-2xl border border-butter/60 bg-butter-tint p-4">
@@ -128,7 +124,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         <div className="mt-4 space-y-2">
           {canShip && (
             <ActionForm action={quickLabelAction.bind(null, order.id)}>
-              <SubmitButton className="w-full" pendingText={t('Requesting label…')}>
+              {/* Empik's green, so the main action on the card stands out. */}
+              <SubmitButton className="w-full bg-gradient-to-br from-[#0f7a50] to-[#0b5e3e] hover:from-[#0b5e3e] hover:to-[#0b5e3e]" pendingText={t('Requesting label…')}>
                 <Truck className="size-4" /> {t('Generate shipping label')}
               </SubmitButton>
             </ActionForm>

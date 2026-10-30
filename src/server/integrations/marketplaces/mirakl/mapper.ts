@@ -222,6 +222,13 @@ function miraklRefunds(o: MiraklOrder): NormalizedRefund[] {
  * @param mediaBase the marketplace URL, used to make relative photo paths loadable.
  * @param profile the marketplace's own field names; Empik when not given.
  */
+/** The biggest photo Mirakl offers (LARGE, then MEDIUM, then anything but SMALL), so it stays sharp when enlarged. */
+function largestMedia<M extends { type?: string | null }>(medias: M[] | null | undefined): M | undefined {
+  if (!medias?.length) return undefined;
+  const of = (type: string) => medias.find((m) => m.type?.toLowerCase() === type);
+  return of('large') ?? of('medium') ?? medias.find((m) => m.type?.toLowerCase() !== 'small') ?? medias[0];
+}
+
 export function mapMiraklOrder(raw: unknown, mediaBase?: string, profile: MiraklProfile = EMPIK_PROFILE): NormalizedOrder {
   const o = miraklOrderSchema.parse(raw);
   const a = o.customer.shipping_address;
@@ -273,7 +280,7 @@ export function mapMiraklOrder(raw: unknown, mediaBase?: string, profile: Mirakl
       quantity: l.quantity,
       unitPrice: money(l.price_unit ?? (l.quantity > 0 ? l.price / l.quantity : l.price)),
       externalProductId: l.offer_id != null ? String(l.offer_id) : null,
-      imageUrl: absoluteUrl((l.product_medias?.find((m) => m.type?.toLowerCase() === 'small') ?? l.product_medias?.[0])?.media_url, mediaBase),
+      imageUrl: absoluteUrl(largestMedia(l.product_medias)?.media_url, mediaBase),
       discountAmount: lineDiscount(l),
     })),
     fees: miraklFees(o, profile.label),

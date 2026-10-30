@@ -70,16 +70,19 @@ export interface SummaryItem {
 /**
  * Products with photo and quantity; prices only when a currency is given.
  * `highlightQuantity` marks lines with more than one piece in yellow, so packers don't miss them.
+ * `photoFirst` is the packing view: a big photo, a small name and the quantity, with no SKU.
  */
 export async function OrderItemsList({
   items,
   currency,
   highlightQuantity,
+  photoFirst = false,
   className,
 }: {
   items: SummaryItem[];
   currency?: string;
   highlightQuantity?: boolean;
+  photoFirst?: boolean;
   className?: string;
 }) {
   const t = await getT();
@@ -87,7 +90,7 @@ export async function OrderItemsList({
     <ul className={cn('space-y-2.5', className)}>
       {items.map((i) => (
         <li key={i.id} className="flex items-center gap-3">
-          <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/5 bg-white">
+          <span className={cn('flex shrink-0 items-center justify-center overflow-hidden border border-black/5 bg-white', photoFirst ? 'size-24 rounded-2xl p-1' : 'size-14 rounded-xl')}>
             {i.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- marketplace CDNs vary; no image optimiser on Workers
               <img src={i.imageUrl} alt="" className="size-full object-contain" loading="lazy" />
@@ -96,7 +99,7 @@ export async function OrderItemsList({
             )}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="line-clamp-2 text-sm leading-snug">{i.name}</p>
+            <p className={cn('leading-snug', photoFirst ? 'line-clamp-3 text-xs text-ink' : 'line-clamp-2 text-sm')}>{i.name}</p>
             <p className="mt-0.5 text-xs text-slate-400">
               {highlightQuantity && i.quantity > 1 ? (
                 <span className="mr-1 inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-sm font-semibold text-amber-800 ring-1 ring-amber-300">
@@ -105,7 +108,7 @@ export async function OrderItemsList({
               ) : (
                 <>{t('Qty {n}', { n: i.quantity })} </>
               )}
-              {i.sku ? `· ${i.sku}` : ''}
+              {!photoFirst && i.sku ? `· ${i.sku}` : ''}
             </p>
           </div>
           {currency && <span className="text-sm font-semibold whitespace-nowrap tabular-nums">{formatMoney(Number(i.unitPrice) * i.quantity, currency)}</span>}

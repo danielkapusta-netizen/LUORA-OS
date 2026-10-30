@@ -77,6 +77,19 @@ describe('mapMiraklOrder', () => {
     expect(mapMiraklOrder(withMedia).items[0].imageUrl).toBeNull();
   });
 
+  it('prefers the largest photo, so it stays sharp when enlarged', () => {
+    const medias = [
+      { media_url: '/img/small', type: 'SMALL' },
+      { media_url: '/img/large', type: 'LARGE' },
+      { media_url: '/img/medium', type: 'MEDIUM' },
+    ];
+    const line = (product_medias: { media_url: string; type: string }[]) => ({ ...order, order_lines: [{ ...order.order_lines[0], product_medias }] });
+    const base = 'https://marketplace.empik.com/api';
+    expect(mapMiraklOrder(line(medias), base).items[0].imageUrl).toBe('https://marketplace.empik.com/img/large');
+    expect(mapMiraklOrder(line(medias.filter((m) => m.type !== 'LARGE')), base).items[0].imageUrl).toBe('https://marketplace.empik.com/img/medium');
+    expect(mapMiraklOrder(line([medias[0]]), base).items[0].imageUrl).toBe('https://marketplace.empik.com/img/small');
+  });
+
   it('is not shippable until accepted and paid', () => {
     expect(mapMiraklOrder({ ...order, order_state: 'WAITING_ACCEPTANCE' }).readyToShip).toBe(false);
     expect(mapMiraklOrder({ ...order, order_state: 'CANCELED' }).cancelled).toBe(true);
