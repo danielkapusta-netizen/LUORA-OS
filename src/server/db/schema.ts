@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { TASK_COMMENT_KINDS, TASK_PRIORITIES, TASK_STATUSES, type ChecklistItem } from '../../lib/tasks/model';
 import type { Address, Buyer, InvoiceRequest, ParcelSpec, SenderSettings } from '../integrations/types';
+import { RECOMMENDATION_STATUSES, type ResearchSource } from '../../lib/pricing-research';
 
 // SQLite on D1: ids are UUID text, timestamps are integer milliseconds, JSON is text.
 const id = () => text('id').primaryKey().$defaultFn(() => crypto.randomUUID());
@@ -566,6 +567,26 @@ export const productListings = sqliteTable(
     uniqueIndex('product_listings_account_external_idx').on(t.accountId, t.externalId),
     index('product_listings_product_idx').on(t.productId),
   ],
+);
+
+/** Research is deliberately separate from marketplace prices; importing it never publishes a price. */
+export const pricingRecommendations = sqliteTable(
+  'pricing_recommendations',
+  {
+    id: id(),
+    productId: text('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+    accountId: text('account_id').notNull().references(() => marketplaceAccounts.id, { onDelete: 'cascade' }),
+    listingId: text('listing_id').references(() => productListings.id, { onDelete: 'set null' }),
+    status: text('status', { enum: RECOMMENDATION_STATUSES }).notNull(),
+    recommendedPrice: text('recommended_price'),
+    observedLuoraPrice: text('observed_luora_price'),
+    rationale: text('rationale').notNull(),
+    sources: json<ResearchSource[]>('sources').notNull(),
+    researchedAt: ts('researched_at').notNull(),
+    runId: text('run_id').notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('pricing_recommendations_product_account_idx').on(t.productId, t.accountId)],
 );
 
 export const stockMovements = sqliteTable(

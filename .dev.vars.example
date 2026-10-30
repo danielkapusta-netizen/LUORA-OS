@@ -11,3 +11,7 @@ ADMIN_PASSWORD=change-me-please
 # Overrides for the vars in wrangler.jsonc
 APP_URL=http://localhost:3000
 INTEGRATIONS_MODE=mock
+
+# Optional: dedicated token (at least 32 random characters) for research imports.
+# Leave blank to disable the research API. Never use NEXT_PUBLIC_ for this secret.
+PRICING_RESEARCH_API_TOKEN=
