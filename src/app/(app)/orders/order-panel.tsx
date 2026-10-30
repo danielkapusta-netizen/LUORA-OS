@@ -74,7 +74,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
 
 
       {/* Delivery and the label actions come first: on a tablet the card's top half is what you work with. */}
-      <div className="mt-3 rounded-2xl bg-sidebar p-4">
+      <div className="mt-3 rounded-2xl border border-butter/60 bg-butter-tint p-4">
         <div className="flex gap-3">
           <Truck className="mt-0.5 size-4 shrink-0 text-slate-400" />
           <div className="min-w-0 flex-1">
@@ -173,7 +173,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
 
       </div>
 
-      <div className="mt-4">
+      {/* Each part of the card has its own pastel, as on the Dashboard: delivery butter, notes peach, items sky. */}
+      <div className="mt-3 rounded-2xl border border-peach/45 bg-peach-tint p-4">
         <OrderNotes
           orderId={order.id}
           orderNumber={order.externalNumber}
@@ -183,12 +184,8 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         />
       </div>
 
-      {/* Items */}
-      <div className="mt-4 flex items-center gap-3">
-        <span className="h-px flex-1 bg-black/[0.06]" />
-        <span className="text-xs font-medium text-slate-500">{t('Order items')}</span>
-        <span className="h-px flex-1 bg-black/[0.06]" />
-      </div>
+      <div className="mt-3 rounded-2xl border border-sky/55 bg-sky-tint p-4">
+      <p className="text-xs font-medium text-sky-ink">{t('Order items')}</p>
       <OrderItemsList items={items.slice(0, 3)} currency={order.currency} className="mt-3" highlightQuantity />
       {items.length > 3 && (
         <details className="group mt-2">
@@ -196,9 +193,10 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
           <OrderItemsList items={items.slice(3)} currency={order.currency} highlightQuantity />
         </details>
       )}
-      <div className="mt-3 flex items-center justify-between border-t border-black/[0.05] pt-3">
+      <div className="mt-3 flex items-center justify-between border-t border-sky-ink/10 pt-3">
         <span className="text-sm text-slate-500">{order.codAmount ? t('Total (cash on delivery)') : t('Total')}</span>
         <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
+      </div>
       </div>
 
       <div className="mt-4 divide-y divide-black/[0.05]">
