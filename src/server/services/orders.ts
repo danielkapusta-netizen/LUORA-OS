@@ -207,7 +207,8 @@ export async function upsertOrders(
       }
       await storeMoneyEvents(tx, account.type, existing.id, n);
 
-      // Fill in product photos for orders imported before photos were stored.
+      // Keep product photos current: fill in ones imported before photos were stored, and replace older ones
+      // (relative Empik paths, or the small Mirakl thumbnail used before the large photo was preferred).
       for (const item of n.items) {
         if (!item.imageUrl) continue;
         await tx
@@ -217,8 +218,7 @@ export async function upsertOrders(
             and(
               eq(orderItems.orderId, existing.id),
               eq(orderItems.externalLineId, item.externalLineId),
-              // Relative paths are Empik photos stored before they were made absolute.
-              or(isNull(orderItems.imageUrl), like(orderItems.imageUrl, '/%')),
+              or(isNull(orderItems.imageUrl), ne(orderItems.imageUrl, item.imageUrl)),
             ),
           );
       }
