@@ -11,7 +11,9 @@ import { requireCapability } from '@/server/auth';
 import type { Product } from '@/server/db/schema';
 import { isPricePlatform, MAX_PRICES_PER_PUSH, PRICE_PLATFORM_LABEL, PRICE_PLATFORMS, pricingView, type PricedListing, type PricePlatform, type PricingRow } from '@/server/services/pricing';
 import { pushPricesAction, refreshPricesAction } from './actions';
-import { PriceCell } from './price-cell';
+import { PriceCell, PriceDraftProvider } from './price-cell';
+import { ResearchCells } from './research-cells';
+import { isResearchMarketplace } from '@/lib/pricing-research';
 import { getT } from '@/lib/i18n/server';
 import { msg } from '@/lib/i18n/msg';
 
@@ -87,6 +89,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const platform: PricePlatform = isPricePlatform(params.platform) ? params.platform : 'shopify';
   const label = PRICE_PLATFORM_LABEL[platform];
+  const showResearch = isResearchMarketplace(platform);
   const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'name';
   const showAll = params.all === '1';
   const view = await pricingView(platform);
@@ -196,7 +199,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
 
             {shown.length === 0 ? (
               <EmptyState title={view.rows.length ? (listed.length === 0 && notListed > 0 ? t('Nothing is listed on {platform} yet', { platform: label }) : t('No product matches the search')) : t('No products yet')}>
-                {view.rows.length ? null : t('Open Inventory and press “Import listings” to load your products from Shopify.')}
+                {view.rows.length ? (notListed > 0 && <Link className="text-brand-700 underline" href={hrefWith(params, { all: '1', page: undefined })}>{t('show {n} not listed here', { n: notListed })}</Link>) : t('Open Inventory and press “Import listings” to load your products from Shopify.')}
               </EmptyState>
             ) : (
               <ActionForm action={pushPricesAction.bind(null, platform)} popup={t('Price update')} showOk={false}>
@@ -223,14 +226,16 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                       <tr>
                         <th className="px-5 py-2 font-medium">{t('Product')}</th>
                         <th className="px-4 py-2 font-medium">{t('Price on {platform} (gross)', { platform: label })}</th>
+                        {showResearch && <><th className="px-4 py-2 font-medium">{t('Recommended price')}</th><th className="px-4 py-2 font-medium">{t('Rationale')}</th></>}
                         {platform !== 'shopify' && <th className="px-4 py-2 font-medium">{t('Shopify price')}</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 max-md:block">
-                      {shown.map(({ product, listings, shopifyPrice }) => (
-                        <tr key={product.id} className="align-top max-md:flex max-md:flex-col max-md:px-4 max-md:py-3">
+                      {shown.map(({ product, listings, shopifyPrice, recommendations }) => (
+                        <PriceDraftProvider key={`${product.id}:${listings.map((l) => `${l.id}:${l.price}`).join(',')}`}>
+                        <tr className="align-top max-md:flex max-md:flex-col max-md:px-4 max-md:py-3">
                           <td className="px-5 py-3 max-md:px-0 max-md:py-1">
-                            <div className="flex min-w-64 items-center gap-3 max-md:min-w-0">
+                            <div className="flex min-w-56 items-center gap-3 max-md:min-w-0">
                               <ProductPhoto product={product} />
                               <div className="min-w-0">
                                 <p className="font-medium leading-snug">{product.name}</p>
@@ -261,6 +266,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                               </div>
                             )}
                           </td>
+                          {showResearch && <ResearchCells recommendations={recommendations} listings={listings} productName={product.name} multipleAccounts={view.accounts.length > 1} />}
                           {platform !== 'shopify' && (
                             <td className="px-4 py-3 whitespace-nowrap max-md:px-0 max-md:py-1 max-md:text-sm max-md:text-slate-500">
                               <span className="md:hidden">{t('Shopify:')} </span>
@@ -269,6 +275,7 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                             </td>
                           )}
                         </tr>
+                        </PriceDraftProvider>
                       ))}
                     </tbody>
                   </table>

@@ -1,5 +1,7 @@
 # Luora OS
 
+Marketplace research recommendations: see [API contract and deployment steps](docs/pricing-research.md).
+
 One place for every order from **Shopify, Allegro, Empik and HEBE**, with shipping labels bought
 through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
 

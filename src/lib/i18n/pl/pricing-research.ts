@@ -1,0 +1,15 @@
+export const pricingResearch: Record<string, string> = {
+  'Recommended price': 'Rekomendowana cena',
+  'Rationale': 'Uzasadnienie',
+  'Last researched': 'Ostatnie sprawdzenie',
+  'Use price': 'Użyj ceny',
+  'Use recommended price for {product}': 'Użyj rekomendowanej ceny dla {product}',
+  'Test proposed price': 'Przetestuj proponowaną cenę',
+  'Keep current price': 'Zachowaj obecną cenę',
+  'Check seller placement': 'Sprawdź głównego sprzedawcę',
+  'Add listing': 'Dodaj ofertę',
+  'Needs verification': 'Wymaga weryfikacji',
+  'No research yet': 'Brak analizy',
+  'Daily research will appear here.': 'Tutaj pojawi się codzienna analiza.',
+  'Recheck before use: research is old or the current price has changed.': 'Sprawdź ponownie: analiza jest nieaktualna lub obecna cena się zmieniła.',
+};

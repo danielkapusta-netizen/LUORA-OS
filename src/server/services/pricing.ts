@@ -1,8 +1,9 @@
 // The Pricing page: every platform's selling price per product, and sending a new price to the platform.
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { parsePrice, samePrice } from '../../lib/price';
+import { isResearchMarketplace } from '../../lib/pricing-research';
 import { getDb } from '../db/client';
-import { marketplaceAccounts, productListings, products } from '../db/schema';
+import { marketplaceAccounts, pricingRecommendations, productListings, products } from '../db/schema';
 import type { PriceUpdate } from '../integrations/types';
 import { getMarketplaceAdapter } from './accounts';
 import { needsMatching } from './inventory';
@@ -40,7 +41,10 @@ export interface PricingRow {
   listings: PricedListing[];
   /** The Shopify price, to compare with on the other platforms. */
   shopifyPrice: string | null;
+  recommendations: PricingRecommendation[];
 }
+
+export type PricingRecommendation = typeof pricingRecommendations.$inferSelect & { accountName: string };
 
 export interface PricingView {
   rows: PricingRow[];
@@ -52,7 +56,7 @@ export interface PricingView {
 
 export async function pricingView(platform: PricePlatform): Promise<PricingView> {
   const db = getDb();
-  const [productRows, listingRows, accounts, pending] = await Promise.all([
+  const [productRows, listingRows, accounts, pending, research] = await Promise.all([
     db.select().from(products).where(isNotNull(products.shopifyVariantId)).orderBy(asc(products.name)),
     db
       .select({
@@ -76,6 +80,9 @@ export async function pricingView(platform: PricePlatform): Promise<PricingView>
       .orderBy(asc(productListings.title)),
     db.select({ id: marketplaceAccounts.id, name: marketplaceAccounts.name }).from(marketplaceAccounts).where(and(eq(marketplaceAccounts.type, platform), eq(marketplaceAccounts.enabled, true))),
     platform === 'shopify' ? Promise.resolve([]) : needsMatching(),
+    isResearchMarketplace(platform) ? db.select({ recommendation: pricingRecommendations, accountName: marketplaceAccounts.name })
+      .from(pricingRecommendations).innerJoin(marketplaceAccounts, eq(marketplaceAccounts.id, pricingRecommendations.accountId))
+      .where(and(eq(marketplaceAccounts.type, platform), eq(marketplaceAccounts.enabled, true))) : Promise.resolve([]),
   ]);
 
   const shopifyPrice = new Map<string, string | null>();
@@ -85,7 +92,9 @@ export async function pricingView(platform: PricePlatform): Promise<PricingView>
     if (marketplace === platform) here.set(productId!, [...(here.get(productId!) ?? []), listing]);
   }
   return {
-    rows: productRows.map((product) => ({ product, listings: here.get(product.id) ?? [], shopifyPrice: shopifyPrice.get(product.id) ?? null })),
+    rows: productRows.map((product) => ({ product, listings: here.get(product.id) ?? [], shopifyPrice: shopifyPrice.get(product.id) ?? null,
+      recommendations: research.filter((r) => r.recommendation.productId === product.id).map((r) => ({ ...r.recommendation, accountName: r.accountName })),
+    })),
     unlinked: pending.filter((l) => l.marketplace === platform).length,
     accounts,
   };
