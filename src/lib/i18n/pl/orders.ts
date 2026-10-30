@@ -128,7 +128,6 @@ export const orders: Record<string, string> = {
   "Not chosen yet": "Jeszcze nie wybrano",
   "Not issued:": "Nie wystawiono:",
   "Open full order": "Otwórz pełne zamówienie",
-  "Order #": "Zamówienie nr",
   "Order items": "Pozycje zamówienia",
   "Packed – moves to Shipped": "Spakowane – przechodzi do Wysłanych",
   "Retry sending tracking": "Ponów wysłanie numeru śledzenia",

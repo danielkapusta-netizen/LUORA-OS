@@ -1,4 +1,4 @@
-import { RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
+import { CircleDashed, Inbox, PauseCircle, RefreshCw, Search, SlidersHorizontal, Tag } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { SubmitButton } from '@/components/forms';
@@ -224,6 +224,28 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       {/* The grid starts right under the header, so the order card begins level with the tabs, not below them. */}
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0">
+        {/* The four open-order counts in the Dashboard's pastels. They sit in the list column, so the card stays at the top. */}
+        <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+          {(
+            [
+              { status: 'new', label: msg('New'), tone: 'bg-sky text-sky-ink', icon: Inbox, count: counts.new ?? 0 },
+              { status: 'processing', label: msg('Processing'), tone: 'bg-blush text-blush-ink', icon: CircleDashed, count: counts.processing ?? 0 },
+              { status: 'label_created', label: msg('Label created'), tone: 'bg-butter text-butter-ink', icon: Tag, count: labelReady },
+              { status: 'on_hold', label: msg('On hold'), tone: 'bg-peach text-peach-ink', icon: PauseCircle, count: counts.on_hold ?? 0 },
+            ] as const
+          ).map(({ status: s, label, tone, icon: Icon, count }) => (
+            <Link
+              key={s}
+              href={hrefWith(params, { status: s, page: undefined, order: undefined })}
+              aria-current={status === s ? 'true' : undefined}
+              className={cn('press lift flex min-h-12 items-center gap-2.5 rounded-2xl px-3.5 py-2', tone, status === s && 'ring-2 ring-ink ring-offset-2 ring-offset-canvas')}
+            >
+              <Icon className="size-4 shrink-0 text-ink" strokeWidth={1.75} aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold tracking-[0.08em] uppercase">{t(label)}</span>
+              <span className="font-mono text-xl font-medium tabular-nums text-ink">{count}</span>
+            </Link>
+          ))}
+        </div>
         {errors.length > 0 && (
           <div className="mb-4 space-y-2">
             {errors.map((a) => (
