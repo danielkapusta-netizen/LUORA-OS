@@ -125,7 +125,7 @@ export async function OrderNotes({
         {notes.length > 0 && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">{notes.length}</span>}
       </p>
       <ActionForm action={addNoteAction.bind(null, orderId)} resetOnSuccess showOk={false} className="mt-2 space-y-2">
-        <Textarea name="note" rows={2} maxLength={NOTE_MAX} placeholder={t('Leave an internal note for the team…')} required aria-label={t('Note on order {number}', { number: orderNumber })} />
+        <Textarea name="note" rows={1} className="min-h-10 resize-none transition-[min-height] duration-200 focus:min-h-20" maxLength={NOTE_MAX} placeholder={t('Leave an internal note for the team…')} required aria-label={t('Note on order {number}', { number: orderNumber })} />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <SubmitButton size="sm" variant="secondary" pendingText={t('Saving…')}>
             {t('Add note')}

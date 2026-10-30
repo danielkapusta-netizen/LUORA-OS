@@ -44,8 +44,9 @@ export interface OrderRow {
   shipment: { id: string; state: string; trackingNumber: string | null; carrier: string; hasLabel: boolean; packed: boolean } | null;
 }
 
-const th = 'px-3 py-3 text-left text-xs font-medium text-slate-500';
-const td = 'px-3 py-4 text-sm';
+// Tighter cells below 1536 px, so all eight columns fit beside the order card on a tablet (e.g. a Surface Pro, 1368 px wide).
+const th = 'px-2 py-3 text-left text-xs font-medium text-slate-500 2xl:px-3';
+const td = 'px-2 py-3.5 text-sm 2xl:px-3 2xl:py-4';
 
 function shortDate(iso: string, locale: Locale): string {
   return new Intl.DateTimeFormat(intlTag(locale), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' }).format(new Date(iso));
@@ -76,7 +77,7 @@ function ProductList({ products }: { products: OrderRow['products'] }) {
   const t = useT();
   if (!products.length) return <span className="text-slate-400">—</span>;
   return (
-    <ul className={cn('w-44 space-y-0.5 text-xs text-slate-500 2xl:w-52', products.length > 3 && 'leading-tight')} title={products.map((p) => `${p.quantity}× ${p.name}`).join('\n')}>
+    <ul className={cn('w-40 space-y-0.5 text-xs text-slate-500 2xl:w-52', products.length > 3 && 'leading-tight')} title={products.map((p) => `${p.quantity}× ${p.name}`).join('\n')}>
       {products.slice(0, SHOWN).map((p, i) => (
         <li key={i} className="flex gap-1">
           {p.quantity > 1 && <span className="shrink-0 font-medium tabular-nums text-slate-700">{p.quantity}×</span>}
@@ -266,7 +267,7 @@ export function OrdersTable({
               <th className={th}>{t('Products')}</th>
               <th className={th}>{t('Customer')}</th>
               <th className={th}>{t('Source')}</th>
-              <th className={cn(th, 'hidden 2xl:table-cell')}>{t('Courier')}</th>
+              <th className={cn(th, 'hidden lg:table-cell')}>{t('Courier')}</th>
               <th className={th}>{t('Status')}</th>
               <th className={cn(th, 'pr-5 text-right')}>{t('Total')}</th>
             </tr>
@@ -301,7 +302,7 @@ export function OrdersTable({
                     <ProductList products={r.products} />
                   </td>
                   <td className={td}>
-                    <div className="flex min-w-44 max-w-72 flex-wrap items-center gap-x-1.5 gap-y-1 font-medium text-ink">
+                    <div className="flex min-w-40 max-w-72 flex-wrap items-center gap-x-1.5 gap-y-1 font-medium text-ink">
                       {r.customerId ? (
                         <Link
                           href={`/customers/${r.customerId}`}
@@ -344,8 +345,8 @@ export function OrdersTable({
                   <td className={td}>
                     <MarketplaceBadge marketplace={r.marketplace} />
                   </td>
-                  <td className={cn(td, 'hidden 2xl:table-cell')}>
-                    <span className="line-clamp-2 w-40 text-slate-600" title={r.courier ?? undefined}>
+                  <td className={cn(td, 'hidden lg:table-cell')}>
+                    <span className="line-clamp-2 w-32 text-slate-600 2xl:w-40" title={r.courier ?? undefined}>
                       {r.courier ?? <span className="text-slate-400">—</span>}
                     </span>
                   </td>

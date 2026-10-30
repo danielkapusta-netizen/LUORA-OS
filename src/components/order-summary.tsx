@@ -13,11 +13,25 @@ function initials(name: string): string {
 }
 
 /** Buyer's name, and whether the parcel goes to them or to someone else. */
-export async function CustomerSummary({ buyerName, recipientName, href, className }: { buyerName: string; recipientName: string; /** The customer's account, when known. */ href?: string; className?: string }) {
+export async function CustomerSummary({
+  buyerName,
+  recipientName,
+  href,
+  compact = false,
+  className,
+}: {
+  buyerName: string;
+  recipientName: string;
+  /** The customer's account, when known. */
+  href?: string;
+  /** A shorter block for the order card, where the label actions need the room. */
+  compact?: boolean;
+  className?: string;
+}) {
   const t = await getT();
   return (
-    <div className={cn('flex items-center gap-3 rounded-2xl bg-sidebar p-4', className)}>
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-base font-semibold text-brand-700">
+    <div className={cn('flex items-center gap-3 rounded-2xl bg-sidebar', compact ? 'px-3 py-2.5' : 'p-4', className)}>
+      <span className={cn('flex shrink-0 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-700', compact ? 'size-9 text-sm' : 'size-12 text-base')}>
         {initials(buyerName)}
       </span>
       <div className="min-w-0 flex-1">
@@ -28,7 +42,7 @@ export async function CustomerSummary({ buyerName, recipientName, href, classNam
         ) : (
           <p className="truncate font-medium">{buyerName}</p>
         )}
-        <div className="mt-1.5 flex items-center gap-1.5 text-sm">
+        <div className={cn('flex items-center gap-1.5', compact ? 'mt-0.5 text-xs' : 'mt-1.5 text-sm')}>
           <UserRound className="size-3.5 shrink-0 text-slate-400" />
           {recipientName === buyerName ? (
             <span className="text-slate-500">{t('Recipient is the buyer')}</span>

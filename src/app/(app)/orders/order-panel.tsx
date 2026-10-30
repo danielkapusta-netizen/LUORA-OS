@@ -6,7 +6,7 @@ import { MarketplaceBadge, ShipmentBadge, StatusBadge } from '@/components/badge
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { CustomerSummary, OrderItemsList } from '@/components/order-summary';
 import { buttonClass, Card } from '@/components/ui';
-import { CARRIER_LABELS, cn, formatDate, formatMoney, ordinal, SERVICE_LABELS } from '@/lib/utils';
+import { CARRIER_LABELS, formatDate, formatMoney, ordinal, SERVICE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import { invoicesForOrder } from '@/server/services/invoicing';
 import { notesForOrders } from '@/server/services/order-notes';
@@ -57,35 +57,24 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
   const returning = (await returningInfo([{ id: order.id, customerId: order.customerId, placedAt: order.placedAt }])).get(order.id);
 
   return (
-    <Card className="p-6 max-xl:border-0 max-xl:bg-transparent max-xl:p-0 max-xl:shadow-none">
+    <Card className="p-4 2xl:p-6 max-xl:border-0 max-xl:bg-transparent max-xl:p-0 max-xl:shadow-none">
       <AutoRefresh active={waiting} />
-      <CustomerSummary buyerName={order.buyer.name} recipientName={a.name} href={order.customerId ? `/customers/${order.customerId}` : undefined} />
+      <CustomerSummary compact buyerName={order.buyer.name} recipientName={a.name} href={order.customerId ? `/customers/${order.customerId}` : undefined} />
       {returning && order.customerId && (
         <Link
           href={`/customers/${order.customerId}`}
-          className="mt-3 flex items-center justify-between gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900 hover:border-violet-300"
+          className="mt-2 flex items-center justify-between gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm text-violet-900 hover:border-violet-300"
         >
           <span className="font-semibold">{t('Returning customer · {ordinal} order', { ordinal: ordinal(returning.orderNumber, t.locale) })}</span>
           <span className="text-xs">{t('first ordered {date}', { date: formatDate(returning.firstOrderAt, false, t.locale) })} →</span>
         </Link>
       )}
 
-      <ImportantNotes notes={notes.filter((n) => n.pinned)} className="mt-3" />
+      <ImportantNotes notes={notes.filter((n) => n.pinned)} className="mt-2" />
 
-      {/* Items */}
-      <div className="mt-4 flex items-center gap-3">
-        <span className="h-px flex-1 bg-black/[0.06]" />
-        <span className="text-xs font-medium text-slate-500">{t('Order items')}</span>
-        <span className="h-px flex-1 bg-black/[0.06]" />
-      </div>
-      <OrderItemsList items={items} currency={order.currency} className="mt-3" highlightQuantity />
-      <div className="mt-3 flex items-center justify-between border-t border-black/[0.05] pt-3">
-        <span className="text-sm text-slate-500">{order.codAmount ? t('Total (cash on delivery)') : t('Total')}</span>
-        <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
-      </div>
 
-      {/* Delivery method and actions */}
-      <div className="mt-4 rounded-2xl bg-sidebar p-4">
+      {/* Delivery and the label actions come first: on a tablet the card's top half is what you work with. */}
+      <div className="mt-3 rounded-2xl bg-sidebar p-4">
         <div className="flex gap-3">
           <Truck className="mt-0.5 size-4 shrink-0 text-slate-400" />
           <div className="min-w-0 flex-1">
@@ -143,24 +132,24 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
             </div>
           )}
           {live?.state === 'created' && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 items-center gap-2">
               <PrintLabelButton className={buttonClass('primary')} href={`/api/labels/${live.id}`}>
                 <Printer className="size-4" /> {t('Print label')}
               </PrintLabelButton>
-              {live.trackingUrl ? (
-                <a className={cn(buttonClass('secondary'), 'bg-white')} href={live.trackingUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink className="size-4" /> {t('Track')}
-                </a>
-              ) : (
-                <span />
-              )}
+              <div className="flex justify-end">
+                <PackedToggle shipmentId={live.id} packed={Boolean(live.packedAt)} />
+              </div>
             </div>
           )}
           {live?.state === 'created' && (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs text-slate-500">{live.packedAt ? t('Packed – moves to Shipped') : t('Tick when packed; the order stays where it is until then')}</span>
-              <PackedToggle shipmentId={live.id} packed={Boolean(live.packedAt)} />
-            </div>
+            <p className="flex items-center justify-between gap-2 text-xs text-slate-500">
+              <span>{live.packedAt ? t('Packed – moves to Shipped') : t('Tick when packed; the order stays where it is until then')}</span>
+              {live.trackingUrl && (
+                <a className="inline-flex shrink-0 items-center gap-1 font-medium text-ink underline-offset-4 hover:underline" href={live.trackingUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="size-3.5" /> {t('Track')}
+                </a>
+              )}
+            </p>
           )}
           {live?.error && <p className="text-xs text-red-700">{live.error}</p>}
           {live?.state === 'created' &&
@@ -183,6 +172,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         </div>
 
       </div>
+
       <div className="mt-4">
         <OrderNotes
           orderId={order.id}
@@ -193,7 +183,25 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         />
       </div>
 
-      <div className="mt-3 divide-y divide-black/[0.05]">
+      {/* Items */}
+      <div className="mt-4 flex items-center gap-3">
+        <span className="h-px flex-1 bg-black/[0.06]" />
+        <span className="text-xs font-medium text-slate-500">{t('Order items')}</span>
+        <span className="h-px flex-1 bg-black/[0.06]" />
+      </div>
+      <OrderItemsList items={items.slice(0, 3)} currency={order.currency} className="mt-3" highlightQuantity />
+      {items.length > 3 && (
+        <details className="group mt-2">
+          <summary className="cursor-pointer list-none text-center text-xs font-medium text-slate-600 hover:text-ink group-open:hidden">{t('Show all {n} items', { n: items.length })}</summary>
+          <OrderItemsList items={items.slice(3)} currency={order.currency} highlightQuantity />
+        </details>
+      )}
+      <div className="mt-3 flex items-center justify-between border-t border-black/[0.05] pt-3">
+        <span className="text-sm text-slate-500">{order.codAmount ? t('Total (cash on delivery)') : t('Total')}</span>
+        <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
+      </div>
+
+      <div className="mt-4 divide-y divide-black/[0.05]">
         <InfoRow icon={Store} label={t('Source')}>
           <span className="flex items-center gap-2">
             <MarketplaceBadge marketplace={order.marketplace} />
