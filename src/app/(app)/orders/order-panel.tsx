@@ -1,8 +1,8 @@
-import { BadgeCheck, ExternalLink, FileText, Hash, MapPin, Printer, Store, Truck } from 'lucide-react';
+import { ExternalLink, FileText, MapPin, Printer, Store, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { PrintLabelButton } from '@/components/print-label-button';
-import { MarketplaceBadge, ShipmentBadge, StatusBadge } from '@/components/badges';
+import { ShipmentBadge } from '@/components/badges';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { CustomerSummary, OrderItemsList } from '@/components/order-summary';
 import { buttonClass, Card } from '@/components/ui';
@@ -73,7 +73,22 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
       <ImportantNotes notes={notes.filter((n) => n.pinned)} className="mt-2" />
 
 
-      {/* Delivery and the label actions come first: on a tablet the card's top half is what you work with. */}
+      {/* Card order: customer, what was bought, how it ships (with the label actions), then notes. */}
+      <div className="mt-3 rounded-2xl border border-sky/55 bg-sky-tint p-4">
+      <p className="text-xs font-medium text-sky-ink">{t('Order items')}</p>
+      <OrderItemsList items={items.slice(0, 3)} currency={order.currency} className="mt-3" highlightQuantity />
+      {items.length > 3 && (
+        <details className="group mt-2">
+          <summary className="cursor-pointer list-none text-center text-xs font-medium text-slate-600 hover:text-ink group-open:hidden">{t('Show all {n} items', { n: items.length })}</summary>
+          <OrderItemsList items={items.slice(3)} currency={order.currency} highlightQuantity />
+        </details>
+      )}
+      <div className="mt-3 flex items-center justify-between border-t border-sky-ink/10 pt-3">
+        <span className="text-sm text-slate-500">{order.codAmount ? t('Total (cash on delivery)') : t('Total')}</span>
+        <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
+      </div>
+      </div>
+
       <div className="mt-3 rounded-2xl border border-butter/60 bg-butter-tint p-4">
         <div className="flex gap-3">
           <Truck className="mt-0.5 size-4 shrink-0 text-slate-400" />
@@ -184,38 +199,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         />
       </div>
 
-      <div className="mt-3 rounded-2xl border border-sky/55 bg-sky-tint p-4">
-      <p className="text-xs font-medium text-sky-ink">{t('Order items')}</p>
-      <OrderItemsList items={items.slice(0, 3)} currency={order.currency} className="mt-3" highlightQuantity />
-      {items.length > 3 && (
-        <details className="group mt-2">
-          <summary className="cursor-pointer list-none text-center text-xs font-medium text-slate-600 hover:text-ink group-open:hidden">{t('Show all {n} items', { n: items.length })}</summary>
-          <OrderItemsList items={items.slice(3)} currency={order.currency} highlightQuantity />
-        </details>
-      )}
-      <div className="mt-3 flex items-center justify-between border-t border-sky-ink/10 pt-3">
-        <span className="text-sm text-slate-500">{order.codAmount ? t('Total (cash on delivery)') : t('Total')}</span>
-        <span className="text-base font-semibold tabular-nums">{formatMoney(order.totalAmount, order.currency)}</span>
-      </div>
-      </div>
-
       <div className="mt-4 divide-y divide-black/[0.05]">
-        <InfoRow icon={Store} label={t('Source')}>
-          <span className="flex items-center gap-2">
-            <MarketplaceBadge marketplace={order.marketplace} />
-            <span className="truncate text-slate-600">{account.name}</span>
-          </span>
-        </InfoRow>
-        <InfoRow icon={Hash} label={t('Order #')}>
-          <span className="font-medium">{order.externalNumber}</span>
-          <span className="text-slate-500"> · {formatDate(order.placedAt, true, t.locale)}</span>
-        </InfoRow>
-        <InfoRow icon={BadgeCheck} label={t('Status')}>
-          <span className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={order.status} />
-            <span className="text-xs text-slate-500">{account.name}: {order.marketplaceStatus}</span>
-          </span>
-        </InfoRow>
         {!order.invoiceRequest && invoice && (invoice.state === 'issued' || invoice.state === 'pending') && (
           <InfoRow icon={FileText} label={t('Invoice')}>
             {invoice.state === 'pending' ? (
