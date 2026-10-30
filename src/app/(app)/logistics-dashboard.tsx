@@ -1,35 +1,31 @@
-import { Truck } from 'lucide-react';
-import { BriefCard } from '@/components/analytics/blocks';
-import { Card, CardBody, CardHeader, td, th } from '@/components/ui';
-import { buildLogisticsBrief, warsawHour } from '@/lib/logistics-brief';
+import { Inbox, Truck } from 'lucide-react';
+import { Card, CardBody, CardHeader, StatTile, td, th } from '@/components/ui';
 import { today as warsawToday } from '@/lib/tasks/dates';
-import { dueState } from '@/lib/tasks/model';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/server/auth';
-import { labelReadyCount, ordersToShipByCourier, statusCounts } from '@/server/services/orders';
+import { ordersToShipByCourier, statusCounts } from '@/server/services/orders';
 import { listTasks } from '@/server/services/tasks';
 import { TASK_LIMIT } from '@/components/tasks/my-tasks-heading';
-import { Greeting, OpenOrderTiles, TasksPanel } from './dashboard-parts';
+import { Greeting, TasksPanel } from './dashboard-parts';
 import { getT } from '@/lib/i18n/server';
 
-/** The Dashboard for roles without analytics: orders to do, tasks, and who is carrying the parcels. No money anywhere. */
+/**
+ * The Dashboard for roles without analytics, built around packing: how many new orders wait, which couriers
+ * they go with, and the person's tasks. No money anywhere.
+ */
 export async function LogisticsDashboard({ user }: { user: SessionUser }) {
   const t = await getT();
-  const [counts, labelReady, couriers, tasks] = await Promise.all([statusCounts(), labelReadyCount(), ordersToShipByCourier(), listTasks({ assignee: user.id, status: 'open', limit: TASK_LIMIT })]);
+  const [counts, couriers, tasks] = await Promise.all([statusCounts(), ordersToShipByCourier(), listTasks({ assignee: user.id, status: 'open', limit: TASK_LIMIT })]);
   const todayKey = warsawToday();
   const firstName = user.name.split(' ')[0];
-  const due = tasks.filter((item) => ['overdue', 'today'].includes(dueState(item, todayKey)));
-  const brief = buildLogisticsBrief({ counts, couriers, tasksDue: due.length, tasksOpen: tasks.length }, firstName, warsawHour());
 
   return (
     <div className="space-y-6 md:space-y-8">
       <Greeting name={firstName} />
 
-      <OpenOrderTiles counts={counts} labelReady={labelReady} />
-
-      <BriefCard brief={brief} atStake={0} />
-
-      <div className="grid grid-cols-1 items-start gap-4 md:gap-5 lg:grid-cols-2">
+      {/* New orders to pack, with the couriers they go out with right beside them. */}
+      <div className="grid grid-cols-1 items-start gap-4 md:gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <StatTile href="/orders?status=new" tone="sky" icon={Inbox} label={t('New')} value={counts.new ?? 0} caption={t('Waiting to be picked up')} />
         <Card className="overflow-x-auto">
           <CardHeader icon={Truck} title={t('Parcels by courier')} description={t('Orders still to be sent, by the delivery method the buyer chose.')} />
           {couriers.length === 0 ? (
@@ -57,9 +53,9 @@ export async function LogisticsDashboard({ user }: { user: SessionUser }) {
             </table>
           )}
         </Card>
-
-        <TasksPanel tasks={tasks} today={todayKey} limit={TASK_LIMIT} show={6} />
       </div>
+
+      <TasksPanel tasks={tasks} today={todayKey} limit={TASK_LIMIT} show={6} />
     </div>
   );
 }
