@@ -217,4 +217,5 @@ export const orders: Record<string, string> = {
   "Open customer": "Otwórz klienta",
   "Show all {n} items": "Pokaż wszystkie pozycje ({n})",
   "Returning": "Powracający",
+  "Mark packed": "Oznacz jako spakowane",
 };
