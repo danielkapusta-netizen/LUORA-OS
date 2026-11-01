@@ -45,6 +45,23 @@ export function nextWorkingDays(now: Date, count: number, includeToday = false):
   return days;
 }
 
+/** Midnight in Warsaw at the start of `day`, as a moment. */
+function warsawMidnight(day: string): Date {
+  const utc = new Date(`${day}T00:00:00Z`);
+  const offsetMs = new Date(utc.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' })).getTime() - new Date(utc.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+  return new Date(utc.getTime() - offsetMs);
+}
+
+/**
+ * Labels made since the start of the previous working day wait for a courier: yesterday and today,
+ * and on a Monday also Friday and the weekend.
+ */
+export function pickupWindowStart(now: Date): Date {
+  let day = addDays(today(now), -1);
+  while (!isWorkingDay(day)) day = addDays(day, -1);
+  return warsawMidnight(day);
+}
+
 /** After this hour (Warsaw) a same-day InPost pickup is no longer offered. */
 export const SAME_DAY_CUTOFF_HOUR = 12;
 

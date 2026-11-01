@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commonSlots, dateOnlySlots, nextWorkingDays, parseSlotKey, pickupCourierOf, slotKey } from '@/lib/pickup-slots';
+import { commonSlots, dateOnlySlots, nextWorkingDays, parseSlotKey, pickupCourierOf, pickupWindowStart, slotKey } from '@/lib/pickup-slots';
 
 describe('pickup slots', () => {
   it('keeps only the windows every parcel is offered, earliest first', () => {
@@ -38,5 +38,14 @@ describe('pickup slots', () => {
     // Couriers without a column.
     expect(pickupCourierOf('Allegro One Box, One Kurier', 'ALLEGRO')).toBeNull();
     expect(pickupCourierOf('Allegro Pocztex Kurier', 'POCZTA_POLSKA')).toBeNull();
+  });
+
+  it('lists labels from the previous working day and today', () => {
+    // Wednesday 4 Nov 2026 (winter time, UTC+1): from Tuesday 00:00 Warsaw.
+    expect(pickupWindowStart(new Date('2026-11-04T08:00:00Z')).toISOString()).toBe('2026-11-02T23:00:00.000Z');
+    // Monday 2 Nov: from Friday, so the weekend's labels are included.
+    expect(pickupWindowStart(new Date('2026-11-02T08:00:00Z')).toISOString()).toBe('2026-10-29T23:00:00.000Z');
+    // Summer time (UTC+2).
+    expect(pickupWindowStart(new Date('2026-07-15T08:00:00Z')).toISOString()).toBe('2026-07-13T22:00:00.000Z');
   });
 });
