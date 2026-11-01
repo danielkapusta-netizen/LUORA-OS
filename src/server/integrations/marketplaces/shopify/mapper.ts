@@ -210,17 +210,23 @@ function shopifyRefunds(o: ShopifyOrder, currency: string): NormalizedRefund[] {
 
 /**
  * Shopify has no built-in parcel locker field. Checkout apps usually store the locker
- * in a note attribute; some put it in the shipping line title instead.
+ * in a note attribute; some put it in the shipping line title instead. Apps often save
+ * several attributes (address, name, code), so every matching one is searched for a code.
+ * Only a locker code is returned: InPost rejects an address as the target point.
  */
 function extractPickupPoint(o: ShopifyOrder, keys: string[]): string | null {
   const wanted = keys.map((k) => k.toLowerCase());
-  for (const attr of o.customAttributes) {
-    if (!attr.value) continue;
-    if (wanted.some((k) => attr.key.toLowerCase().includes(k))) {
-      return findLockerCode(attr.value) ?? attr.value.trim();
-    }
+  const attrs = o.customAttributes.filter((a) => a.value);
+  for (const attr of attrs) {
+    if (!wanted.some((k) => attr.key.toLowerCase().includes(k))) continue;
+    const code = findLockerCode(attr.value);
+    if (code) return code;
   }
   const title = o.shippingLine?.title;
-  if (title && LOCKER_SHIPPING.test(title)) return findLockerCode(title);
+  if (!title || !LOCKER_SHIPPING.test(title)) return null;
+  for (const text of [title, ...attrs.map((a) => a.value)]) {
+    const code = findLockerCode(text);
+    if (code) return code;
+  }
   return null;
 }

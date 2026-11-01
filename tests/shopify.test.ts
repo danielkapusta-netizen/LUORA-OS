@@ -40,6 +40,16 @@ describe('mapShopifyOrder', () => {
     expect(o.items[1].sku).toBeNull();
   });
 
+  it('reads the locker code when a pickup-point plugin saves the address first', () => {
+    const attrs = (customAttributes: { key: string; value: string }[]) => mapShopifyOrder({ ...order, customAttributes }).pickupPointId;
+    expect(attrs([
+      { key: 'pickup_point_address', value: 'Aleja Jordana 16, 95-083 Lutomiersk' },
+      { key: 'pickup_point_id', value: 'LUT02M' },
+    ])).toBe('LUT02M');
+    expect(attrs([{ key: 'inpost_point', value: 'PL_LUT02M' }])).toBe('LUT02M');
+    expect(attrs([{ key: 'pickup_point', value: 'Aleja Jordana 16, 95-083 Lutomiersk' }])).toBeNull();
+  });
+
   it('treats cash on delivery as ready even when unpaid', () => {
     const o = mapShopifyOrder({ ...order, displayFinancialStatus: 'PENDING', paymentGatewayNames: ['Cash on Delivery (COD)'] });
     expect(o.readyToShip).toBe(true);
