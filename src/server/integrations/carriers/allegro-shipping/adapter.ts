@@ -5,7 +5,17 @@ import type { CarrierSettings } from '../../../db/schema';
 import { parseRetryAfter } from '../../../http';
 import { describeAllegroErrors, type AllegroClient } from '../../marketplaces/allegro/client';
 import type { LabelFormat, LabelSize } from '../../types';
-import { inpostTrackingUrl, type CarrierAdapter, type CarrierService, type DeliveryStatus, type ShipmentRequest, type ShipmentStatus } from '../types';
+import {
+  inpostTrackingUrl,
+  type CarrierAdapter,
+  type CarrierService,
+  type DeliveryStatus,
+  type PickupAddressInput,
+  type PickupSlot,
+  type PickupStatus,
+  type ShipmentRequest,
+  type ShipmentStatus,
+} from '../types';
 import { msg } from '@/lib/i18n/msg';
 
 /** Service id meaning "use the delivery method from the Allegro order". */
@@ -16,6 +26,30 @@ interface CreateCommandStatus {
   status: 'IN_PROGRESS' | 'SUCCESS' | 'ERROR';
   errors?: { code?: string; message?: string; userMessage?: string; path?: string }[];
   shipmentId?: string | null;
+}
+
+interface PickupCommandStatus {
+  status: 'IN_PROGRESS' | 'SUCCESS' | 'ERROR';
+  errors?: { code?: string; message?: string; userMessage?: string; path?: string }[];
+  pickupId?: string | null;
+  carrierPickupId?: string | null;
+}
+
+/** Allegro takes at most 100 shipments per pickup-proposals request. */
+const PROPOSALS_PER_REQUEST = 100;
+
+/** The pickup address as Allegro's AddressDto. */
+export function pickupAddressBody(a: PickupAddressInput) {
+  return {
+    name: a.name?.trim() || undefined,
+    company: a.company?.trim() || undefined,
+    street: a.street.trim(),
+    postalCode: a.postalCode.trim(),
+    city: a.city.trim(),
+    countryCode: a.countryCode.trim().toUpperCase(),
+    email: a.email.trim(),
+    phone: allegroPhone(a.phone, a.countryCode),
+  };
 }
 
 interface AllegroShipment {
@@ -246,5 +280,44 @@ export class AllegroShippingAdapter implements CarrierAdapter {
     const latest = [...statuses].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)).at(-1);
     if (!latest) return 'unknown';
     return TRACKING_CODES[latest.code] ?? 'in_transit';
+  }
+
+  async pickupProposals(externalIds: string[], address: PickupAddressInput): Promise<Map<string, PickupSlot[]>> {
+    const slots = new Map<string, PickupSlot[]>();
+    for (let i = 0; i < externalIds.length; i += PROPOSALS_PER_REQUEST) {
+      const data = await this.client.call<{ proposals?: { shipmentId: string; pickupTimes?: PickupSlot[] | null }[] }[]>(
+        'POST',
+        '/shipment-management/pickup-proposals',
+        { body: { shipmentIds: externalIds.slice(i, i + PROPOSALS_PER_REQUEST), address: pickupAddressBody(address) } },
+      );
+      for (const group of data) {
+        for (const p of group.proposals ?? []) {
+          slots.set(p.shipmentId, (p.pickupTimes ?? []).map((t) => ({ date: t.date, minTime: t.minTime ?? null, maxTime: t.maxTime ?? null })));
+        }
+      }
+    }
+    return slots;
+  }
+
+  async createPickup(commandId: string, externalIds: string[], slot: PickupSlot, address: PickupAddressInput): Promise<PickupStatus> {
+    // InPost offers no windows: Allegro then wants the date alone.
+    const pickupTime = slot.minTime && slot.maxTime ? { date: slot.date, minTime: slot.minTime, maxTime: slot.maxTime } : { date: slot.date };
+    const response = await this.client.callWithHeaders('POST', '/shipment-management/pickups/create-commands', {
+      body: { commandId, input: { shipmentIds: externalIds, pickupTime, address: pickupAddressBody(address) } },
+    });
+    return { state: 'pending', retryAfterSeconds: (parseRetryAfter(response.headers.get('retry-after')) ?? 2000) / 1000 };
+  }
+
+  async pickupStatus(commandId: string): Promise<PickupStatus> {
+    const response = await this.client.callWithHeaders<PickupCommandStatus>('GET', `/shipment-management/pickups/create-commands/${commandId}`);
+    const command = response.data;
+    if (command.status === 'ERROR') {
+      console.error('[allegro-shipping] pickup command failed', commandId, JSON.stringify(command.errors));
+      return { state: 'failed', error: describeAllegroErrors(command.errors) ?? 'Allegro rejected the pickup' };
+    }
+    if (command.status !== 'SUCCESS') {
+      return { state: 'pending', retryAfterSeconds: (parseRetryAfter(response.headers.get('retry-after')) ?? 2000) / 1000 };
+    }
+    return { state: 'booked', pickupId: command.pickupId ?? null, carrierPickupId: command.carrierPickupId ?? null };
   }
 }

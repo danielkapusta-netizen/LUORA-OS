@@ -3,12 +3,21 @@ import { ActionForm, SubmitButton } from '@/components/forms';
 import { Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, Select } from '@/components/ui';
 import { MARKETPLACE_LABELS, SERVICE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
-import type { CarrierAccount, PackagePreset, ShippingRule } from '@/server/db/schema';
+import type { CarrierAccount, PackagePreset, PickupAddress, ShippingRule } from '@/server/db/schema';
 import { BUYER_CHOICE } from '@/server/integrations/carriers/allegro-shipping/adapter';
 import { INPOST_SERVICES } from '@/server/integrations/carriers/inpost/adapter';
 import { describeConditions } from '@/server/services/routing';
+import { listPickupAddresses } from '@/server/services/pickups';
 import { loadRoutingData } from '@/server/services/shipping';
-import { createDefaultRulesAction, deletePresetAction, deleteRuleAction, savePresetAction, saveRuleAction } from '../actions';
+import {
+  createDefaultRulesAction,
+  deletePickupAddressAction,
+  deletePresetAction,
+  deleteRuleAction,
+  savePickupAddressAction,
+  savePresetAction,
+  saveRuleAction,
+} from '../actions';
 import { getT } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -131,10 +140,51 @@ async function PresetForm({ preset }: { preset?: PackagePreset }) {
   );
 }
 
+async function PickupAddressForm({ address }: { address?: PickupAddress }) {
+  const t = await getT();
+  return (
+    <ActionForm action={savePickupAddressAction.bind(null, address?.id ?? null)} className="grid grid-cols-1 gap-3 sm:grid-cols-6">
+      <Field label={t('Name of this place')} className="sm:col-span-2">
+        <Input name="label" defaultValue={address?.label ?? ''} placeholder={t('e.g. Warehouse')} required />
+      </Field>
+      <Field label={t('Contact person')} className="sm:col-span-2">
+        <Input name="name" defaultValue={address?.name ?? ''} autoComplete="name" />
+      </Field>
+      <Field label={t('Company')} className="sm:col-span-2">
+        <Input name="company" defaultValue={address?.company ?? ''} autoComplete="organization" />
+      </Field>
+      <Field label={t('Street and number')} className="sm:col-span-3">
+        <Input name="street" defaultValue={address?.street ?? ''} autoComplete="street-address" required />
+      </Field>
+      <Field label={t('Postal code')} className="sm:col-span-1">
+        <Input name="postalCode" defaultValue={address?.postalCode ?? ''} autoComplete="postal-code" required />
+      </Field>
+      <Field label={t('City')} className="sm:col-span-2">
+        <Input name="city" defaultValue={address?.city ?? ''} autoComplete="address-level2" required />
+      </Field>
+      <Field label={t('Country')} className="sm:col-span-1">
+        <Input name="countryCode" defaultValue={address?.countryCode ?? 'PL'} maxLength={2} required />
+      </Field>
+      <Field label={t('Phone')} className="sm:col-span-2">
+        <Input name="phone" type="tel" defaultValue={address?.phone ?? ''} autoComplete="tel" required />
+      </Field>
+      <Field label={t('Email')} className="sm:col-span-3">
+        <Input name="email" type="email" defaultValue={address?.email ?? ''} autoComplete="email" required />
+      </Field>
+      <div className="flex items-center gap-3 sm:col-span-6">
+        <Checkbox name="isDefault" label={t('Preselect when booking')} defaultChecked={address?.isDefault ?? false} />
+        <SubmitButton size="sm" variant={address ? 'secondary' : 'primary'}>
+          {address ? t('Save') : t('Add address')}
+        </SubmitButton>
+      </div>
+    </ActionForm>
+  );
+}
+
 export default async function ShippingSettingsPage() {
   const t = await getT();
   const user = await requireUser();
-  const { rules, carriers, presets } = await loadRoutingData();
+  const [{ rules, carriers, presets }, pickupAddresses] = await Promise.all([loadRoutingData(), listPickupAddresses()]);
   const admin = user.role === 'admin';
   const carrierName = (id: string) => carriers.find((c) => c.id === id)?.name ?? t('deleted carrier');
 
@@ -221,6 +271,49 @@ export default async function ShippingSettingsPage() {
             <div>
               <p className="mb-2 text-sm font-medium">{t('New package')}</p>
               <PresetForm />
+            </div>
+          )}
+        </CardBody>
+      </Card>
+
+      <Card id="pickup-addresses" className="scroll-mt-24">
+        <CardHeader
+          title={t('Pickup addresses')}
+          description={t('Where couriers collect parcels booked on Orders → Courier pickup. Allegro needs a phone and an email for each.')}
+        />
+        <CardBody className="space-y-4">
+          {pickupAddresses.length === 0 && !admin && <EmptyState title={t('No pickup addresses yet')} />}
+          {pickupAddresses.map((a) => (
+            <div key={a.id} className="border-b border-slate-100 pb-4">
+              {admin ? (
+                <details>
+                  <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium">{a.label}</span>
+                    {a.isDefault && <Badge tone="green">{t('Preselected')}</Badge>}
+                    <span className="text-slate-500">
+                      {a.street}, {a.postalCode} {a.city}
+                    </span>
+                  </summary>
+                  <div className="mt-3 space-y-3 border-t border-slate-100 pt-3">
+                    <PickupAddressForm address={a} />
+                    <ActionForm action={deletePickupAddressAction.bind(null, a.id)} showOk={false}>
+                      <SubmitButton size="sm" variant="ghost" confirm={t('Delete this pickup address?')}>
+                        {t('Delete')}
+                      </SubmitButton>
+                    </ActionForm>
+                  </div>
+                </details>
+              ) : (
+                <p className="text-sm">
+                  <span className="font-medium">{a.label}</span>: {a.street}, {a.postalCode} {a.city}
+                </p>
+              )}
+            </div>
+          ))}
+          {admin && (
+            <div>
+              <p className="mb-2 text-sm font-medium">{t('New pickup address')}</p>
+              <PickupAddressForm />
             </div>
           )}
         </CardBody>

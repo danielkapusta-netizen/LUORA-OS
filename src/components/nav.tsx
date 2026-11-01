@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Boxes, ChevronRight, Ellipsis, LayoutDashboard, LogOut, Menu, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Tag, Truck, Users, X } from 'lucide-react';
+import { BarChart3, Boxes, ChevronRight, Ellipsis, LayoutDashboard, LogOut, Menu, PackageCheck, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Tag, Truck, Users, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -11,9 +11,10 @@ import { cn } from '@/lib/utils';
 import { LanguageSwitcher } from './i18n/language-switcher';
 import { Sheet } from './sheet';
 
-const ITEMS = [
+const ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; /** Shown indented under this item. */ parent?: string }[] = [
   { href: '/', label: msg('Dashboard'), icon: LayoutDashboard },
   { href: '/orders', label: msg('Orders'), icon: ShoppingBag },
+  { href: '/orders/pickup', label: msg('Courier pickup'), icon: PackageCheck, parent: '/orders' },
   { href: '/shipments', label: msg('Shipments'), icon: Truck },
   { href: '/inventory', label: msg('Inventory'), icon: Boxes },
   { href: '/pricing', label: msg('Pricing'), icon: Tag },
@@ -27,9 +28,27 @@ const ITEMS = [
 /** The four pages a phone's tab bar keeps one tap away; everything else lives under "More". */
 const TABS = ['/', '/orders', '/shipments', '/inventory'];
 
-type Props = { userName: string; role: string; mock: boolean; /** My tasks due today or already late. */ taskBadge?: number; logoutAction: () => Promise<void> };
+type Props = {
+  userName: string;
+  role: string;
+  mock: boolean;
+  /** My tasks due today or already late. */
+  taskBadge?: number;
+  /** Packed parcels waiting for a courier pickup to be booked. */
+  pickupBadge?: number;
+  logoutAction: () => Promise<void>;
+};
 
-const isActive = (pathname: string, href: string) => pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+const matches = (pathname: string, href: string) => pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+/** The deepest item that matches, so "Courier pickup" lights up on its page and "Orders" does not. */
+const isActive = (pathname: string, href: string) =>
+  matches(pathname, href) && !ITEMS.some((i) => i.href !== href && i.href.startsWith(`${href}/`) && matches(pathname, i.href));
+
+function badgeFor(href: string, { taskBadge = 0, pickupBadge = 0 }: Pick<Props, 'taskBadge' | 'pickupBadge'>): { count: number; title: string } | null {
+  if (href === '/tasks' && taskBadge > 0) return { count: taskBadge, title: msg('Your tasks due today or late') };
+  if (href === '/orders/pickup' && pickupBadge > 0) return { count: pickupBadge, title: msg('Packed parcels waiting for a courier') };
+  return null;
+}
 const initials = (name: string) =>
   name
     .split(/\s+/)
@@ -39,7 +58,7 @@ const initials = (name: string) =>
     .toUpperCase();
 
 /** The sidebar's contents: logo, links, language and the signed-in user. Shared by the wide-screen sidebar and the tablet drawer. */
-function SidebarContent({ items, userName, mock, taskBadge = 0, logoutAction, trailing }: Props & { items: typeof ITEMS; /** Shown at the end of the logo row (the drawer's close button). */ trailing?: React.ReactNode }) {
+function SidebarContent({ items, userName, mock, taskBadge = 0, pickupBadge = 0, logoutAction, trailing }: Props & { items: typeof ITEMS; /** Shown at the end of the logo row (the drawer's close button). */ trailing?: React.ReactNode }) {
   const pathname = usePathname();
   const t = useT();
   return (
@@ -51,8 +70,9 @@ function SidebarContent({ items, userName, mock, taskBadge = 0, logoutAction, tr
         {trailing && <span className={cn('-my-2 -mr-3', !mock && 'ml-auto')}>{trailing}</span>}
       </div>
       <nav aria-label={t('Main')} className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
-        {items.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon, parent }) => {
           const active = isActive(pathname, href);
+          const badge = badgeFor(href, { taskBadge, pickupBadge });
           return (
             <Link
               key={href}
@@ -60,14 +80,16 @@ function SidebarContent({ items, userName, mock, taskBadge = 0, logoutAction, tr
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'press flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors 2xl:min-h-10',
+                // A sub-page sits indented on a hairline guide, so it reads as part of its parent.
+                parent && 'relative ml-5 min-h-10 gap-2.5 pl-3 text-[13px] before:absolute before:inset-y-1 before:-left-2 before:w-px before:bg-black/[0.08] 2xl:min-h-9',
                 active ? 'bg-sidebar-active font-medium text-ink' : 'text-slate-600 hover:bg-black/[0.035] hover:text-ink',
               )}
             >
-              <Icon className="size-[18px]" strokeWidth={active ? 2 : 1.75} aria-hidden />
+              <Icon className={parent ? 'size-4' : 'size-[18px]'} strokeWidth={active ? 2 : 1.75} aria-hidden />
               {t(label)}
-              {href === '/tasks' && taskBadge > 0 && (
-                <span className="ml-auto flex min-w-5 items-center justify-center rounded-full bg-ink px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white" title={t('Your tasks due today or late')}>
-                  {taskBadge > 99 ? '99+' : taskBadge}
+              {badge && (
+                <span className="ml-auto flex min-w-5 items-center justify-center rounded-full bg-ink px-1.5 py-0.5 text-[11px] leading-none font-semibold text-white" title={t(badge.title)}>
+                  {badge.count > 99 ? '99+' : badge.count}
                 </span>
               )}
             </Link>
@@ -235,7 +257,7 @@ function Account({ userName, role, logoutAction }: Pick<Props, 'userName' | 'rol
 }
 
 /** Phone chrome: a slim translucent top bar, a tab bar under the thumb, and a sheet for the rest. */
-function MobileNav({ items, userName, role, mock, taskBadge = 0, logoutAction }: Props & { items: typeof ITEMS }) {
+function MobileNav({ items, userName, role, mock, taskBadge = 0, pickupBadge = 0, logoutAction }: Props & { items: typeof ITEMS }) {
   const pathname = usePathname();
   const t = useT();
   // A sheet belongs to the page it was opened on, so any navigation closes it, however the link was followed.
@@ -247,7 +269,7 @@ function MobileNav({ items, userName, role, mock, taskBadge = 0, logoutAction }:
   const tabs = items.filter((i) => TABS.includes(i.href));
   const more = items.filter((i) => !TABS.includes(i.href));
   const moreActive = more.some((i) => isActive(pathname, i.href));
-  const tasksInMore = more.some((i) => i.href === '/tasks');
+  const moreBadge = more.some((i) => badgeFor(i.href, { taskBadge, pickupBadge }));
   const tab = 'press relative flex min-h-[3.25rem] flex-col items-center justify-center gap-0.5 text-[10px] font-medium tracking-wide';
 
   return (
@@ -280,7 +302,7 @@ function MobileNav({ items, userName, role, mock, taskBadge = 0, logoutAction }:
             <button type="button" onClick={() => setSheet('more')} aria-haspopup="dialog" className={cn(tab, 'w-full', moreActive || sheet === 'more' ? 'text-brand-700' : 'text-slate-500')}>
               <span className="relative">
                 <Ellipsis className="size-6" strokeWidth={moreActive ? 2.3 : 1.8} aria-hidden />
-                {tasksInMore && taskBadge > 0 && <span className="absolute -top-0.5 -right-1 size-2.5 rounded-full bg-ink ring-2 ring-white" aria-label={t('{n} tasks due', { n: taskBadge })} />}
+                {moreBadge && <span className="absolute -top-0.5 -right-1 size-2.5 rounded-full bg-ink ring-2 ring-white" aria-label={t('Something is waiting for you')} />}
               </span>
               {t('More')}
             </button>
@@ -290,18 +312,21 @@ function MobileNav({ items, userName, role, mock, taskBadge = 0, logoutAction }:
 
       <Sheet open={sheet === 'more'} onClose={close} title={t('More')}>
         <ul className="overflow-hidden rounded-2xl bg-slate-900/[0.04]">
-          {more.map(({ href, label, icon: Icon }, i) => (
+          {more.map(({ href, label, icon: Icon }, i) => {
+            const badge = badgeFor(href, { taskBadge, pickupBadge });
+            return (
             <li key={href} className={cn(i > 0 && 'border-t border-slate-900/5')}>
               <Link href={href} onClick={close} className="press flex min-h-14 items-center gap-3 px-4 active:bg-slate-900/5">
                 <span className="flex size-9 items-center justify-center rounded-xl bg-white text-slate-700 shadow-sm">
                   <Icon className="size-5" aria-hidden />
                 </span>
                 <span className={cn('flex-1 text-base font-medium', isActive(pathname, href) && 'text-brand-700')}>{t(label)}</span>
-                {href === '/tasks' && taskBadge > 0 && <span className="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-white">{taskBadge > 99 ? '99+' : taskBadge}</span>}
+                {badge && <span className="rounded-full bg-ink px-2 py-0.5 text-xs font-semibold text-white">{badge.count > 99 ? '99+' : badge.count}</span>}
                 <ChevronRight className="size-4 text-slate-400" aria-hidden />
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
         <div className="mt-4">
           <Account userName={userName} role={role} logoutAction={logoutAction} />

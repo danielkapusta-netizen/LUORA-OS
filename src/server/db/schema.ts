@@ -29,6 +29,7 @@ export const orderStatusValues = [
   'cancelled',
 ] as const;
 export const shipmentStateValues = ['pending', 'created', 'failed', 'cancelled'] as const;
+export const pickupStateValues = ['pending', 'booked', 'failed'] as const;
 export const labelFormatValues = ['pdf', 'zpl'] as const;
 export const labelSizeValues = ['A4', 'A6'] as const;
 // 'external' = invoiced outside Luora (marked by hand), so the order leaves "To issue".
@@ -399,6 +400,66 @@ export const shipmentBatches = sqliteTable('shipment_batches', {
   createdAt: createdAt(),
 });
 
+/** Where a courier collects parcels; Settings → Shipping keeps one per warehouse or office. */
+export const pickupAddresses = sqliteTable('pickup_addresses', {
+  id: id(),
+  /** Staff-facing name, e.g. "Magazyn". */
+  label: text('label').notNull(),
+  name: text('name'),
+  company: text('company'),
+  street: text('street').notNull(),
+  postalCode: text('postal_code').notNull(),
+  city: text('city').notNull(),
+  countryCode: text('country_code').notNull().default('PL'),
+  phone: text('phone').notNull(),
+  email: text('email').notNull(),
+  isDefault: bool('is_default').notNull().default(false),
+  createdAt: createdAt(),
+});
+
+export interface PickupAddressSnapshot {
+  name?: string | null;
+  company?: string | null;
+  street: string;
+  postalCode: string;
+  city: string;
+  countryCode: string;
+  phone: string;
+  email: string;
+}
+
+/** A courier pickup booked through a carrier (Allegro "Wysyłam z Allegro"); its parcels point here. */
+export const courierPickups = sqliteTable(
+  'courier_pickups',
+  {
+    id: id(),
+    carrierAccountId: text('carrier_account_id')
+      .notNull()
+      .references(() => carrierAccounts.id, { onDelete: 'cascade' }),
+    /** Courier column it was booked from (see src/lib/couriers.ts). */
+    courier: text('courier').notNull(),
+    addressLabel: text('address_label').notNull(),
+    /** The address sent to the carrier, kept even if the saved address changes later. */
+    address: json<PickupAddressSnapshot>('address').notNull(),
+    /** yyyy-MM-dd and HH:mm, as the carrier proposed them. */
+    pickupDate: text('pickup_date').notNull(),
+    minTime: text('min_time'),
+    maxTime: text('max_time'),
+    state: text('state', { enum: pickupStateValues }).notNull().default('pending'),
+    /** Allegro create-command id, kept so a retry polls instead of booking twice. */
+    commandId: text('command_id'),
+    /** Allegro pickupId, and the number the courier knows the pickup by. */
+    externalId: text('external_id'),
+    carrierPickupId: text('carrier_pickup_id'),
+    error: text('error'),
+    pollAttempts: integer('poll_attempts').notNull().default(0),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('courier_pickups_date_idx').on(t.pickupDate)],
+);
+
 export interface ShipmentOptions {
   codAmount?: string | null;
   insuranceAmount?: string | null;
@@ -441,6 +502,8 @@ export const shipments = sqliteTable(
     /** Set when staff tick "Packed" on the Shipments page. */
     packedAt: ts('packed_at'),
     packedBy: text('packed_by').references(() => users.id, { onDelete: 'set null' }),
+    /** The courier pickup booked for this parcel (Orders → Courier pickup). */
+    pickupId: text('pickup_id').references(() => courierPickups.id, { onDelete: 'set null' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -451,6 +514,7 @@ export const shipments = sqliteTable(
       .where(sql`state in ('pending', 'created')`),
     index('shipments_batch_idx').on(t.batchId),
     index('shipments_state_idx').on(t.state),
+    index('shipments_pickup_idx').on(t.pickupId),
   ],
 );
 
@@ -994,6 +1058,9 @@ export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type OrderStatus = (typeof orderStatusValues)[number];
 export type Shipment = typeof shipments.$inferSelect;
+export type PickupAddress = typeof pickupAddresses.$inferSelect;
+export type CourierPickup = typeof courierPickups.$inferSelect;
+export type PickupState = (typeof pickupStateValues)[number];
 export type ShippingRule = typeof shippingRules.$inferSelect;
 export type PackagePreset = typeof packagePresets.$inferSelect;
 export type Product = typeof products.$inferSelect;
