@@ -17,11 +17,9 @@ import { enqueue, JOBS } from '../jobs/queue';
 import { getCarrierAdapter } from './accounts';
 import { logEvent } from './events';
 import { msg } from '@/lib/i18n/msg';
-import { commonSlots, dateOnlySlots, PICKUP_COURIERS, pickupCourierOf, type PickupCourier } from '@/lib/pickup-slots';
+import { commonSlots, dateOnlySlots, PICKUP_COURIERS, pickupCourierOf, pickupWindowStart, type PickupCourier } from '@/lib/pickup-slots';
 import { isDay, isTime, today } from '@/lib/tasks/dates';
 
-/** Labels older than this are left out: they were sent before pickups were booked here. */
-const LOOKBACK_DAYS = 14;
 /** Give up waiting for Allegro to confirm a pickup after this many checks. */
 const MAX_POLLS = 40;
 
@@ -61,7 +59,8 @@ function waitingFilter() {
     or(isNull(shipments.deliveryStatus), inArray(shipments.deliveryStatus, ['in_transit', 'unknown'])),
     ne(orders.status, 'cancelled'),
     eq(orders.historical, false),
-    gte(shipments.createdAt, new Date(Date.now() - LOOKBACK_DAYS * 86_400_000)),
+    // Only labels from the previous working day and today: older parcels have already gone.
+    gte(shipments.createdAt, pickupWindowStart(new Date())),
   );
 }
 
