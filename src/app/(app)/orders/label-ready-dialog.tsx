@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Printer, Square, X } from 'lucide-react';
+import { Check, Printer, Square } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { DynamicButton } from '@/components/dynamic-button';
@@ -84,16 +84,8 @@ export function LabelReadyDialog({ orderId, shipmentId, nextOrderId }: { orderId
       }}
       className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-3xl border border-black/5 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-900/40"
     >
-      <div className="flex items-start justify-between gap-3 px-6 pt-5">
-        <div>
-          <h2 className="text-lg font-semibold">{t('Label ready')}</h2>
-          <p className="mt-1 text-sm text-slate-500">{t('Print the label, then mark the order packed.')}</p>
-        </div>
-        <button type="button" aria-label={t('Close')} onClick={close} className="rounded-full p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-          <X className="size-4" />
-        </button>
-      </div>
-      <div className="grid grid-cols-2 gap-3 px-6 pt-5 pb-6">
+      {/* Only the two buttons; Esc or a click outside closes it. */}
+      <div className="grid grid-cols-2 gap-3 p-5">
         <PrintLabelButton className={cn(buttonClass('primary'), 'h-12 w-full')} href={`/api/labels/${shipmentId}`}>
           <Printer className="size-4" /> {t('Print label')}
         </PrintLabelButton>
