@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, like, lte, ne, or,
 import { dayEnd, dayStart } from '../../lib/analytics/window';
 import { courierOf, type Courier } from '../../lib/couriers';
 import { chunk, getDb, insertStatements, type Tx } from '../db/client';
+import { findLockerCode } from '../integrations/address';
 import {
   marketplaceAccounts,
   orderEvents,
@@ -188,8 +189,9 @@ export async function upsertOrders(
                 shippingAddress: n.shippingAddress,
                 deliveryMethodId: n.deliveryMethodId ?? null,
                 deliveryMethodName: n.deliveryMethodName ?? null,
-                // Keep a locker code staff typed in by hand.
-                pickupPointId: existing.pickupPointId ?? n.pickupPointId ?? null,
+                // Keep a locker code staff typed in by hand, but replace a stored address
+                // (older Shopify imports) once the marketplace data yields a real code.
+                pickupPointId: (findLockerCode(existing.pickupPointId) ? existing.pickupPointId : null) ?? n.pickupPointId ?? existing.pickupPointId ?? null,
                 codAmount: n.codAmount ?? null,
                 totalAmount: n.totalAmount,
               }
@@ -388,11 +390,13 @@ const LOCKER_METHOD = /paczkomat|packstation|parcel.?locker/i;
  * Allegro is skipped: Allegro Delivery ships with the buyer's own method and point.
  */
 export async function withPickupPoint(order: Order): Promise<Order> {
-  if (order.pickupPointId || order.marketplace === 'allegro') return order;
+  // A Shopify point without a locker code is an address saved by an older import: re-read it.
+  const hasPoint = order.marketplace === 'shopify' ? Boolean(findLockerCode(order.pickupPointId)) : Boolean(order.pickupPointId);
+  if (hasPoint || order.marketplace === 'allegro') return order;
   if (!LOCKER_METHOD.test(`${order.deliveryMethodId ?? ''} ${order.deliveryMethodName ?? ''}`)) return order;
   await refreshOrder(order.id);
   const fresh = await loadOrder(order.id);
-  if (!fresh.pickupPointId) {
+  if (order.marketplace === 'shopify' ? !findLockerCode(fresh.pickupPointId) : !fresh.pickupPointId) {
     throw new Error(`The buyer chose "${order.deliveryMethodName}" but ${order.marketplace} sent no Paczkomat code. Enter it in the full order.`);
   }
   return fresh;

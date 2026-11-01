@@ -218,4 +218,5 @@ export const orders: Record<string, string> = {
   "Show all {n} items": "Pokaż wszystkie pozycje ({n})",
   "Returning": "Powracający",
   "Mark packed": "Spakowane",
+  "Print the label, then mark the order packed.": "Wydrukuj etykietę, a potem oznacz zamówienie jako spakowane.",
 };

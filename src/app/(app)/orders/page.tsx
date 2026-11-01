@@ -79,6 +79,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const filtersActive = Boolean(params.marketplace || params.account || params.assignee || params.tag || params.invoice || params.from || params.to);
   // The details panel shows the chosen order, or the first one on the page.
   const selectedId = params.order ?? rows[0]?.order.id ?? null;
+  // Where "Packed" in the label pop-up goes next: the order below, or above when it is the last one.
+  const selectedIndex = rows.findIndex((r) => r.order.id === selectedId);
+  const nextOrderId = selectedIndex < 0 ? null : (rows[selectedIndex + 1] ?? rows[selectedIndex - 1])?.order.id ?? null;
 
   const tableRows: OrderRow[] = rows.map(({ order, accountName, assigneeName, itemCount, products, shipment, returning, notes }) => ({
     id: order.id,
@@ -327,7 +330,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         <aside className="xl:sticky xl:top-[72px] xl:max-h-[calc(100dvh-88px)] xl:overflow-y-auto xl:overscroll-contain xl:rounded-3xl 2xl:top-6 2xl:max-h-[calc(100dvh-48px)]">
           {selectedId ? (
             <OrderSheet>
-              <OrderPanel orderId={selectedId} />
+              <OrderPanel orderId={selectedId} nextOrderId={nextOrderId} />
             </OrderSheet>
           ) : null}
         </aside>

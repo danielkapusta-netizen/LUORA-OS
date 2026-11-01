@@ -17,6 +17,7 @@ import { loadRoutingData, routeOrder } from '@/server/services/shipping';
 import { PackedToggle } from '../shipments/packed-toggle';
 import { createInvoiceAction } from '../accounting/actions';
 import { pollShipmentAction, quickLabelAction, retryTrackingAction } from './actions';
+import { LabelReadyDialog, RememberLabelRequest } from './label-ready-dialog';
 import { ImportantNotes, OrderNotes } from './order-notes';
 import { getT } from '@/lib/i18n/server';
 
@@ -33,7 +34,7 @@ function InfoRow({ icon: Icon, label, children }: { icon: typeof Store; label: s
 }
 
 /** Right-hand details panel on the Orders page. */
-export async function OrderPanel({ orderId }: { orderId: string }) {
+export async function OrderPanel({ orderId, nextOrderId = null }: { orderId: string; nextOrderId?: string | null }) {
   const t = await getT();
   const detail = await getOrderDetail(orderId);
   if (!detail) return null;
@@ -124,10 +125,12 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
         <div className="mt-4 space-y-2">
           {canShip && (
             <ActionForm action={quickLabelAction.bind(null, order.id)}>
-              {/* Empik's green, so the main action on the card stands out. */}
-              <SubmitButton className="w-full bg-gradient-to-br from-[#0f7a50] to-[#0b5e3e] hover:from-[#0b5e3e] hover:to-[#0b5e3e]" pendingText={t('Requesting label…')}>
-                <Truck className="size-4" /> {t('Generate shipping label')}
-              </SubmitButton>
+              <RememberLabelRequest orderId={order.id}>
+                {/* Empik's green, so the main action on the card stands out. */}
+                <SubmitButton className="w-full bg-gradient-to-br from-[#0f7a50] to-[#0b5e3e] hover:from-[#0b5e3e] hover:to-[#0b5e3e]" pendingText={t('Requesting label…')}>
+                  <Truck className="size-4" /> {t('Generate shipping label')}
+                </SubmitButton>
+              </RememberLabelRequest>
             </ActionForm>
           )}
           {!order.readyToShip && order.status !== 'cancelled' && (
@@ -143,6 +146,7 @@ export async function OrderPanel({ orderId }: { orderId: string }) {
               </ActionForm>
             </div>
           )}
+          {live?.state === 'created' && !live.packedAt && <LabelReadyDialog key={live.id} orderId={order.id} shipmentId={live.id} nextOrderId={nextOrderId} />}
           {live?.state === 'created' && (
             <div className="grid grid-cols-2 items-center gap-2">
               <PrintLabelButton className={buttonClass('primary')} href={`/api/labels/${live.id}`}>
