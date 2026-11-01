@@ -38,6 +38,33 @@ export interface ShipmentStatus {
   retryAfterSeconds?: number | null;
 }
 
+/** Where the courier collects parcels (Allegro's AddressDto: name or company is required). */
+export interface PickupAddressInput {
+  name?: string | null;
+  company?: string | null;
+  street: string;
+  postalCode: string;
+  city: string;
+  countryCode: string;
+  phone: string;
+  email: string;
+}
+
+/** A pickup window the carrier offers; InPost via Allegro offers dates only. */
+export interface PickupSlot {
+  date: string;
+  minTime?: string | null;
+  maxTime?: string | null;
+}
+
+export interface PickupStatus {
+  state: 'pending' | 'booked' | 'failed';
+  pickupId?: string | null;
+  carrierPickupId?: string | null;
+  error?: string | null;
+  retryAfterSeconds?: number | null;
+}
+
 export type DeliveryStatus = 'in_transit' | 'ready_for_pickup' | 'delivered' | 'returned' | 'unknown';
 
 export interface CarrierAdapter {
@@ -49,6 +76,11 @@ export interface CarrierAdapter {
   getLabels(externalIds: string[], options: { format: LabelFormat; size: LabelSize }): Promise<Buffer>;
   cancelShipment(externalId: string): Promise<void>;
   deliveryStatus?(ref: { trackingNumber: string; externalId: string | null; carrierCode: string | null }): Promise<DeliveryStatus>;
+  /** Courier pickups (Allegro Delivery): the windows offered for each shipment, keyed by its external id. */
+  pickupProposals?(externalIds: string[], address: PickupAddressInput): Promise<Map<string, PickupSlot[]>>;
+  /** Books a pickup; `commandId` is our pickup id, so a retried request can't book twice. */
+  createPickup?(commandId: string, externalIds: string[], slot: PickupSlot, address: PickupAddressInput): Promise<PickupStatus>;
+  pickupStatus?(commandId: string): Promise<PickupStatus>;
 }
 
 export function inpostTrackingUrl(trackingNumber: string): string {

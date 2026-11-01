@@ -85,7 +85,6 @@ export const shared: Record<string, string> = {
   "Close": "Zamknij",
   "Working…": "Pracuję…",
   "Language": "Język",
-  "{n} tasks due": "Zadań do zrobienia: {n}",
   "Account": "Konto",
   "Account: {name}": "Konto: {name}",
   "Demo": "Demo",

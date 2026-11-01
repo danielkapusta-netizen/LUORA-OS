@@ -4,6 +4,7 @@ import { analytics } from './analytics';
 import { customers } from './customers';
 import { dashboard } from './dashboard';
 import { inventory } from './inventory';
+import { pickup } from './pickup';
 import { pricingResearch } from './pricing-research';
 import { orders } from './orders';
 import { settings_a } from './settings-a';
@@ -24,6 +25,7 @@ export const PL: Record<string, string> = {
   ...customers,
   ...dashboard,
   ...inventory,
+  ...pickup,
   ...pricingResearch,
   ...orders,
   ...settings_a,

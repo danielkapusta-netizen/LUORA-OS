@@ -49,6 +49,8 @@ const DELIVERY: Record<Marketplace, { id: string; name: string; locker: boolean;
     { id: '5d9c7838-e05f-4dec-afdd-58e884170ba7', name: 'Allegro One Box, One Kurier', locker: true },
     { id: '758fcd59-fbfa-4453-ae07-4800d72c2ca5', name: 'Allegro Kurier DPD', locker: false },
     { id: '685d8b40-2571-4111-8937-9220b1710d4c', name: 'Allegro Kurier DPD pobranie', locker: false, cod: true },
+    { id: 'b20ef9e1-faa2-4f25-9032-adbea23e5cb9', name: 'Allegro Kurier DHL', locker: false },
+    { id: 'c3066682-97a3-42fe-9eb5-3beeb4d3c8f1', name: 'Allegro Kurier ORLEN Paczka', locker: false },
   ],
   empik: [
     { id: 'PACZKOMAT', name: 'Paczkomaty InPost', locker: true },

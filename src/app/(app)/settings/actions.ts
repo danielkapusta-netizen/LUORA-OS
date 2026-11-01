@@ -29,6 +29,7 @@ import {
   testCarrierConnection,
   testMarketplaceConnection,
 } from '@/server/services/settings';
+import { deletePickupAddress, savePickupAddress } from '@/server/services/pickups';
 import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
@@ -357,6 +358,40 @@ export async function deletePresetAction(id: string): Promise<ActionResult> {
     await deletePreset(id);
     revalidatePath('/settings/shipping');
     return msg('Package deleted');
+  });
+}
+
+export async function savePickupAddressAction(id: string | null, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    await savePickupAddress(
+      {
+        label: text(fd, 'label'),
+        name: text(fd, 'name') || null,
+        company: text(fd, 'company') || null,
+        street: text(fd, 'street'),
+        postalCode: text(fd, 'postalCode'),
+        city: text(fd, 'city'),
+        countryCode: text(fd, 'countryCode') || 'PL',
+        phone: text(fd, 'phone'),
+        email: text(fd, 'email'),
+        isDefault: bool(fd, 'isDefault'),
+      },
+      id ?? undefined,
+    );
+    revalidatePath('/settings/shipping');
+    revalidatePath('/orders/pickup');
+    return msg('Pickup address saved');
+  });
+}
+
+export async function deletePickupAddressAction(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    await deletePickupAddress(id);
+    revalidatePath('/settings/shipping');
+    revalidatePath('/orders/pickup');
+    return msg('Pickup address deleted');
   });
 }
 

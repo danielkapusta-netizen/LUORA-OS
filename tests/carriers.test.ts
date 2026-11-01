@@ -281,6 +281,68 @@ describe('Allegro Delivery (Wysyłam z Allegro)', () => {
   });
 });
 
+describe('Allegro Delivery courier pickups', () => {
+  const API = 'https://api.allegro.pl.allegrosandbox.pl';
+  const creds: AllegroCredentials = { clientId: 'c', clientSecret: 's', sandbox: true, accessToken: 'a', refreshToken: 'r', expiresAt: new Date(Date.now() + 3600_000).toISOString() };
+  const adapter = new AllegroShippingAdapter(new AllegroClient({ get: () => creds, save: async () => {} }), {});
+  const address = { name: 'Daniel', company: 'Luora', street: 'ul. Magazynowa 5', postalCode: '02-222', city: 'Warszawa', countryCode: 'pl', phone: '500 600 700', email: 'w@example.com' };
+
+  it('asks for proposals with the pickup address and reads the windows per shipment', async () => {
+    server.use(
+      http.post(`${API}/shipment-management/pickup-proposals`, async ({ request: req }) => {
+        const body = (await req.json()) as { shipmentIds: string[]; address: Record<string, string> };
+        expect(body.shipmentIds).toEqual(['s1', 's2']);
+        expect(body.address).toMatchObject({ street: 'ul. Magazynowa 5', countryCode: 'PL', phone: '+48500600700', email: 'w@example.com', company: 'Luora' });
+        return HttpResponse.json([
+          {
+            proposals: [
+              { shipmentId: 's1', proposalItems: [], pickupTimes: [{ date: '2026-11-03', minTime: '09:00', maxTime: '12:00' }] },
+              { shipmentId: 's2', pickupTimes: [] },
+            ],
+            address: body.address,
+          },
+        ]);
+      }),
+    );
+    const slots = await adapter.pickupProposals(['s1', 's2'], address);
+    expect(slots.get('s1')).toEqual([{ date: '2026-11-03', minTime: '09:00', maxTime: '12:00' }]);
+    expect(slots.get('s2')).toEqual([]);
+  });
+
+  it('books with the window, or the date alone for InPost, and polls the command', async () => {
+    const bodies: { commandId: string; input: { shipmentIds: string[]; pickupTime: Record<string, string> } }[] = [];
+    let polls = 0;
+    server.use(
+      http.post(`${API}/shipment-management/pickups/create-commands`, async ({ request: req }) => {
+        const body = (await req.json()) as (typeof bodies)[number];
+        bodies.push(body);
+        return HttpResponse.json(body, { headers: { 'Retry-After': '3' } });
+      }),
+      http.get(`${API}/shipment-management/pickups/create-commands/:id`, ({ params }) => {
+        polls++;
+        return HttpResponse.json(
+          polls < 2 ? { commandId: params.id, status: 'IN_PROGRESS' } : { commandId: params.id, status: 'SUCCESS', pickupId: 'pk-1', carrierPickupId: 'DPD-77' },
+        );
+      }),
+    );
+    expect(await adapter.createPickup('cmd-1', ['s1'], { date: '2026-11-03', minTime: '09:00', maxTime: '12:00' }, address)).toMatchObject({ state: 'pending', retryAfterSeconds: 3 });
+    await adapter.createPickup('cmd-2', ['s2'], { date: '2026-11-03', minTime: null, maxTime: null }, address);
+    expect(bodies[0]).toMatchObject({ commandId: 'cmd-1', input: { shipmentIds: ['s1'], pickupTime: { date: '2026-11-03', minTime: '09:00', maxTime: '12:00' } } });
+    expect(bodies[1].input.pickupTime).toEqual({ date: '2026-11-03' });
+    expect(await adapter.pickupStatus('cmd-1')).toMatchObject({ state: 'pending' });
+    expect(await adapter.pickupStatus('cmd-1')).toEqual({ state: 'booked', pickupId: 'pk-1', carrierPickupId: 'DPD-77' });
+  });
+
+  it('reports a rejected pickup with Allegro’s reason', async () => {
+    server.use(
+      http.get(`${API}/shipment-management/pickups/create-commands/:id`, ({ params }) =>
+        HttpResponse.json({ commandId: params.id, status: 'ERROR', errors: [{ code: 'X', message: 'Termin odbioru jest niedostępny', path: 'pickupTime', userMessage: null }] }),
+      ),
+    );
+    expect(await adapter.pickupStatus('cmd-3')).toEqual({ state: 'failed', error: 'pickupTime: Termin odbioru jest niedostępny' });
+  });
+});
+
 describe('Allegro Delivery insurance', () => {
   it('recognises the Packeta / ORLEN Paczka methods and the insurance-required error', () => {
     expect(isPacketaMethod('Allegro Wysyłka z Polski do Słowacji - Odbiór w Punkcie Packeta pobranie, ORLEN Paczka')).toBe(true);

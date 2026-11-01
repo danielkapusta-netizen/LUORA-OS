@@ -9,6 +9,7 @@ export const JOBS = {
   shipmentCreate: 'shipment-create',
   shipmentPoll: 'shipment-poll',
   shipmentSweep: 'shipment-sweep',
+  pickupPoll: 'pickup-poll',
   trackingPush: 'tracking-push',
   marketplaceProcessing: 'marketplace-processing',
   deliveryCheck: 'delivery-check',
@@ -37,6 +38,7 @@ export interface JobPayloads {
   [JOBS.shipmentCreate]: { shipmentId: string };
   [JOBS.shipmentPoll]: { shipmentId: string };
   [JOBS.shipmentSweep]: Record<string, never>;
+  [JOBS.pickupPoll]: { pickupId: string };
   [JOBS.trackingPush]: { shipmentId: string };
   [JOBS.marketplaceProcessing]: { orderId: string };
   [JOBS.deliveryCheck]: Record<string, never>;
@@ -89,6 +91,8 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.shipmentCreate]: { retries: 0, delaySeconds: 0 },
   [JOBS.shipmentPoll]: { retries: 3, delaySeconds: 10 },
   [JOBS.shipmentSweep]: { retries: 0, delaySeconds: 0 },
+  // Only reads the booking status; errors are saved on the pickup and re-queued by the job itself.
+  [JOBS.pickupPoll]: { retries: 2, delaySeconds: 15 },
   [JOBS.trackingPush]: { retries: 5, delaySeconds: 60 },
   [JOBS.marketplaceProcessing]: { retries: 3, delaySeconds: 60 },
   [JOBS.deliveryCheck]: { retries: 0, delaySeconds: 0 },

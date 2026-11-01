@@ -10,6 +10,7 @@ import { runCrmSync } from '../services/crm-sync';
 import { importListings, runReconcile, runStockPush, syncAllStock } from '../services/inventory';
 import { autoInvoice, runCreateInvoice, runSendKsef, runUploadInvoice } from '../services/invoicing';
 import { backfillOrderDetails, syncAccount } from '../services/orders';
+import { runPollPickup } from '../services/pickups';
 import { runCreateShipment, runPollShipment, runPendingSweep } from '../services/shipping';
 import { runDeliveryCheck, runMarketplaceProcessing, runPushTracking } from '../services/tracking';
 import { enqueue, JOBS, type JobName, type JobPayloads } from './queue';
@@ -28,6 +29,7 @@ export const handlers: Handlers = {
   [JOBS.syncAccount]: ({ accountId }) => syncAccount(accountId),
   [JOBS.shipmentCreate]: ({ shipmentId }) => runCreateShipment(shipmentId),
   [JOBS.shipmentPoll]: ({ shipmentId }) => runPollShipment(shipmentId),
+  [JOBS.pickupPoll]: ({ pickupId }) => runPollPickup(pickupId),
   [JOBS.shipmentSweep]: () => runPendingSweep(),
   [JOBS.trackingPush]: ({ shipmentId }) => runPushTracking(shipmentId),
   [JOBS.marketplaceProcessing]: ({ orderId }) => runMarketplaceProcessing(orderId),

@@ -3,7 +3,16 @@
 // labels are real PDF files drawn with pdf-lib.
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import type { Carrier, LabelFormat, LabelSize } from '../../types';
-import { inpostTrackingUrl, type CarrierAdapter, type CarrierService, type ShipmentRequest, type ShipmentStatus } from '../types';
+import {
+  inpostTrackingUrl,
+  type CarrierAdapter,
+  type CarrierService,
+  type PickupSlot,
+  type PickupStatus,
+  type ShipmentRequest,
+  type ShipmentStatus,
+} from '../types';
+import { nextWorkingDays } from '@/lib/pickup-slots';
 import { INPOST_SERVICES } from '../inpost/adapter';
 import { BUYER_CHOICE } from '../allegro-shipping/adapter';
 import { msg } from '@/lib/i18n/msg';
@@ -161,5 +170,28 @@ export class MockCarrierAdapter implements CarrierAdapter {
 
   async deliveryStatus() {
     return 'in_transit' as const;
+  }
+
+  /** Two windows on each of the next two working days; InPost (like the real API) offers none. */
+  async pickupProposals(externalIds: string[]): Promise<Map<string, PickupSlot[]>> {
+    const days = nextWorkingDays(new Date(), 2);
+    return new Map(
+      externalIds.map((id) => {
+        const inpost = /inpost|paczkomat|2488f7b7/i.test(decode(id).service);
+        const slots = days.flatMap((date) => [
+          { date, minTime: '09:00', maxTime: '12:00' },
+          { date, minTime: '12:00', maxTime: '16:00' },
+        ]);
+        return [id, inpost ? [] : slots];
+      }),
+    );
+  }
+
+  async createPickup(): Promise<PickupStatus> {
+    return { state: 'pending', retryAfterSeconds: 1 };
+  }
+
+  async pickupStatus(commandId: string): Promise<PickupStatus> {
+    return { state: 'booked', pickupId: `mock-${commandId}`, carrierPickupId: `MOCK-P${digitsFrom(commandId, 8)}` };
   }
 }

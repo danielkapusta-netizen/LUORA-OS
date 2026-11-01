@@ -34,4 +34,11 @@ export const PL_PLURALS_ALL: Record<string, PluralForms> = {
   "{n} task finished in the last 7 days": { one: "{n} zadanie ukończone w ostatnich 7 dniach", few: "{n} zadania ukończone w ostatnich 7 dniach", many: "{n} zadań ukończonych w ostatnich 7 dniach", other: "{n} zadania ukończonego w ostatnich 7 dniach" },
   "{n} task open": { one: "{n} zadanie otwarte", few: "{n} zadania otwarte", many: "{n} zadań otwartych", other: "{n} zadania otwartego" },
   "vs previous {n} day": { one: "vs poprzedni {n} dzień", few: "vs poprzednie {n} dni", many: "vs poprzednie {n} dni", other: "vs poprzednie {n} dnia" },
+  "{n} parcel": { one: "{n} paczka", few: "{n} paczki", many: "{n} paczek", other: "{n} paczki" },
+  "{n} parcel ticked": { one: "Zaznaczono {n} paczkę", few: "Zaznaczono {n} paczki", many: "Zaznaczono {n} paczek", other: "Zaznaczono {n} paczki" },
+  "{n} courier": { one: "{n} kurier", few: "{n} kurierów", many: "{n} kurierów", other: "{n} kuriera" },
+  "{n} parcel waiting": { one: "{n} paczka czeka", few: "{n} paczki czekają", many: "{n} paczek czeka", other: "{n} paczki czeka" },
+  "Book pickup · {n} parcel": { one: "Zamów odbiór · {n} paczka", few: "Zamów odbiór · {n} paczki", many: "Zamów odbiór · {n} paczek", other: "Zamów odbiór · {n} paczki" },
+  "{n} other parcel (Allegro One, Pocztex…) is not listed: those couriers are not booked from here.": { one: "{n} inna paczka (Allegro One, Pocztex…) nie jest tu pokazana: tych kurierów nie zamawia się stąd.", few: "{n} inne paczki (Allegro One, Pocztex…) nie są tu pokazane: tych kurierów nie zamawia się stąd.", many: "{n} innych paczek (Allegro One, Pocztex…) nie jest tu pokazanych: tych kurierów nie zamawia się stąd.", other: "{n} innej paczki (Allegro One, Pocztex…) nie pokazano: tych kurierów nie zamawia się stąd." },
+  "{n} parcel can’t be collected by this courier: drop it off at a point.": { one: "{n} paczki nie może odebrać ten kurier: nadaj ją w punkcie.", few: "{n} paczek nie może odebrać ten kurier: nadaj je w punkcie.", many: "{n} paczek nie może odebrać ten kurier: nadaj je w punkcie.", other: "{n} paczki nie może odebrać ten kurier: nadaj ją w punkcie." },
 };
