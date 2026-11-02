@@ -31,7 +31,18 @@ export function RememberLabelRequest({ orderId, children }: { orderId: string; c
  * Print label, then Packed. Packed turns green, closes the pop-up and moves to the next order.
  * Opening an order that already has a label shows the usual card buttons, not the pop-up.
  */
-export function LabelReadyDialog({ orderId, shipmentId, nextOrderId }: { orderId: string; shipmentId: string; nextOrderId: string | null }) {
+export function LabelReadyDialog({
+  orderId,
+  shipmentId,
+  nextOrderId,
+  children,
+}: {
+  orderId: string;
+  shipmentId: string;
+  nextOrderId: string | null;
+  /** What to pack, under the buttons: customer, items and where it goes. */
+  children?: ReactNode;
+}) {
   const t = useT();
   const router = useRouter();
   const sheet = useOrderSheet();
@@ -82,9 +93,9 @@ export function LabelReadyDialog({ orderId, shipmentId, nextOrderId }: { orderId
         // A click on the backdrop lands on the dialog element itself.
         if (e.target === ref.current && !pending) close();
       }}
-      className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-3xl border border-black/5 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-900/40"
+      className="m-auto w-[min(30rem,calc(100vw-2rem))] rounded-3xl border border-black/5 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-900/40"
     >
-      {/* Only the two buttons; Esc or a click outside closes it. */}
+      {/* The two buttons on top; Esc or a click outside closes it. */}
       <div className="grid grid-cols-2 gap-3 p-5">
         <PrintLabelButton className={cn(buttonClass('primary'), 'h-12 w-full')} href={`/api/labels/${shipmentId}`}>
           <Printer className="size-4" /> {t('Print label')}
@@ -102,6 +113,7 @@ export function LabelReadyDialog({ orderId, shipmentId, nextOrderId }: { orderId
         </DynamicButton>
         {error && <p className="col-span-2 text-sm text-red-700">{error}</p>}
       </div>
+      {children && <div className="max-h-[min(70dvh,36rem)] overflow-y-auto overscroll-contain border-t border-black/[0.06] px-5 pt-4 pb-5">{children}</div>}
     </dialog>
   );
 }
