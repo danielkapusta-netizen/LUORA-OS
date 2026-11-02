@@ -14,10 +14,11 @@ import {
 } from '../db/schema';
 import type { PickupSlot } from '../integrations/carriers/types';
 import { enqueue, JOBS } from '../jobs/queue';
+import { deliveryMethodOf } from '../integrations/carriers/allegro-shipping/insurance';
 import { getCarrierAdapter } from './accounts';
 import { logEvent } from './events';
 import { msg } from '@/lib/i18n/msg';
-import { commonSlots, dateOnlySlots, PICKUP_COURIERS, pickupCourierOf, pickupWindowStart, type PickupCourier } from '@/lib/pickup-slots';
+import { commonSlots, dateOnlySlots, PICKUP_COURIERS, pickupCourierOf, pickupWindowStart, slotKey, type PickupCourier } from '@/lib/pickup-slots';
 import { isDay, isTime, today } from '@/lib/tasks/dates';
 
 /** Give up waiting for Allegro to confirm a pickup after this many checks. */
@@ -158,6 +159,36 @@ function groupByCarrier<T extends { shipment: { carrierAccountId: string } }>(ro
   return groups;
 }
 
+/**
+ * One pickup per Allegro account and delivery method: Allegro refuses a pickup that mixes delivery
+ * networks (ORLEN Paczka and One Box) or integrations (two DPD services).
+ */
+function groupForPickup<T extends { shipment: { carrierAccountId: string; service: string }; order: { deliveryMethodId: string | null } }>(rows: T[]) {
+  const groups = new Map<string, { carrierAccountId: string; rows: T[] }>();
+  for (const row of rows) {
+    const key = `${row.shipment.carrierAccountId}|${deliveryMethodOf(row.shipment.service, row.order) ?? ''}`;
+    const group = groups.get(key) ?? { carrierAccountId: row.shipment.carrierAccountId, rows: [] };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Allegro's answer to a pickup it can't do in one go lists the shipments that belong together,
+ * groups separated by "||" ("… Separate ids in different requests by ||: a, b || c"). Returns
+ * those groups of shipment ids, or nothing when the message lists no such groups.
+ */
+export function splitGroupsFromError(text: string | null | undefined): string[][] {
+  if (!text?.includes('||')) return [];
+  // Allegro shipment ids are UUIDs; the demo carrier's start with "MOCK.".
+  const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|MOCK\.[A-Za-z0-9_-]+/gi;
+  return text
+    .split('||')
+    .map((part) => [...new Set(part.match(uuid) ?? [])])
+    .filter((ids) => ids.length > 0);
+}
+
 export interface ProposalResult {
   slots: PickupSlot[];
   /** True when the carrier proposes no windows (InPost): the courier comes on the chosen day. */
@@ -170,27 +201,30 @@ export interface ProposalResult {
 export async function pickupProposals(shipmentIds: string[], addressId: string, now = new Date()): Promise<ProposalResult> {
   const rows = await loadBookable(shipmentIds);
   const address = toSnapshot(await loadAddress(addressId));
-  const perParcel: PickupSlot[][] = [];
-  const unavailable: string[] = [];
+  // InPost through Allegro proposes no windows: it is booked for a date and comes on its round.
+  if (rows.every((r) => pickupCourierOf(r.order.deliveryMethodName, r.shipment.carrierCode) === 'InPost')) {
+    return { slots: dateOnlySlots(now), dateOnly: true, unavailable: [] };
+  }
+  const offered = new Map<string, PickupSlot[]>();
   for (const [carrierAccountId, group] of groupByCarrier(rows)) {
     const adapter = await getCarrierAdapter(await loadCarrier(carrierAccountId));
     if (!adapter.pickupProposals) throw new PickupError(msg('This carrier account cannot book courier pickups'));
-    const offered = await adapter.pickupProposals(
+    const slots = await adapter.pickupProposals(
       group.map((r) => r.shipment.externalId!),
       address,
     );
-    for (const r of group) {
-      const slots = offered.get(r.shipment.externalId!) ?? [];
-      if (slots.length) perParcel.push(slots);
-      else unavailable.push(r.shipment.id);
-    }
+    for (const r of group) offered.set(r.shipment.id, slots.get(r.shipment.externalId!) ?? []);
   }
-  // InPost through Allegro answers with no windows at all: it is booked for a date instead.
-  const couriers = new Set(rows.map((r) => pickupCourierOf(r.order.deliveryMethodName, r.shipment.carrierCode)));
-  if (!perParcel.length && couriers.size === 1 && couriers.has('InPost')) {
-    return { slots: dateOnlySlots(now), dateOnly: true, unavailable: [] };
-  }
-  return { slots: commonSlots(perParcel), dateOnly: false, unavailable };
+  const unavailable = rows.filter((r) => !offered.get(r.shipment.id)!.length).map((r) => r.shipment.id);
+  const withSlots = rows.filter((r) => offered.get(r.shipment.id)!.length).map((r) => offered.get(r.shipment.id)!);
+  const shared = commonSlots(withSlots);
+  if (shared.length || !withSlots.length) return { slots: shared, dateOnly: false, unavailable };
+  // No window suits every parcel (different networks keep different hours): offer the earliest one's,
+  // and leave the parcels that can't make it for another pickup.
+  const first = commonSlots([withSlots.flat()])[0];
+  const fits = (slots: PickupSlot[]) => slots.some((x) => slotKey(x) === slotKey(first));
+  const later = rows.filter((r) => offered.get(r.shipment.id)!.length && !fits(offered.get(r.shipment.id)!)).map((r) => r.shipment.id);
+  return { slots: commonSlots(withSlots.filter(fits)), dateOnly: false, unavailable: [...unavailable, ...later] };
 }
 
 function checkSlot(slot: PickupSlot): PickupSlot {
@@ -201,7 +235,7 @@ function checkSlot(slot: PickupSlot): PickupSlot {
 
 /**
  * Books a pickup for the parcels: one per Allegro account (a pickup belongs to the account whose
- * labels it collects). The booking is confirmed in the background by `runPollPickup`.
+ * labels it collects) and delivery method. The booking is confirmed in the background by `runPollPickup`.
  */
 export async function bookPickup(
   input: { courier: PickupCourier; shipmentIds: string[]; addressId: string; slot: PickupSlot },
@@ -215,10 +249,7 @@ export async function bookPickup(
   const db = getDb();
   const failed: string[] = [];
   let booked = 0;
-  for (const [carrierAccountId, group] of groupByCarrier(rows)) {
-    const carrier = await loadCarrier(carrierAccountId);
-    const adapter = await getCarrierAdapter(carrier);
-    if (!adapter.createPickup) throw new PickupError(msg('This carrier account cannot book courier pickups'));
+  for (const { carrierAccountId, rows: group } of groupForPickup(rows)) {
     const pickupId = crypto.randomUUID();
     await db.batch([
       db.insert(courierPickups).values({
@@ -235,24 +266,65 @@ export async function bookPickup(
       }),
       ...chunk(group.map((r) => r.shipment.id), 90).map((ids) => db.update(shipments).set({ pickupId }).where(inArray(shipments.id, ids))),
     ]);
-    try {
-      const status = await adapter.createPickup(
-        pickupId,
-        group.map((r) => r.shipment.externalId!),
-        slot,
-        address,
-      );
-      await enqueue(JOBS.pickupPoll, { pickupId }, { startAfterSeconds: Math.max(1, Math.round(status.retryAfterSeconds ?? 2)) });
-      booked++;
-    } catch (err) {
-      const error = err instanceof Error ? err.message : String(err);
-      await db.update(courierPickups).set({ state: 'failed', error }).where(eq(courierPickups.id, pickupId));
-      failed.push(error);
-    }
+    const error = await sendPickup(pickupId, carrierAccountId, group.map((r) => r.shipment.externalId!), slot, address);
+    if (error) failed.push(error);
+    else booked++;
     const when = `${slot.date}${slot.minTime ? ` ${slot.minTime}–${slot.maxTime}` : ''}`;
     for (const r of group) await logEvent(db, r.order.id, 'label', `Courier pickup requested: ${input.courier}, ${when}`, { userId });
   }
   return { booked, failed };
+}
+
+/** Sends a pickup's create command and queues its confirmation; returns the error when Allegro refuses it at once. */
+async function sendPickup(pickupId: string, carrierAccountId: string, externalIds: string[], slot: PickupSlot, address: PickupAddressSnapshot): Promise<string | null> {
+  const adapter = await getCarrierAdapter(await loadCarrier(carrierAccountId));
+  if (!adapter.createPickup) throw new PickupError(msg('This carrier account cannot book courier pickups'));
+  try {
+    const status = await adapter.createPickup(pickupId, externalIds, slot, address);
+    await enqueue(JOBS.pickupPoll, { pickupId }, { startAfterSeconds: Math.max(1, Math.round(status.retryAfterSeconds ?? 2)) });
+    return null;
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    await getDb().update(courierPickups).set({ state: 'failed', error }).where(eq(courierPickups.id, pickupId));
+    return error;
+  }
+}
+
+/**
+ * Allegro refused a pickup but named which shipments go together: books one pickup per group with
+ * the same day, window and address, and drops the refused one. Each new pickup holds a single
+ * group, so a second refusal can't split again.
+ */
+async function splitPickup(pickup: CourierPickup, groups: string[][]): Promise<boolean> {
+  const db = getDb();
+  const linked = await db.select({ id: shipments.id, externalId: shipments.externalId }).from(shipments).where(eq(shipments.pickupId, pickup.id));
+  const byExternal = new Map(linked.map((s) => [s.externalId, s.id]));
+  const parts = groups.map((ids) => ids.filter((id) => byExternal.has(id))).filter((ids) => ids.length > 0);
+  if (parts.length < 2) return false;
+  const slot = { date: pickup.pickupDate, minTime: pickup.minTime, maxTime: pickup.maxTime };
+  const copy = {
+    carrierAccountId: pickup.carrierAccountId,
+    courier: pickup.courier,
+    addressLabel: pickup.addressLabel,
+    address: pickup.address,
+    pickupDate: pickup.pickupDate,
+    minTime: pickup.minTime,
+    maxTime: pickup.maxTime,
+    createdBy: pickup.createdBy,
+  };
+  for (const externalIds of parts) {
+    const id = crypto.randomUUID();
+    await db.batch([
+      db.insert(courierPickups).values({ ...copy, id, commandId: id }),
+      ...chunk(externalIds.map((e) => byExternal.get(e)!), 90).map((ids) => db.update(shipments).set({ pickupId: id }).where(inArray(shipments.id, ids))),
+    ]);
+    await sendPickup(id, pickup.carrierAccountId, externalIds, slot, pickup.address);
+  }
+  // Parcels Allegro didn't name stay with the refused pickup, so they return to the list.
+  const left = await db.select({ n: count() }).from(shipments).where(eq(shipments.pickupId, pickup.id));
+  if (left[0].n === 0) await db.delete(courierPickups).where(eq(courierPickups.id, pickup.id));
+  else await db.update(courierPickups).set({ state: 'failed', error: msg('Allegro split this pickup; these parcels were not included. Book them again.') }).where(eq(courierPickups.id, pickup.id));
+  return true;
 }
 
 /** Job: waits for Allegro to confirm a pickup, then stores the courier's pickup number. */
@@ -272,6 +344,7 @@ export async function runPollPickup(pickupId: string): Promise<void> {
       return;
     }
     if (status.state === 'failed') {
+      if (await splitPickup(pickup, splitGroupsFromError(status.error))) return;
       await db.update(courierPickups).set({ state: 'failed', error: status.error ?? null, pollAttempts: attempts }).where(eq(courierPickups.id, pickupId));
       return;
     }

@@ -343,6 +343,20 @@ describe('Allegro Delivery courier pickups', () => {
   });
 });
 
+describe('Allegro pickup refusals', () => {
+  it('reads the groups of shipments Allegro says to book separately', async () => {
+    const { splitGroupsFromError } = await import('@/server/services/pickups');
+    const text =
+      'W zleceniu znajdują się przesyłki, dla których nie można zamówić wspólnego podjęcia. (The order includes shipments for which common pickup is not available. Shipment created via different integrations. Separate ids in different requests by ||: 07e4ad17-f8bf-47a4-838c-e51fdfe98534, 15638512-3fce-483f-bfdf-7f1e90b09cc6 || 70425595-a9dd-4b6c-9e23-983a582fc7fc)';
+    expect(splitGroupsFromError(text)).toEqual([
+      ['07e4ad17-f8bf-47a4-838c-e51fdfe98534', '15638512-3fce-483f-bfdf-7f1e90b09cc6'],
+      ['70425595-a9dd-4b6c-9e23-983a582fc7fc'],
+    ]);
+    // The ORLEN / One Box refusal names waybills, not shipment ids: nothing to split by.
+    expect(splitGroupsFromError('Przesyłki do sieci Orlen Paczka: AD0FTPMQVMX8RR649, przesyłki do sieci One Box: AD0SSPK4PSJW7D461')).toEqual([]);
+  });
+});
+
 describe('Allegro Delivery insurance', () => {
   it('recognises the Packeta / ORLEN Paczka methods and the insurance-required error', () => {
     expect(isPacketaMethod('Allegro Wysyłka z Polski do Słowacji - Odbiór w Punkcie Packeta pobranie, ORLEN Paczka')).toBe(true);

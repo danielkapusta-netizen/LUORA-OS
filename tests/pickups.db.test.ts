@@ -125,29 +125,55 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
     await expect(m.pickups.pickupProposals([labelled.at(-1)!], home.id)).rejects.toThrow(/packed|no longer need/);
   });
 
-  it('books a pickup, takes its parcels off the list, and stores the courier number once confirmed', async () => {
+  const methodsOf = async (shipmentIds: string[]) =>
+    new Map(
+      (
+        await m.db
+          .getDb()
+          .select({ id: m.schema.shipments.id, externalId: m.schema.shipments.externalId, method: m.schema.orders.deliveryMethodId })
+          .from(m.schema.shipments)
+          .innerJoin(m.schema.orders, m.orm.eq(m.schema.orders.id, m.schema.shipments.orderId))
+          .where(m.orm.inArray(m.schema.shipments.id, shipmentIds))
+      ).map((r) => [r.id, r]),
+    );
+  const pollAll = async () => {
+    const pending = jobs.filter((j) => j.name === 'pickup-poll').map((j) => (j.data as { pickupId: string }).pickupId);
+    jobs.length = 0;
+    for (const id of pending) await m.pickups.runPollPickup(id);
+  };
+
+  it('books one pickup per delivery method, takes the parcels off the list, and stores the courier numbers', async () => {
     const [home] = await m.pickups.listPickupAddresses();
-    const column = (await board()).columns.find((c) => c.parcels.some((p) => p.packed))!;
+    // The busiest column, so it mixes delivery methods where the demo data has them (DPD and DPD COD).
+    const column = (await board()).columns.filter((c) => c.courier !== 'InPost').sort((a, b) => b.parcels.filter((p) => p.packed).length - a.parcels.filter((p) => p.packed).length)[0];
     const ids = column.parcels.filter((p) => p.packed).map((p) => p.shipmentId);
+    const methods = new Set([...(await methodsOf(ids)).values()].map((r) => r.method));
     const { slots } = await m.pickups.pickupProposals(ids, home.id);
     const before = await m.pickups.pickupWaitingCount();
     jobs.length = 0;
 
-    expect(await m.pickups.bookPickup({ courier: column.courier, shipmentIds: ids, addressId: home.id, slot: slots[0] }, userId)).toEqual({ booked: 1, failed: [] });
-    const after = await board();
-    const same = after.columns.find((c) => c.courier === column.courier)!;
+    expect(await m.pickups.bookPickup({ courier: column.courier, shipmentIds: ids, addressId: home.id, slot: slots[0] }, userId)).toEqual({ booked: methods.size, failed: [] });
+    const same = (await board()).columns.find((c) => c.courier === column.courier)!;
     expect(same.parcels.some((p) => ids.includes(p.shipmentId))).toBe(false);
-    expect(same.pickups).toHaveLength(1);
-    expect(same.pickups[0]).toMatchObject({ state: 'pending', parcels: ids.length, addressLabel: 'Magazyn', pickupDate: slots[0].date });
+    expect(same.pickups).toHaveLength(methods.size);
+    expect(same.pickups.reduce((n, p) => n + p.parcels, 0)).toBe(ids.length);
+    expect(same.pickups.every((p) => p.state === 'pending' && p.addressLabel === 'Magazyn' && p.pickupDate === slots[0].date)).toBe(true);
     expect(await m.pickups.pickupWaitingCount()).toBe(before - ids.length);
     // Booking the same parcels twice is refused.
     await expect(m.pickups.bookPickup({ courier: column.courier, shipmentIds: ids, addressId: home.id, slot: slots[0] }, userId)).rejects.toThrow(/already have a pickup/);
 
-    const poll = jobs.find((j) => j.name === 'pickup-poll')!;
-    await m.pickups.runPollPickup((poll.data as { pickupId: string }).pickupId);
-    const [confirmed] = (await board()).columns.find((c) => c.courier === column.courier)!.pickups;
-    expect(confirmed.state).toBe('booked');
-    expect(confirmed.carrierPickupId).toMatch(/^MOCK-P\d{8}$/);
+    await pollAll();
+    const confirmed = (await board()).columns.find((c) => c.courier === column.courier)!.pickups;
+    expect(confirmed.every((p) => p.state === 'booked' && /^MOCK-P\d{8}$/.test(p.carrierPickupId ?? ''))).toBe(true);
+  });
+
+  it('offers InPost by date only, without asking Allegro for windows', async () => {
+    const [home] = await m.pickups.listPickupAddresses();
+    const inpost = (await board()).columns.find((c) => c.courier === 'InPost')!.parcels.filter((p) => p.packed);
+    if (!inpost.length) return;
+    const result = await m.pickups.pickupProposals(inpost.map((p) => p.shipmentId), home.id);
+    expect(result).toMatchObject({ dateOnly: true, unavailable: [] });
+    expect(result.slots.every((s) => !s.minTime && !s.maxTime)).toBe(true);
   });
 
   it('puts the parcels of a failed pickup back on the list', async () => {
@@ -156,5 +182,39 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
     const linked = await m.db.getDb().select().from(m.schema.shipments).where(m.orm.eq(m.schema.shipments.pickupId, pickup.id));
     const back = (await parcels()).map((p) => p.shipmentId);
     expect(linked.every((s) => back.includes(s.id))).toBe(true);
+  });
+
+  it('splits a pickup Allegro refuses for mixing integrations, as Allegro’s message says', async () => {
+    const db = m.db.getDb();
+    // Free every parcel again, then take two packed ones with different delivery methods.
+    await db.update(m.schema.shipments).set({ pickupId: null });
+    const waiting = (await parcels()).filter((p) => p.packed).map((p) => p.shipmentId);
+    const info = await methodsOf(waiting);
+    const byMethod = new Map<string | null, string>();
+    for (const r of info.values()) if (!byMethod.has(r.method)) byMethod.set(r.method, r.id);
+    const pair = [...byMethod.values()].slice(0, 2);
+    expect(pair).toHaveLength(2);
+
+    const carrier = (await db.select().from(m.schema.shipments).where(m.orm.eq(m.schema.shipments.id, pair[0])))[0].carrierAccountId;
+    const address = { street: 'ul. Magazynowa 5', postalCode: '02-222', city: 'Warszawa', countryCode: 'PL', phone: '500600700', email: 'm@example.com', company: 'Luora' };
+    const id = crypto.randomUUID();
+    await db.insert(m.schema.courierPickups).values({ id, carrierAccountId: carrier, courier: 'DPD', addressLabel: 'Magazyn', address, pickupDate: '2026-11-03', minTime: '09:00', maxTime: '12:00', commandId: id });
+    await db.update(m.schema.shipments).set({ pickupId: id }).where(m.orm.inArray(m.schema.shipments.id, pair));
+    const { getCarrierAdapter } = await import('@/server/services/accounts');
+    const [account] = await db.select().from(m.schema.carrierAccounts).where(m.orm.eq(m.schema.carrierAccounts.id, carrier));
+    await (await getCarrierAdapter(account)).createPickup!(id, pair.map((s) => info.get(s)!.externalId!), { date: '2026-11-03', minTime: '09:00', maxTime: '12:00' }, address);
+
+    jobs.length = 0;
+    await m.pickups.runPollPickup(id);
+    // The refused pickup is gone; each parcel has its own, booked once confirmed.
+    expect(await db.select().from(m.schema.courierPickups).where(m.orm.eq(m.schema.courierPickups.id, id))).toHaveLength(0);
+    const linked = await db.select().from(m.schema.shipments).where(m.orm.inArray(m.schema.shipments.id, pair));
+    expect(new Set(linked.map((s) => s.pickupId)).size).toBe(2);
+    await pollAll();
+    const split = await db.select().from(m.schema.courierPickups).where(m.orm.inArray(m.schema.courierPickups.id, linked.map((s) => s.pickupId!)));
+    expect(split.map((p) => [p.state, p.pickupDate, p.minTime])).toEqual([
+      ['booked', '2026-11-03', '09:00'],
+      ['booked', '2026-11-03', '09:00'],
+    ]);
   });
 });

@@ -110,6 +110,9 @@ export async function drawLabel(data: MockLabelData, size: LabelSize): Promise<P
   return doc;
 }
 
+/** Pickups the demo carrier was asked to book, by command id (the shipments' external ids). */
+const mockPickups = new Map<string, string[]>();
+
 export class MockCarrierAdapter implements CarrierAdapter {
   constructor(readonly carrier: Carrier) {}
 
@@ -187,11 +190,22 @@ export class MockCarrierAdapter implements CarrierAdapter {
     );
   }
 
-  async createPickup(): Promise<PickupStatus> {
+  async createPickup(commandId: string, externalIds: string[]): Promise<PickupStatus> {
+    mockPickups.set(commandId, externalIds);
     return { state: 'pending', retryAfterSeconds: 1 };
   }
 
+  /** Like Allegro, refuses a pickup that mixes delivery methods and says which shipments go together. */
   async pickupStatus(commandId: string): Promise<PickupStatus> {
+    const groups = new Map<string, string[]>();
+    for (const id of mockPickups.get(commandId) ?? []) {
+      const service = decode(id).service;
+      groups.set(service, [...(groups.get(service) ?? []), id]);
+    }
+    if (groups.size > 1) {
+      const lists = [...groups.values()].map((ids) => ids.join(', ')).join(' || ');
+      return { state: 'failed', error: `Shipment created via different integrations. Separate ids in different requests by ||: ${lists}` };
+    }
     return { state: 'booked', pickupId: `mock-${commandId}`, carrierPickupId: `MOCK-P${digitsFrom(commandId, 8)}` };
   }
 }
