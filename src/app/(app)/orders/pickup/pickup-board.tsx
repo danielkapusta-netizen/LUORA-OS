@@ -264,8 +264,26 @@ function PickupRow({ pickup: p, today }: { pickup: BoardPickup; today: string })
           </>
         )}
       </p>
-      {p.state === 'failed' && p.error && <p className="mt-1 pl-6 text-red-700">{t(p.error)}</p>}
+      {p.state === 'failed' && p.error && <PickupError text={t(p.error)} />}
       {p.state === 'failed' && <p className="mt-0.5 pl-6 text-slate-500">{t('Its parcels are back in the list to book again.')}</p>}
     </li>
+  );
+}
+
+/** Allegro's refusals are long and full of ids: the first sentence, with the rest folded away. */
+function PickupError({ text }: { text: string }) {
+  const t = useT();
+  const first = text.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? text;
+  const short = first.length > 160 ? `${first.slice(0, 157)}…` : first;
+  return (
+    <div className="mt-1 pl-6 text-red-700">
+      <p>{short}</p>
+      {short !== text && (
+        <details className="mt-0.5">
+          <summary className="cursor-pointer text-slate-500 hover:text-ink">{t('Details')}</summary>
+          <p className="mt-1 break-words text-slate-600">{text}</p>
+        </details>
+      )}
+    </div>
   );
 }
