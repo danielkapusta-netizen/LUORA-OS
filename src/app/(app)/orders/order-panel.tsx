@@ -146,7 +146,23 @@ export async function OrderPanel({ orderId, nextOrderId = null }: { orderId: str
               </ActionForm>
             </div>
           )}
-          {live?.state === 'created' && !live.packedAt && <LabelReadyDialog key={live.id} orderId={order.id} shipmentId={live.id} nextOrderId={nextOrderId} />}
+          {live?.state === 'created' && !live.packedAt && (
+            <LabelReadyDialog key={live.id} orderId={order.id} shipmentId={live.id} nextOrderId={nextOrderId}>
+              {/* What to pack: who it is for, what goes in, and where it goes. */}
+              <CustomerSummary compact buyerName={order.buyer.name} recipientName={a.name} />
+              <OrderItemsList items={items} className="mt-3" highlightQuantity photoFirst />
+              <div className="mt-3 flex gap-3 border-t border-black/[0.06] pt-3">
+                <MapPin className="mt-0.5 size-4 shrink-0 text-slate-400" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-500">{order.pickupPointId ? t('Pickup point') : t('Ship to')}</p>
+                  <p className="mt-0.5 text-sm text-ink">
+                    {order.pickupPointId && <span className="font-medium">{order.pickupPointId} · </span>}
+                    {a.street}, {a.postalCode} {a.city}
+                  </p>
+                </div>
+              </div>
+            </LabelReadyDialog>
+          )}
           {live?.state === 'created' && (
             <div className="grid grid-cols-2 items-center gap-2">
               <PrintLabelButton className={buttonClass('primary')} href={`/api/labels/${live.id}`}>
