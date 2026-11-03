@@ -48,6 +48,9 @@ describe('mapShopifyOrder', () => {
     ])).toBe('LUT02M');
     expect(attrs([{ key: 'inpost_point', value: 'PL_LUT02M' }])).toBe('LUT02M');
     expect(attrs([{ key: 'pickup_point', value: 'Aleja Jordana 16, 95-083 Lutomiersk' }])).toBeNull();
+    // No pickup attribute: the code is read from the shipping line, app-only lockers included.
+    const fromTitle = mapShopifyOrder({ ...order, customAttributes: [], shippingLine: { ...order.shippingLine, title: 'Inpost Paczkomat · KRA03BAPP' } });
+    expect(fromTitle.pickupPointId).toBe('KRA03BAPP');
   });
 
   it('treats cash on delivery as ready even when unpaid', () => {

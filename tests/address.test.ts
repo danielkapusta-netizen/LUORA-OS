@@ -42,5 +42,9 @@ describe('findLockerCode', () => {
     expect(findLockerCode('KRA010 – ul. Długa 5, Kraków')).toBe('KRA010');
     expect(findLockerCode('paczkomat waw01a')).toBe('WAW01A');
     expect(findLockerCode('InPost Paczkomat 24/7')).toBeNull();
+    // App-only lockers end in "APP".
+    expect(findLockerCode('Inpost Paczkomat · KRA03BAPP')).toBe('KRA03BAPP');
+    expect(findLockerCode('waw01app')).toBe('WAW01APP');
+    expect(findLockerCode('ABC12DEFGH')).toBeNull();
   });
 });
