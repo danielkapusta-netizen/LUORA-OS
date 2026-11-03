@@ -32,8 +32,8 @@ export function formatPostalCode(code: string, countryCode = 'PL'): string {
   return digits.length === 5 ? `${digits.slice(0, 2)}-${digits.slice(2)}` : trimmed;
 }
 
-/** InPost parcel locker codes look like "KRA010", "WAW01A" or "POZ08M". */
-const LOCKER_CODE = /(?<![A-Z0-9])([A-Z]{3}\d{2,3}[A-Z]{0,3})(?![A-Z0-9])/;
+/** InPost parcel locker codes look like "KRA010", "WAW01A", "POZ08M" or, for app-only lockers, "KRA03BAPP". */
+const LOCKER_CODE = /(?<![A-Z0-9])([A-Z]{3}\d{2,3}[A-Z]{0,4})(?![A-Z0-9])/;
 
 export function findLockerCode(text: string | null | undefined): string | null {
   if (!text) return null;
