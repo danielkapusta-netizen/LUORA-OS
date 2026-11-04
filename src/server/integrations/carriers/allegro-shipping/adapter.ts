@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CarrierSettings } from '../../../db/schema';
 import { parseRetryAfter } from '../../../http';
+import { spaceBeforeNumber } from '../../address';
 import { describeAllegroErrors, type AllegroClient } from '../../marketplaces/allegro/client';
 import type { LabelFormat, LabelSize } from '../../types';
 import {
@@ -43,7 +44,7 @@ export function pickupAddressBody(a: PickupAddressInput) {
   return {
     name: a.name?.trim() || undefined,
     company: a.company?.trim() || undefined,
-    street: a.street.trim(),
+    street: spaceBeforeNumber(a.street),
     postalCode: a.postalCode.trim(),
     city: a.city.trim(),
     countryCode: a.countryCode.trim().toUpperCase(),
@@ -89,7 +90,7 @@ function contact(a: { name: string; company?: string | null; street: string; pos
   return {
     name: a.name.trim(),
     company: a.company?.trim() || undefined,
-    street: a.street.trim(),
+    street: spaceBeforeNumber(a.street),
     postalCode: a.postalCode.trim(),
     city: a.city.trim(),
     countryCode: a.countryCode.trim().toUpperCase(),

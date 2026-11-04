@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findLockerCode, formatPostalCode, normalizePhone, splitStreet } from '@/server/integrations/address';
+import { findLockerCode, formatPostalCode, normalizePhone, spaceBeforeNumber, splitStreet } from '@/server/integrations/address';
 
 describe('splitStreet', () => {
   it.each([
@@ -14,6 +14,20 @@ describe('splitStreet', () => {
 
   it('keeps lines without a number intact', () => {
     expect(splitStreet('Rynek Główny')).toEqual({ street: 'Rynek Główny', buildingNumber: '' });
+  });
+});
+
+describe('spaceBeforeNumber', () => {
+  it.each([
+    ['Progowa7a', 'Progowa 7a'],
+    ['ul.Długa5/3', 'ul.Długa 5/3'],
+    ['Sołtysowska10E', 'Sołtysowska 10E'],
+    ['Aleja 3 Maja 12A', 'Aleja 3 Maja 12A'],
+    ['Grunwaldzka 182', 'Grunwaldzka 182'],
+    ['Rynek Główny', 'Rynek Główny'],
+    ['  Długa  5 m. 3 ', 'Długa 5 m. 3'],
+  ])('%s', (line, expected) => {
+    expect(spaceBeforeNumber(line)).toBe(expected);
   });
 });
 
