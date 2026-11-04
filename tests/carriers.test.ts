@@ -152,6 +152,11 @@ describe('Allegro Delivery (Wysyłam z Allegro)', () => {
     expect(cmd.input.packages[0]).toMatchObject({ type: 'PACKAGE', length: { value: 30, unit: 'CENTIMETER' }, weight: { value: 1.5, unit: 'KILOGRAMS' } });
   });
 
+  it('puts back the space between the street and the house number', () => {
+    const body = buildCreateCommand({ ...request, service: 'buyer_choice', receiver: { ...request.receiver, street: 'Progowa7a' } }, {}, request.shipmentId);
+    expect(body.input.receiver.street).toBe('Progowa 7a');
+  });
+
   it('keeps the reference number to the characters Allegro accepts (letters, digits, _/-)', () => {
     const reference = '6B7C4270: 2x Anua PDRN 100 + Hyaluron, 1x Żel łagodzący 50%';
     expect(allegroReferenceNumber(reference)).toBe('6B7C4270_2x_Anua_PDRN_100_Hyaluron');

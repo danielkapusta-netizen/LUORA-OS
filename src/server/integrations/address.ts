@@ -15,6 +15,17 @@ export function splitStreet(line: string): { street: string; buildingNumber: str
   };
 }
 
+/**
+ * Puts back the space a buyer left out between the street and the house number:
+ * "Progowa7a" → "Progowa 7a", "ul.Długa5/3" → "ul.Długa 5/3". Lines that already have it,
+ * or have no number, stay as they are. Allegro Delivery takes one street line and can't
+ * find the building number without the space.
+ */
+export function spaceBeforeNumber(line: string): string {
+  const value = line.replace(/\s+/g, ' ').trim();
+  return value.replace(/^(.*?[^\s\d])(\d+[A-Za-z]?(?:\s*[/\\-]\s*\d+[A-Za-z]?)?(?:\s*(?:m\.?|lok\.?)\s*\d+[A-Za-z]?)?)$/i, '$1 $2');
+}
+
 /** Normalises a Polish phone number to 9 digits; other numbers keep their digits and leading +. */
 export function normalizePhone(phone: string | null | undefined): string {
   if (!phone) return '';
