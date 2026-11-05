@@ -34,6 +34,8 @@ export const pickup: Record<string, string> = {
   "The courier offers no pickup for these parcels. Drop them off at a point instead.": "Kurier nie oferuje odbioru tych paczek. Nadaj je w punkcie.",
   "A booked pickup can only be cancelled with the courier directly.": "Zamówiony odbiór można anulować tylko bezpośrednio u kuriera.",
   "Pickup requested": "Zamówiono odbiór",
+  "Clear ticked ({n})": "Wyczyść zaznaczone ({n})",
+  "Takes parcels that already left off this list. Nothing is booked or cancelled.": "Usuwa z tej listy paczki, które już wysłano. Nic nie jest zamawiane ani anulowane.",
   "Allegro split this pickup; these parcels were not included. Book them again.": "Allegro podzieliło ten odbiór i pominęło te paczki. Zamów je ponownie.",
   "Tick at least one parcel": "Zaznacz co najmniej jedną paczkę",
   "Some parcels already have a pickup or no longer need one. Refresh the page.": "Niektóre paczki mają już zamówiony odbiór lub go nie potrzebują. Odśwież stronę.",

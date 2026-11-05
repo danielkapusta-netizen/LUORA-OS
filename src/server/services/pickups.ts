@@ -56,6 +56,7 @@ function waitingFilter() {
     eq(shipments.carrier, 'allegro_shipping'),
     or(isNull(shipments.pickupId), eq(courierPickups.state, 'failed')),
     isNull(shipments.deliveredAt),
+    isNull(shipments.pickupClearedAt),
     // Tracking that already shows the parcel at a point or delivered means it left with a courier.
     or(isNull(shipments.deliveryStatus), inArray(shipments.deliveryStatus, ['in_transit', 'unknown'])),
     ne(orders.status, 'cancelled'),
@@ -366,6 +367,17 @@ export async function runPollPickup(pickupId: string): Promise<void> {
     await db.update(courierPickups).set({ error, pollAttempts: attempts }).where(eq(courierPickups.id, pickupId));
     await enqueue(JOBS.pickupPoll, { pickupId }, { startAfterSeconds: Math.min(300, 15 * attempts) });
   }
+}
+
+/** Takes parcels that already left off the Courier pickup list. Nothing is booked or cancelled. */
+export async function clearFromPickup(shipmentIds: string[]): Promise<number> {
+  const ids = new Set(shipmentIds);
+  const waiting = (await waitingRows()).filter((r) => ids.has(r.shipment.id)).map((r) => r.shipment.id);
+  if (!waiting.length) return 0;
+  const db = getDb();
+  const now = new Date();
+  for (const part of chunk(waiting, 90)) await db.update(shipments).set({ pickupClearedAt: now }).where(inArray(shipments.id, part));
+  return waiting.length;
 }
 
 // ---------------------------------------------------------------- pickup addresses

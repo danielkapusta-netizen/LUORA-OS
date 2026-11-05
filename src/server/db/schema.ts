@@ -504,6 +504,8 @@ export const shipments = sqliteTable(
     packedBy: text('packed_by').references(() => users.id, { onDelete: 'set null' }),
     /** The courier pickup booked for this parcel (Orders → Courier pickup). */
     pickupId: text('pickup_id').references(() => courierPickups.id, { onDelete: 'set null' }),
+    /** Set when staff clear an already-sent parcel off the Courier pickup list. */
+    pickupClearedAt: ts('pickup_cleared_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

@@ -1,7 +1,7 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, Clock3, PackageCheck, Truck } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { AlertCircle, CheckCircle2, Clock3, Eraser, PackageCheck, Truck } from 'lucide-react';
+import { useMemo, useState, useTransition } from 'react';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { Badge, buttonClass, Card, type Tone } from '@/components/ui';
 import { useT } from '@/lib/i18n/client';
@@ -9,6 +9,7 @@ import type { T } from '@/lib/i18n/translate';
 import type { PickupCourier } from '@/lib/pickup-slots';
 import { dayLabel, timeRange } from '@/lib/tasks/dates';
 import { cn } from '@/lib/utils';
+import { clearPickupAction } from './actions';
 import { BookingDialog, type BookingGroup } from './booking-dialog';
 
 export interface BoardParcel {
@@ -68,6 +69,8 @@ export function PickupBoard({ columns, otherCouriers, addresses, today }: { colu
   // Every packed parcel starts ticked: in the morning one press books them all.
   const [selected, setSelected] = useState<Set<string>>(() => new Set(columns.flatMap((c) => c.parcels.filter((p) => p.packed).map((p) => p.shipmentId))));
   const [dialog, setDialog] = useState<BookingGroup[] | null>(null);
+  const [clearing, startClearing] = useTransition();
+  const [cleared, setCleared] = useState<{ ok?: string; error?: string } | null>(null);
 
   // Parcels that left the list (booked elsewhere, refreshed away) drop out of the selection.
   const live = useMemo(() => new Set(columns.flatMap((c) => c.parcels.filter((p) => p.packed).map((p) => p.shipmentId))), [columns]);
@@ -135,6 +138,29 @@ export function PickupBoard({ columns, otherCouriers, addresses, today }: { colu
         <p className="mt-4 text-center text-xs text-slate-500">
           {t.plural(otherCouriers, '{n} other parcel (Allegro One, Pocztex…) is not listed: those couriers are not booked from here.', '{n} other parcels (Allegro One, Pocztex…) are not listed: those couriers are not booked from here.')}
         </p>
+      )}
+
+      {/* Parcels that already left (sent without a pickup here) come off the list, so they aren't booked again. */}
+      {live.size > 0 && (
+        <div className="mt-6 flex flex-col items-center gap-1.5">
+          <button
+            type="button"
+            disabled={total === 0 || clearing}
+            onClick={() => {
+              const ids = groups.flatMap((g) => g.shipmentIds);
+              if (!window.confirm(t.plural(ids.length, 'Remove {n} parcel from the list? It won’t be booked for pickup.', 'Remove {n} parcels from the list? They won’t be booked for pickup.'))) return;
+              setCleared(null);
+              startClearing(async () => setCleared(await clearPickupAction(ids)));
+            }}
+            className={buttonClass('secondary')}
+          >
+            <Eraser className="size-4" aria-hidden />
+            {clearing ? t('Working…') : t('Clear ticked ({n})', { n: total })}
+          </button>
+          <p className="text-center text-xs text-slate-500">{t('Takes parcels that already left off this list. Nothing is booked or cancelled.')}</p>
+          {cleared?.ok && <p className="text-xs text-emerald-700" role="status">{cleared.ok}</p>}
+          {cleared?.error && <p className="text-xs text-red-700" role="alert">{cleared.error}</p>}
+        </div>
       )}
 
       <BookingDialog groups={dialog} addresses={addresses} onClose={() => setDialog(null)} />
