@@ -217,4 +217,18 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
       ['booked', '2026-11-03', '09:00'],
     ]);
   });
+
+  it('clears ticked parcels off the list without booking them', async () => {
+    await m.db.getDb().update(m.schema.shipments).set({ pickupId: null });
+    const packed = (await parcels()).filter((p) => p.packed);
+    const ids = packed.slice(0, 2).map((p) => p.shipmentId);
+    const before = await m.pickups.pickupWaitingCount();
+    expect(await m.pickups.clearFromPickup([...ids, 'not-a-parcel'])).toBe(2);
+    expect((await parcels()).some((p) => ids.includes(p.shipmentId))).toBe(false);
+    expect(await m.pickups.pickupWaitingCount()).toBe(before - 2);
+    const [home] = await m.pickups.listPickupAddresses();
+    await expect(m.pickups.pickupProposals(ids, home.id)).rejects.toThrow(/no longer need one/);
+    // Clearing again changes nothing.
+    expect(await m.pickups.clearFromPickup(ids)).toBe(0);
+  });
 });

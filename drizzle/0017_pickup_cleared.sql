@@ -1,0 +1,1 @@
+ALTER TABLE `shipments` ADD `pickup_cleared_at` integer;

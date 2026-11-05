@@ -6,7 +6,7 @@ import { getT } from '@/lib/i18n/server';
 import { msg } from '@/lib/i18n/msg';
 import type { PickupCourier, Slot } from '@/lib/pickup-slots';
 import { requireUser } from '@/server/auth';
-import { bookPickup, pickupProposals, type ProposalResult } from '@/server/services/pickups';
+import { bookPickup, clearFromPickup, pickupProposals, type ProposalResult } from '@/server/services/pickups';
 
 /** The windows the carrier offers for the ticked parcels (the booking dialog asks when it opens). */
 export async function proposalsAction(shipmentIds: string[], addressId: string): Promise<(ProposalResult & { error?: undefined }) | { error: string }> {
@@ -27,5 +27,16 @@ export async function bookPickupAction(input: { courier: PickupCourier; shipment
     revalidatePath('/orders', 'layout');
     if (failed.length) throw new Error(failed.join('; '));
     return msg('Pickup requested');
+  });
+}
+
+/** "Wyczyść zaznaczone": takes the ticked parcels off the list without booking anything. */
+export async function clearPickupAction(shipmentIds: string[]): Promise<ActionResult> {
+  await requireUser();
+  return attempt(async () => {
+    const n = await clearFromPickup(shipmentIds);
+    revalidatePath('/orders', 'layout');
+    const t = await getT();
+    return t.plural(n, '{n} parcel removed from the list', '{n} parcels removed from the list');
   });
 }
