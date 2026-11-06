@@ -479,7 +479,7 @@ describe('offers created from Shopify', () => {
     );
     const adapter = new VonHalskyAdapter(store());
     await adapter.updatePrices([{ offerId: 'o1', price: '98.99', currency: 'PLN' }]);
-    expect(body).toEqual([{ offerId: 'o1', price: { grossPrice: { amount: 98.99, currency: 'PLN' } } }]);
+    expect(body).toEqual([{ offerId: 'o1', price: { amount: 98.99, currency: 'PLN' } }]);
     expect(await adapter.categoryLeaves('uroda')).toEqual([
       { id: 'l', path: 'Uroda › Perfumy' },
       { id: 'k', path: 'Uroda › Pielęgnacja › Kremy' },
