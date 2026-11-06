@@ -233,7 +233,7 @@ describe('Von Halsky prices', () => {
     );
     const adapter = new VonHalskyAdapter(store());
     expect(await adapter.setPrices([update({ externalId: 'o1', price: '98.99' })])).toEqual([]);
-    expect(body).toEqual([{ offerId: 'o1', price: { grossPrice: { amount: 98.99, currency: 'PLN' } } }]);
+    expect(body).toEqual([{ offerId: 'o1', price: { amount: 98.99, currency: 'PLN' } }]);
     refuse = true;
     const failures = await adapter.setPrices([update({ externalId: 'o1' }), update({ externalId: 'o2' })]);
     expect(failures.map((f) => f.externalId)).toEqual(['o1', 'o2']);

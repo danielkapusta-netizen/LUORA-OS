@@ -91,6 +91,13 @@ interface CommandStatus {
   errors?: { fieldName?: string; message: string }[];
 }
 
+/** A gross price as InPost's number, refusing text that isn't one (NaN would be sent as null). */
+function priceAmount(price: string): number {
+  const amount = Math.round(Number(price.trim().replace(',', '.')) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error(`"${price}" is not a valid price`);
+  return amount;
+}
+
 export class VonHalskyAdapter implements MarketplaceAdapter {
   readonly marketplace = 'vonhalsky' as const;
   readonly client: VonHalskyClient;
@@ -173,17 +180,19 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
   async updatePrices(updates: { offerId: string; price: string; currency: string }[]): Promise<void> {
     for (let i = 0; i < updates.length; i += STOCK_BATCH) {
       const batch = updates.slice(i, i + STOCK_BATCH);
-      const price = (u: { price: string; currency: string }) => ({ grossPrice: { amount: Number(u.price), currency: u.currency } });
+      // The batch endpoint takes a plain Money ({amount, currency}); an offer itself holds a price tag ({grossPrice}).
+      const money = (u: { price: string; currency: string }) => ({ amount: priceAmount(u.price), currency: u.currency });
+      const priceTag = (u: { price: string; currency: string }) => ({ grossPrice: money(u) });
       let commands: CommandDetails[];
       try {
-        commands = asCommands(await this.client.call<unknown>('PATCH', this.client.org('/offers/prices'), { body: batch.map((u) => ({ offerId: u.offerId, price: price(u) })) }));
+        commands = asCommands(await this.client.call<unknown>('PATCH', this.client.org('/offers/prices'), { body: batch.map((u) => ({ offerId: u.offerId, price: money(u) })) }));
       } catch (err) {
         if (!(err instanceof VonHalskyApiError) || ![404, 405, 501].includes(err.status)) throw err;
         commands = [];
         for (const u of batch) {
           await this.client.call('PATCH', this.client.org(`/offers/${encodeURIComponent(u.offerId)}`), {
             headers: { 'Content-Type': 'application/merge-patch+json' },
-            body: JSON.stringify({ price: price(u) }),
+            body: JSON.stringify({ price: priceTag(u) }),
           });
         }
       }
