@@ -82,6 +82,7 @@ export const shared: Record<string, string> = {
   "Show {what}": "Pokaż: {what}",
   "{what} failed": "Nie udało się: {what}",
   "{what} finished": "Zakończono: {what}",
+  "The database was briefly unavailable. Try again.": "Baza danych była przez chwilę niedostępna. Spróbuj ponownie.",
   "Close": "Zamknij",
   "Working…": "Pracuję…",
   "Language": "Język",
