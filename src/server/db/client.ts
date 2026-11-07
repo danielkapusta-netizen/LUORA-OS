@@ -2,6 +2,7 @@ import { getTableColumns } from 'drizzle-orm';
 import { drizzle, type DrizzleD1Database } from 'drizzle-orm/d1';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { getCfEnv } from '../cf';
+import { withD1Retry } from './d1-retry';
 import * as schema from './schema';
 
 export type Db = DrizzleD1Database<typeof schema>;
@@ -16,7 +17,7 @@ const cache = new WeakMap<D1Database, Db>();
 export function getDb(): Db {
   const binding = getCfEnv().DB;
   let db = cache.get(binding);
-  if (!db) cache.set(binding, (db = drizzle(binding, { schema })));
+  if (!db) cache.set(binding, (db = drizzle(withD1Retry(binding), { schema })));
   return db;
 }
 
