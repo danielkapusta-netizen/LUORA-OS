@@ -90,7 +90,7 @@ export function buildOfferCsv(draft: OfferDraft, state: string, leadtimeDays: nu
 }
 
 /**
- * OF01 import that changes only the price of existing offers (import mode PARTIAL leaves every
+ * OF01 import that changes only the price of existing offers (import mode PARTIAL_UPDATE leaves every
  * column that is not in the file alone, so descriptions, stock and lead times stay as they are).
  */
 export function buildPriceCsv(updates: PriceUpdate[]): string {
@@ -429,7 +429,7 @@ export class MiraklAdapter implements MarketplaceAdapter, OfferPublisher {
     if (sendable.length === 0) return failures;
     const form = new FormData();
     form.append('file', new Blob([buildPriceCsv(sendable)], { type: 'text/csv' }), 'prices.csv');
-    form.append('import_mode', 'PARTIAL');
+    form.append('import_mode', 'PARTIAL_UPDATE');
     const { import_id: importId } = await this.client.call<{ import_id: number | string }>('POST', '/offers/imports', { body: form });
     try {
       await this.awaitImport(importId, 'the price update');
