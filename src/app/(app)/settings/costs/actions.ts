@@ -10,7 +10,6 @@ import {
   importCostsFromSheet,
   importCostsFromShopify,
   importInvoice,
-  LABEL_COST_SERVICES,
   parseAmount,
   parseCostLines,
   saveAnalyticsSettings,
@@ -39,15 +38,20 @@ export async function saveProfitSettingsAction(_prev: ActionResult, fd: FormData
       const v = percent(fd, `commission_${m}`);
       if (v !== undefined) fallbackCommission[m] = v;
     }
-    const labelCosts: Record<string, number> = {};
-    for (const s of LABEL_COST_SERVICES) {
-      const v = amount(fd, `label_${s.key}`);
-      if (v !== null) labelCosts[s.key] = v;
+    const sellerShipping: AnalyticsSettings['sellerShipping'] = {};
+    for (const m of MARKETPLACES) {
+      const v = amount(fd, `shipping_${m}`);
+      if (v !== null) sellerShipping[m] = v;
+    }
+    for (const rate of Object.values(fallbackCommission)) {
+      if (rate! < 0 || rate! > 1) throw new Error(msg('Commission must be between 0 and 100%'));
+    }
+    for (const cost of Object.values(sellerShipping)) {
+      if (cost! < 0) throw new Error(msg('Shipping cost can’t be negative'));
     }
     await saveAnalyticsSettings({
       fallbackCommission,
-      labelCosts,
-      defaultLabelCost: amount(fd, 'defaultLabelCost') ?? undefined,
+      sellerShipping,
       packagingCost: amount(fd, 'packagingCost') ?? undefined,
       feesVatDeductible: fd.get('feesVatDeductible') === 'on',
       targetMargin: percent(fd, 'targetMargin'),

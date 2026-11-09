@@ -765,6 +765,9 @@ export interface AnalyticsSettings {
    */
   fallbackCommission?: Partial<Record<(typeof marketplaceTypeValues)[number], number>>;
   /** Net cost of one label in PLN, by carrier service ("inpost_locker_standard", …). */
+  /** What we pay to ship one order when the buyer didn't pay for delivery (zł, without VAT), per marketplace. */
+  sellerShipping?: Partial<Record<(typeof marketplaceTypeValues)[number], number>>;
+  /** No longer used: shipping is set per marketplace in `sellerShipping`. Kept so older settings still load. */
   labelCosts?: Record<string, number>;
   /** Label cost for services without their own entry and for orders shipped outside Luora. */
   defaultLabelCost?: number;

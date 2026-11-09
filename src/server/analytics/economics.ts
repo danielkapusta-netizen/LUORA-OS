@@ -2,10 +2,9 @@
 // rules are unit-tested and the same numbers come out wherever they are computed.
 //
 //   net revenue  = paid for the goods (after discounts) without VAT
-//   − fees       = marketplace and payment fees without deductible VAT (or the fallback commission)
+//   − fees       = commission the marketplace reports, without deductible VAT (or the configured rate)
 //   − cost       = landed unit cost on the order day × units
-//   + shipping   = shipping the buyer paid, without VAT
-//   − delivery   = labels, packaging and marketplace delivery charges
+//   − delivery   = shipping we pay (none when the buyer paid for delivery) + packaging
 //   − refunds    = money returned without VAT, less the cost of goods that came back to stock
 //   = profit
 import type { AnalyticsSettings, FeeKind } from '../db/schema';
@@ -116,11 +115,11 @@ export function orderEconomics(input: EconomicsInput): LineEconomics[] {
   const spread = (total: number, key: 'fees' | 'delivery' | 'refunds') =>
     allocate(total, gross).forEach((share, n) => (lines[n][key] += share));
 
-  // Fees: delivery charges count as delivery; everything else as fees. Only what the marketplace
-  // reports, or the fallback commission when it reported nothing at all.
+  // Commission: what the marketplace reports (delivery charges aside), or the configured rate when it
+  // reported no commission at all.
   const charges = input.fees.filter((f) => f.kind !== 'delivery');
   const deliveryCharges = input.fees.filter((f) => f.kind === 'delivery');
-  const feesEstimated = input.fees.length === 0;
+  const feesEstimated = charges.length === 0;
   if (feesEstimated) {
     const rate = s.fallbackCommission[input.marketplace] ?? 0;
     const deductible = s.feesVatDeductible && VAT_INVOICED_FEES.has(input.marketplace);
@@ -136,18 +135,17 @@ export function orderEconomics(input: EconomicsInput): LineEconomics[] {
     spread(shared, 'fees');
   }
 
-  // Delivery: our labels, the marketplace's delivery charges, packaging. A label bought through
-  // Allegro Delivery is billed by Allegro, so its charge replaces the configured label cost.
-  const marketplaceDelivery = deliveryCharges.reduce((sum, f) => sum + netFee(f, s.feesVatDeductible, input.feeVatRate), 0);
-  let labels = 0;
-  for (const shipment of input.shipments) {
-    if (shipment.carrier === 'allegro_shipping') {
-      if (!deliveryCharges.length) labels += s.labelCosts.allegro_shipping ?? s.defaultLabelCost;
-    } else labels += s.labelCosts[shipment.service] ?? s.defaultLabelCost;
+  // Shipping: when the buyer paid for delivery it neither adds to nor takes from the margin.
+  // Otherwise we pay it: Allegro's own delivery charge when its billing has one, else the amount set
+  // for the marketplace. Packaging always counts.
+  const buyerPaid = input.shippingAmount > 0;
+  let wePay = 0;
+  if (!buyerPaid) {
+    wePay = deliveryCharges.length
+      ? deliveryCharges.reduce((sum, f) => sum + netFee(f, s.feesVatDeductible, input.feeVatRate), 0)
+      : (s.sellerShipping[input.marketplace] ?? 0);
   }
-  // Shipped outside Luora (or not yet): one parcel at the default cost, unless the marketplace billed delivery.
-  if (!input.shipments.length && !deliveryCharges.length) labels += s.defaultLabelCost;
-  spread(marketplaceDelivery + labels + s.packagingCost, 'delivery');
+  spread(wePay + s.packagingCost, 'delivery');
 
   // Refunds: back without VAT; goods that return to stock give their cost back.
   let sharedRefunds = 0;
@@ -166,11 +164,10 @@ export function orderEconomics(input: EconomicsInput): LineEconomics[] {
   }
   spread(sharedRefunds, 'refunds');
 
-  const shipping = allocate((input.shippingAmount * fxRate) / (1 + vatRate), gross);
-  return lines.map((l, n) => {
+  return lines.map((l) => {
     const net = l.gross / (1 + vatRate);
     const cost = (l.item.unitCost ?? 0) * l.item.quantity;
-    const profit = net - l.fees - cost + shipping[n] - l.delivery - l.refunds;
+    const profit = net - l.fees - cost - l.delivery - l.refunds;
     return {
       itemId: l.item.id,
       quantity: l.item.quantity,
@@ -182,7 +179,8 @@ export function orderEconomics(input: EconomicsInput): LineEconomics[] {
       feesEstimated,
       cost: round(cost),
       costKnown: l.item.unitCost !== null,
-      shipping: round(shipping[n]),
+      // Delivery the buyer paid is neutral, so it never adds to the margin.
+      shipping: 0,
       delivery: round(l.delivery),
       refunds: round(l.refunds),
       profit: round(profit),
