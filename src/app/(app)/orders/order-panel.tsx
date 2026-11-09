@@ -77,13 +77,8 @@ export async function OrderPanel({ orderId, nextOrderId = null }: { orderId: str
       {/* Card order: customer, what was bought, how it ships (with the label actions), then notes. */}
       <div className="mt-3 rounded-2xl border border-sky/55 bg-sky-tint p-4">
       <p className="text-xs font-medium text-sky-ink">{t('Order items')}</p>
-      <OrderItemsList items={items.slice(0, 3)} className="mt-3" highlightQuantity photoFirst />
-      {items.length > 3 && (
-        <details className="group mt-2">
-          <summary className="cursor-pointer list-none text-center text-xs font-medium text-slate-600 hover:text-ink group-open:hidden">{t('Show all {n} items', { n: items.length })}</summary>
-          <OrderItemsList items={items.slice(3)} className="mt-2.5" highlightQuantity photoFirst />
-        </details>
-      )}
+      {/* Every item, always: a hidden fourth item is one that doesn't get packed. */}
+      <OrderItemsList items={items} className="mt-3" highlightQuantity photoFirst />
       </div>
 
       <div className="mt-3 rounded-2xl border border-butter/60 bg-butter-tint p-4">
