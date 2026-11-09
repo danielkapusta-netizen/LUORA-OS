@@ -315,7 +315,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <Card>
               <CardHeader title={t('Profit')} description={t('After VAT, fees, product cost, shipping and refunds, in PLN.')} />
               <CardBody>
-                <ProfitBreakdown lines={profitLines} />
+                <ProfitBreakdown lines={profitLines} buyerPaidShipping={Number(order.shippingAmount ?? 0) > 0} />
               </CardBody>
             </Card>
           ) : (

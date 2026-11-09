@@ -17,7 +17,8 @@ import { msg } from '@/lib/i18n/msg';
 // ---------------------------------------------------------------- settings
 
 export const DEFAULT_ANALYTICS_SETTINGS: Required<AnalyticsSettings> = {
-  fallbackCommission: { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1, hebe: 0.15 },
+  fallbackCommission: { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1, hebe: 0.12 },
+  sellerShipping: { allegro: 11, empik: 12.5, shopify: 12.5, vonhalsky: 12.5, hebe: 9 },
   labelCosts: { inpost_locker_standard: 12.5, inpost_courier_standard: 15.5, allegro_shipping: 11 },
   defaultLabelCost: 12.5,
   packagingCost: 1.5,
@@ -28,13 +29,6 @@ export const DEFAULT_ANALYTICS_SETTINGS: Required<AnalyticsSettings> = {
   criticalMargin: 0.05,
 };
 
-/** Label services that have their own cost, with how staff know them. */
-export const LABEL_COST_SERVICES = [
-  { key: 'inpost_locker_standard', label: 'InPost Paczkomat label' },
-  { key: 'inpost_courier_standard', label: 'InPost courier label' },
-  { key: 'allegro_shipping', label: 'Allegro Delivery label', hint: 'Used only when Allegro billing has no delivery charge for the order.' },
-] as const;
-
 export async function loadAnalyticsSettings(): Promise<Required<AnalyticsSettings>> {
   const [row] = await getDb().select().from(analyticsSettings).where(eq(analyticsSettings.id, 'main'));
   const s = row?.settings ?? {};
@@ -43,6 +37,7 @@ export async function loadAnalyticsSettings(): Promise<Required<AnalyticsSetting
     ...d,
     ...s,
     fallbackCommission: { ...d.fallbackCommission, ...s.fallbackCommission },
+    sellerShipping: { ...d.sellerShipping, ...s.sellerShipping },
     labelCosts: { ...d.labelCosts, ...s.labelCosts },
   };
 }

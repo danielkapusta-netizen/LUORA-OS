@@ -4,7 +4,7 @@ import { ActionForm, SubmitButton } from '@/components/forms';
 import { Alert, Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, Select, Textarea, td, th } from '@/components/ui';
 import { cn, formatMoney, MARKETPLACE_LABELS } from '@/lib/utils';
 import { requireAdmin } from '@/server/auth';
-import { costHistory, filterCostRows, LABEL_COST_SERVICES, listCostRows, loadAnalyticsSettings } from '@/server/services/costs';
+import { costHistory, filterCostRows, listCostRows, loadAnalyticsSettings } from '@/server/services/costs';
 import { loadAccounting } from '@/server/services/invoicing';
 import {
   deleteProductCostAction,
@@ -56,7 +56,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
           title={t('How profit is calculated')}
           description={
             <>
-              {t('Profit = revenue without VAT − marketplace fees − product cost − label and packaging + shipping paid by the buyer − refunds. VAT rates come from')}{' '}
+              {t('Profit = revenue without VAT − marketplace commission − product cost − shipping we pay − packaging − refunds. VAT rates come from')}{' '}
               <Link href="/settings/accounting" className="underline">
                 {t('Accounting')}
               </Link>{' '}
@@ -67,16 +67,50 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
         <CardBody>
           <ActionForm action={saveProfitSettingsAction} className="space-y-5">
             <fieldset>
-              <legend className="mb-1 text-sm font-semibold">{t('Marketplace fees when the marketplace reports none')}</legend>
-              <p className="mb-2 text-xs text-slate-500">
-                {t('Real fees are read from Allegro billing, Empik and HEBE commissions and Shopify Payments. These rates (% of the gross price) are only used for orders without a reported fee yet, and such orders are marked as estimated.')}
+              <legend className="mb-1 text-sm font-semibold">{t('Marketplace costs')}</legend>
+              <p className="mb-3 text-xs text-slate-500">
+                {t('When the marketplace reports its commission, the real one is used; otherwise this %. When the buyer pays for delivery, shipping doesn’t change the margin. Allegro: its delivery charge from billing is used when there is one.')}
               </p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {(['allegro', 'empik', 'hebe', 'shopify', 'vonhalsky'] as const).map((m) => (
-                  <Field key={m} label={`${MARKETPLACE_LABELS[m]}, %`}>
-                    <Input name={`commission_${m}`} inputMode="decimal" defaultValue={pct(settings.fallbackCommission[m])} />
-                  </Field>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full max-w-xl text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-slate-500">
+                      <th className="py-1.5 pr-3 font-medium">{t('Marketplace')}</th>
+                      <th className="py-1.5 pr-3 font-medium">{t('Commission (%)')}</th>
+                      <th className="py-1.5 font-medium">{t('Shipping we pay (PLN)')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-black/[0.04]">
+                    {(['allegro', 'empik', 'hebe', 'shopify', 'vonhalsky'] as const).map((m) => (
+                      <tr key={m}>
+                        <td className="py-2 pr-3 font-medium text-ink">{MARKETPLACE_LABELS[m]}</td>
+                        <td className="py-2 pr-3">
+                          <Input
+                            name={`commission_${m}`}
+                            inputMode="decimal"
+                            aria-label={t('{marketplace} commission (%)', { marketplace: MARKETPLACE_LABELS[m] })}
+                            defaultValue={pct(settings.fallbackCommission[m])}
+                            className="w-28"
+                          />
+                        </td>
+                        <td className="py-2">
+                          <Input
+                            name={`shipping_${m}`}
+                            inputMode="decimal"
+                            aria-label={t('{marketplace} shipping we pay (PLN)', { marketplace: MARKETPLACE_LABELS[m] })}
+                            defaultValue={settings.sellerShipping[m] ?? ''}
+                            className="w-28"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Field label={t('Packaging (PLN per parcel)')}>
+                  <Input name="packagingCost" inputMode="decimal" defaultValue={settings.packagingCost} />
+                </Field>
               </div>
               <Checkbox
                 className="mt-3"
@@ -84,23 +118,6 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                 label={t('Fees are invoiced with VAT that the company deducts (count them without VAT)')}
                 defaultChecked={settings.feesVatDeductible}
               />
-            </fieldset>
-
-            <fieldset>
-              <legend className="mb-1 text-sm font-semibold">{t('Shipping costs per parcel (PLN, without VAT)')}</legend>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                {LABEL_COST_SERVICES.map((s) => (
-                  <Field key={s.key} label={s.label} hint={'hint' in s ? s.hint : undefined}>
-                    <Input name={`label_${s.key}`} inputMode="decimal" defaultValue={settings.labelCosts[s.key] ?? ''} />
-                  </Field>
-                ))}
-                <Field label={t('Other parcels')} hint={t('Labels bought outside Luora, and past orders.')}>
-                  <Input name="defaultLabelCost" inputMode="decimal" defaultValue={settings.defaultLabelCost} />
-                </Field>
-                <Field label={t('Packaging')}>
-                  <Input name="packagingCost" inputMode="decimal" defaultValue={settings.packagingCost} />
-                </Field>
-              </div>
             </fieldset>
 
             <fieldset>

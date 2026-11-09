@@ -4,7 +4,8 @@ import { DEFAULT_ANALYTICS_SETTINGS } from '@/server/services/costs';
 
 const settings = {
   ...DEFAULT_ANALYTICS_SETTINGS,
-  fallbackCommission: { allegro: 0.1, empik: 0.15, shopify: 0.02, vonhalsky: 0.1 },
+  fallbackCommission: { allegro: 0.1, empik: 0.15, shopify: 0.02, vonhalsky: 0.1, hebe: 0.12 },
+  sellerShipping: { allegro: 10, empik: 12, shopify: 12, vonhalsky: 12, hebe: 9 },
   labelCosts: { inpost_locker_standard: 10, inpost_courier_standard: 14, allegro_shipping: 9 },
   defaultLabelCost: 12,
   packagingCost: 2,
@@ -46,15 +47,27 @@ describe('allocate', () => {
 });
 
 describe('order economics', () => {
-  it('estimates the commission when the marketplace reported no fee, without its VAT', () => {
+  it('estimates the commission when the marketplace reported none, and takes off the shipping we pay', () => {
     const [line] = orderEconomics(input());
-    // 123 gross → 100 net; commission 10% of 123 = 12.30 gross = 10 net; cost 40; label 10 + packaging 2.
-    expect(line).toMatchObject({ gross: 123, net: 100, fees: 10, feesEstimated: true, cost: 40, costKnown: true, delivery: 12, profit: 38 });
+    // 123 gross → 100 net; commission 10% of 123 = 12.30 gross = 10 net; cost 40; shipping we pay 10 + packaging 2.
+    expect(line).toMatchObject({ gross: 123, net: 100, fees: 10, feesEstimated: true, cost: 40, costKnown: true, shipping: 0, delivery: 12, profit: 38 });
+  });
+
+  it('HEBE: 12% commission plus 9 zł shipping when the buyer did not pay for delivery', () => {
+    const [line] = orderEconomics(input({ marketplace: 'hebe', items: [{ id: 'a', productId: 'p1', quantity: 1, unitPrice: 123, discount: 0, unitCost: 40 }] }));
+    // 12% of 123 = 14.76 gross = 12 net; 9 shipping + 2 packaging.
+    expect(line).toMatchObject({ net: 100, fees: 12, feesEstimated: true, delivery: 11, profit: 100 - 12 - 40 - 11 });
+  });
+
+  it('counts delivery the buyer paid as neutral: only packaging is taken off', () => {
+    const [line] = orderEconomics(input({ marketplace: 'hebe', shippingAmount: 12.99, items: [{ id: 'a', productId: 'p1', quantity: 1, unitPrice: 123, discount: 0, unitCost: 40 }] }));
+    expect(line).toMatchObject({ shipping: 0, delivery: 2, profit: 100 - 12 - 40 - 2 });
   });
 
   it('uses reported fees: VAT taken off where reported, line fees on their line, the rest spread by value', () => {
     const lines = orderEconomics(
       input({
+        marketplace: 'empik',
         items: [
           { id: 'a', productId: 'p1', quantity: 1, unitPrice: 100, discount: 0, unitCost: 30 },
           { id: 'b', productId: null, quantity: 1, unitPrice: 300, discount: 0, unitCost: null },
@@ -68,25 +81,26 @@ describe('order economics', () => {
     );
     expect(lines[0]).toMatchObject({ fees: 20, feesEstimated: false, costKnown: true });
     expect(lines[1]).toMatchObject({ fees: 30, cost: 0, costKnown: false });
-    // No label bought here: one parcel at the default cost plus packaging, spread 1:3.
+    // Empik: 12 shipping we pay + 2 packaging, spread 1:3.
     expect(lines.map((l) => l.delivery)).toEqual([3.5, 10.5]);
   });
 
-  it("lets Allegro's delivery charge replace the configured Allegro Delivery label", () => {
+  it("uses Allegro's delivery charge instead of the configured shipping, and still estimates the commission", () => {
     const withCharge = orderEconomics(
       input({ fees: [{ itemId: null, kind: 'delivery', amount: 6.15, tax: 1.15 }], shipments: [{ carrier: 'allegro_shipping', service: 'buyer_choice' }] }),
     )[0];
-    expect(withCharge.delivery).toBe(7); // 5 net charge + 2 packaging, no label
-    expect(withCharge.fees).toBe(0);
+    expect(withCharge.delivery).toBe(7); // 5 net charge + 2 packaging
+    expect(withCharge).toMatchObject({ fees: 10, feesEstimated: true }); // only a delivery charge: no commission reported
     const withoutCharge = orderEconomics(input({ fees: [{ itemId: null, kind: 'commission', amount: 0, tax: 0 }], shipments: [{ carrier: 'allegro_shipping', service: 'buyer_choice' }] }))[0];
-    expect(withoutCharge.delivery).toBe(11); // 9 label + 2 packaging
+    expect(withoutCharge.delivery).toBe(12); // 10 shipping we pay + 2 packaging
   });
 
-  it('adds the shipping the buyer paid and converts foreign orders at the order day rate', () => {
+  it('converts foreign orders at the order day rate; delivery the buyer paid is not income', () => {
     const [line] = orderEconomics(input({ marketplace: 'shopify', fxRate: 4.3, vatRate: 0.21, shippingAmount: 12.1, items: [{ id: 'a', productId: 'p1', quantity: 1, unitPrice: 24.2, discount: 0, unitCost: 30 }] }));
     expect(line.gross).toBe(104.06);
     expect(line.net).toBe(86);
-    expect(line.shipping).toBe(43);
+    expect(line.shipping).toBe(0);
+    expect(line.delivery).toBe(2);
     // Shopify's fallback is a payment fee with no VAT: 2% of the gross.
     expect(line.fees).toBe(2.08);
   });

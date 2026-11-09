@@ -944,10 +944,10 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(rows.find((r) => r.product.sku === 'LUO-TSH-M')?.cost?.source).toBe('import');
     expect(rows.some((r) => r.units90 > 0 && r.revenue90 > 0)).toBe(true);
 
-    await costs.saveAnalyticsSettings({ fallbackCommission: { allegro: 0.1 }, labelCosts: { inpost_locker_standard: 9 } });
+    await costs.saveAnalyticsSettings({ fallbackCommission: { allegro: 0.1 }, sellerShipping: { hebe: 7 } });
     const settings = await costs.loadAnalyticsSettings();
     expect(settings.fallbackCommission).toMatchObject({ allegro: 0.1, empik: 0.15 });
-    expect(settings.labelCosts).toMatchObject({ inpost_locker_standard: 9, inpost_courier_standard: 15.5 });
+    expect(settings.sellerShipping).toMatchObject({ hebe: 7, allegro: 11 });
     await expect(costs.saveAnalyticsSettings({ thinMargin: 0.2, healthyMargin: 0.15 })).rejects.toThrow('Margin bands');
   });
 
@@ -995,7 +995,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       else expect(unit).toBeLessThan(100);
     }
 
-    // A new label on an order brings its configured cost in.
+    // Shipping on an order: packaging only when the buyer paid for delivery, else the marketplace's shipping we pay too.
     const order = (await unlabelledOrders()).find((o) => o.status === 'new' && o.marketplace === 'shopify' && o.pickupPointId)!;
     const deliveryOf = async () =>
       (await db.select().from(s.salesLines).where(orm.eq(s.salesLines.orderId, order.id))).reduce((sum, l) => sum + l.delivery, 0);
@@ -1006,7 +1006,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     );
     await drain(['tracking-push']);
     const settings = await costs.loadAnalyticsSettings();
-    expect(await deliveryOf()).toBeCloseTo((settings.labelCosts[form.route!.service] ?? settings.defaultLabelCost) + settings.packagingCost, 1);
+    const wePay = Number(order.shippingAmount ?? 0) > 0 ? 0 : (settings.sellerShipping.shopify ?? 0);
+    expect(await deliveryOf()).toBeCloseTo(wePay + settings.packagingCost, 1);
     queue.length = 0;
   });
 

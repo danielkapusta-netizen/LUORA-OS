@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { getT } from '@/lib/i18n/server';
 
 /** How an order's revenue becomes profit, from its stored profit lines. */
-export async function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; compact?: boolean }) {
+export async function ProfitBreakdown({ lines, compact, buyerPaidShipping }: { lines: SalesLine[]; compact?: boolean; /** The buyer paid for delivery, so shipping doesn't count. */ buyerPaidShipping?: boolean }) {
   const t = await getT();
   if (!lines.length) return <p className="text-sm text-slate-500">{t('No profit figures yet (cancelled, or waiting for the exchange rate).')}</p>;
   const total = (k: keyof SalesLine) => lines.reduce((sum, l) => sum + Number(l[k] ?? 0), 0);
@@ -16,10 +16,11 @@ export async function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; 
   const rows: [string, number, string?][] = [
     [t('Paid for the goods'), gross],
     [t('VAT'), net - gross],
-    [t('Marketplace fees'), -total('fees'), estimated ? t('estimated') : undefined],
+    [t('Marketplace commission'), -total('fees'), estimated ? t('estimated') : undefined],
     [t('Product cost'), -total('cost'), missingCost ? t('missing for some lines') : undefined],
+    // Older lines may still carry a shipping credit until they are recalculated.
     [t('Shipping paid by the buyer'), total('shipping')],
-    [t('Labels, packaging, delivery'), -total('delivery')],
+    [t('Shipping we pay and packaging'), -total('delivery')],
     [t('Refunds'), -total('refunds')],
   ];
   return (
@@ -42,6 +43,7 @@ export async function ProfitBreakdown({ lines, compact }: { lines: SalesLine[]; 
           </dd>
         </div>
       </dl>
+      {buyerPaidShipping && <p className="text-xs text-slate-500">{t('The buyer paid for delivery, so shipping doesn’t change the margin.')}</p>}
       {lines[0].currency !== 'PLN' && (
         <p className="text-xs text-slate-500">
           {t('Converted from {currency} at {rate} (NBP, {day}); VAT {vat}%.', { currency: lines[0].currency, rate: lines[0].fxRate.toFixed(4), day: lines[0].day, vat: (lines[0].vatRate * 100).toFixed(0) })}
