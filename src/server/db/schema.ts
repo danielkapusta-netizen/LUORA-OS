@@ -1056,6 +1056,22 @@ export const jobLocks = sqliteTable('job_locks', {
   until: ts('until').notNull(),
 });
 
+/** Server errors (page renders and server actions), keyed by the digest the user sees on the error screen. */
+export const appErrors = sqliteTable(
+  'app_errors',
+  {
+    id: id(),
+    at: createdAt(),
+    digest: text('digest'),
+    path: text('path'),
+    route: text('route'),
+    kind: text('kind'),
+    message: text('message'),
+    stack: text('stack'),
+  },
+  (t) => [index('app_errors_digest_idx').on(t.digest), index('app_errors_at_idx').on(t.at)],
+);
+
 export type User = typeof users.$inferSelect;
 export type MarketplaceAccount = typeof marketplaceAccounts.$inferSelect;
 export type CarrierAccount = typeof carrierAccounts.$inferSelect;

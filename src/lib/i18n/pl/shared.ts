@@ -309,4 +309,8 @@ export const shared: Record<string, string> = {
   "The order changed meanwhile; reload and try again": "Zamówienie w międzyczasie się zmieniło; odśwież i spróbuj ponownie",
   "View all": "Zobacz wszystko",
   "Menu": "Menu",
+  "This page couldn't load": "Nie udało się wczytać tej strony",
+  "Something went wrong on our side. Try again; it usually works the second time.": "Coś poszło nie tak po naszej stronie. Spróbuj ponownie – zwykle za drugim razem działa.",
+  "Reload page": "Odśwież stronę",
+  "Error code": "Kod błędu",
 };

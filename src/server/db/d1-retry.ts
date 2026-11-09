@@ -1,5 +1,5 @@
 // D1 sometimes fails a query for a moment ("Network connection lost", a storage timeout, an internal
-// error); Cloudflare documents these as safe to retry. Reads are retried once; writes never are, so a
+// error); Cloudflare documents these as safe to retry. Reads are retried twice; writes never are, so a
 // retry can't buy a second label or save something twice.
 
 const TRANSIENT = /network connection lost|storage operation exceeded timeout|internal error|reset because its code was updated|overloaded|transient issue/i;
@@ -14,17 +14,19 @@ export function isReadOnlySql(sql: string): boolean {
   return /^\s*select\b/i.test(sql);
 }
 
-const RETRY_DELAY_MS = 200;
-const pause = () => new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+/** Waits before each retry: a blip usually clears within a second. */
+const RETRY_DELAYS_MS = [200, 600];
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function once<T>(readOnly: boolean, run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (err) {
-    if (!readOnly || !isTransientD1Error(err)) throw err;
-    console.warn('[d1] retrying a read after a transient error:', err instanceof Error ? err.message : err);
-    await pause();
-    return run();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      if (!readOnly || !isTransientD1Error(err) || attempt >= RETRY_DELAYS_MS.length) throw err;
+      console.warn('[d1] retrying a read after a transient error:', err instanceof Error ? err.message : err);
+      await pause(RETRY_DELAYS_MS[attempt]);
+    }
   }
 }
 
@@ -45,7 +47,7 @@ function wrapStatement(stmt: D1PreparedStatement, sql: string): D1PreparedStatem
   return wrapped;
 }
 
-/** The D1 binding with one retry for reads that hit a transient error. */
+/** The D1 binding with two retries for reads that hit a transient error. */
 export function withD1Retry(db: D1Database): D1Database {
   return new Proxy(db, {
     get(target, prop) {
