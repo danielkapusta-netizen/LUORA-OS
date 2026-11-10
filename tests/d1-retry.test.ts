@@ -32,13 +32,24 @@ describe('D1 retry', () => {
     expect(isReadOnlySql('insert into "shipments" …')).toBe(false);
   });
 
-  it('retries a read once after a transient error', async () => {
+  it('retries a read after a transient error', async () => {
     vi.useFakeTimers();
     const { db, calls } = fakeD1((sql, n) => (n === 1 ? new Error('D1_ERROR: Network connection lost.') : null));
     const read = withD1Retry(db).prepare('select 1').bind().all();
     await vi.runAllTimersAsync();
     expect((await read).results).toEqual([{ ok: 1 }]);
     expect(calls).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it('gives up on a read after two retries', async () => {
+    vi.useFakeTimers();
+    const { db, calls } = fakeD1(() => new Error('D1_ERROR: Network connection lost.'));
+    const read = withD1Retry(db).prepare('select 1').bind().all();
+    const settled = read.catch((err: Error) => err);
+    await vi.runAllTimersAsync();
+    expect(((await settled) as Error).message).toContain('Network connection lost');
+    expect(calls).toHaveLength(3);
     vi.useRealTimers();
   });
 
