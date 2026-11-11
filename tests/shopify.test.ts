@@ -205,13 +205,16 @@ describe('ShopifyAdapter', () => {
     let input: { quantities: Record<string, unknown>[] } | undefined;
     server.use(
       http.post(`${SHOP}/admin/api/2026-07/graphql.json`, async ({ request }) => {
-        const body = (await request.json()) as { variables: { input: typeof input } };
+        const body = (await request.json()) as { query: string; variables: { input: typeof input; key: string } };
         input = body.variables.input;
+        // Since API 2026-04 the mutation is refused without an idempotency key.
+        expect(body.query).toContain('@idempotent(key: $key)');
+        expect(body.variables.key).toMatch(/^[0-9a-f-]{36}$/);
         return HttpResponse.json({ data: { inventorySetQuantities: { inventoryAdjustmentGroup: { id: 'g' }, userErrors: [] } } });
       }),
     );
     const adapter = new ShopifyAdapter(store({ shopDomain: 'luora.myshopify.com', accessToken: 'shpat_x' }), { locationId: 'gid://shopify/Location/1' });
-    await adapter.setStock([{ externalId: 'v', sku: 'A', ref: { inventoryItemId: 'gid://shopify/InventoryItem/111' }, quantity: 7 }]);
+    expect(await adapter.setStock([{ externalId: 'v', sku: 'A', ref: { inventoryItemId: 'gid://shopify/InventoryItem/111' }, quantity: 7 }])).toEqual([]);
     expect(input?.quantities).toEqual([{ inventoryItemId: 'gid://shopify/InventoryItem/111', locationId: 'gid://shopify/Location/1', quantity: 7, changeFromQuantity: null }]);
   });
 });

@@ -1,5 +1,5 @@
 import type { MarketplaceSettings } from '../../../db/schema';
-import type { CredentialsStore, Listing, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
+import type { CredentialsStore, Listing, OrderRef, PriceFailure, PriceUpdate, StockFailure, StockUpdate, TrackingInfo } from '../../types';
 import type { MarketplaceAdapter, SyncResult } from '../types';
 import { DEFAULT_SHOPIFY_API_VERSION, ShopifyClient, type ShopifyCredentials } from './client';
 import { DEFAULT_PICKUP_POINT_KEYS, mapShopifyOrder } from './mapper';
@@ -129,8 +129,9 @@ const FIND_CUSTOMER = `query FindCustomer($query: String!) {
 const TAGS_ADD = `mutation TagsAdd($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { field message } } }`;
 const TAGS_REMOVE = `mutation TagsRemove($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { userErrors { field message } } }`;
 
-const SET_QUANTITIES = `mutation SetQty($input: InventorySetQuantitiesInput!) {
-  inventorySetQuantities(input: $input) {
+// Since API 2026-04 inventory mutations must carry an idempotency key.
+const SET_QUANTITIES = `mutation SetQty($input: InventorySetQuantitiesInput!, $key: String!) {
+  inventorySetQuantities(input: $input) @idempotent(key: $key) {
     inventoryAdjustmentGroup { id }
     userErrors { field message code }
   }
@@ -373,8 +374,8 @@ export class ShopifyAdapter implements MarketplaceAdapter {
     }
   }
 
-  async setStock(updates: StockUpdate[]): Promise<void> {
-    if (updates.length === 0) return;
+  async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
+    if (updates.length === 0) return [];
     const locationId = this.settings.locationId ?? (await this.primaryLocationId());
     // inventorySetQuantities accepts up to 250 quantities per call.
     for (let i = 0; i < updates.length; i += 250) {
@@ -382,6 +383,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
       const result = await this.client.graphql<{
         inventorySetQuantities: { userErrors: { message: string }[] };
       }>(SET_QUANTITIES, {
+        key: crypto.randomUUID(),
         input: {
           name: 'available',
           reason: 'correction',
@@ -398,6 +400,7 @@ export class ShopifyAdapter implements MarketplaceAdapter {
       const errors = result.inventorySetQuantities.userErrors;
       if (errors.length) throw new Error(`Shopify stock update failed: ${errors.map((e) => e.message).join('; ')}`);
     }
+    return [];
   }
 
   /** Sets variant prices. Shopify changes variants one product at a time, so a product Shopify refuses fails alone. */

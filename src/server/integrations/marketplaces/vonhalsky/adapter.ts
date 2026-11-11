@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import { httpConfig } from '../../../http';
-import type { CredentialsStore, Listing, NormalizedOrder, PriceFailure, PriceUpdate, StockUpdate } from '../../types';
+import type { CredentialsStore, Listing, NormalizedOrder, PriceFailure, PriceUpdate, StockFailure, StockUpdate } from '../../types';
 import type { MarketplaceAdapter, SyncResult } from '../types';
 import { VonHalskyApiError, VonHalskyClient, type VonHalskyCredentials } from './client';
 import { isImportable, mapVonHalskyOrder, vonHalskyOrderSchema } from './mapper';
@@ -300,7 +300,7 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
   }
 
   /** Sets absolute stock. InPost runs each update as a command, whose result is checked here. */
-  async setStock(updates: StockUpdate[]): Promise<void> {
+  async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
     for (let i = 0; i < updates.length; i += STOCK_BATCH) {
       const batch = updates.slice(i, i + STOCK_BATCH);
       const stock = (u: StockUpdate) => ({ quantity: Math.max(0, Math.floor(u.quantity)), unit: 'UNIT' });
@@ -322,6 +322,7 @@ export class VonHalskyAdapter implements MarketplaceAdapter {
       }
       await this.confirm(commands, 'the stock update');
     }
+    return [];
   }
 
   /** Waits briefly for pending commands; a failed one is reported with InPost's reason. */

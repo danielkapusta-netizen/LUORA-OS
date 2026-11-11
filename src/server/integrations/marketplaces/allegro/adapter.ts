@@ -1,6 +1,6 @@
 import type { MarketplaceSettings } from '../../../db/schema';
 import { httpConfig } from '../../../http';
-import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
+import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, PriceFailure, PriceUpdate, StockFailure, StockUpdate, TrackingInfo } from '../../types';
 import { invoiceFileName, type CatalogueMatch, type ExternalFee, type ExternalRefund, type FeeFeed, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { AllegroApiError, AllegroClient, describeAllegroErrors, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
@@ -377,13 +377,22 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
     return out;
   }
 
-  async setStock(updates: StockUpdate[]): Promise<void> {
+  /** One offer at a time, so an offer Allegro refuses (e.g. one deleted there) can't hold up the others. */
+  async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
+    const failures: StockFailure[] = [];
     for (const u of updates) {
-      await this.client.call('PATCH', `/sale/product-offers/${u.externalId}`, {
-        body: { stock: { available: u.quantity } },
-        responseType: 'none',
-      });
+      try {
+        await this.client.call('PATCH', `/sale/product-offers/${u.externalId}`, {
+          body: { stock: { available: u.quantity } },
+          responseType: 'none',
+        });
+      } catch (err) {
+        // A rejected login or a rate limit affects every offer, so it stops the run instead of failing each one.
+        if (!(err instanceof AllegroApiError) || err.status === 401 || err.status === 403 || err.status === 429) throw err;
+        failures.push({ externalId: u.externalId, message: err.message, gone: err.status === 404 });
+      }
     }
+    return failures;
   }
 
   /** One offer at a time; an offer Allegro refuses is reported with Allegro's reason and the others still go through. */

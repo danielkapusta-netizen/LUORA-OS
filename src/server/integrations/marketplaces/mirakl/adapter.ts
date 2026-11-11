@@ -1,5 +1,5 @@
 import type { MarketplaceSettings, MiraklOfferField } from '../../../db/schema';
-import type { Listing, NormalizedOrder, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
+import type { Listing, NormalizedOrder, OrderRef, PriceFailure, PriceUpdate, StockFailure, StockUpdate, TrackingInfo } from '../../types';
 import { httpConfig } from '../../../http';
 import { invoiceFileName, type CatalogueMatch, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { MiraklClient, type MiraklCarrier, type MiraklCredentials } from './client';
@@ -334,11 +334,12 @@ export class MiraklAdapter implements MarketplaceAdapter, OfferPublisher {
    * STO01 stock import. OF24 is not used on purpose: it resets every offer field that
    * is not sent, which would wipe prices and descriptions.
    */
-  async setStock(updates: StockUpdate[]): Promise<void> {
-    if (updates.length === 0) return;
+  async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
+    if (updates.length === 0) return [];
     const form = new FormData();
     form.append('file', new Blob([buildStockCsv(updates)], { type: 'text/csv' }), 'stock.csv');
     await this.client.call('POST', '/offers/stock/imports', { body: form });
+    return [];
   }
 
   // ------------------------------------------------------------ creating offers

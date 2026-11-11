@@ -3,7 +3,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 describe('order flow (D1)', { timeout: 60_000 }, () => {
   const persistTo = mkdtempSync(path.join(tmpdir(), 'luora-d1-'));
@@ -271,6 +271,45 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       .where(orm.eq(s.productListings.accountId, empik.id));
     await db.update(s.marketplaceAccounts).set({ stockDryRun: true }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
     await db.delete(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, empik.id));
+  });
+
+  it('keeps sending stock when one offer is refused, stops sending to a deleted one, and includes products not on Shopify', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const { MockMarketplaceAdapter } = await import('@/server/integrations/marketplaces/mock/adapter');
+    const [empik] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'empik'));
+    await db.update(s.marketplaceAccounts).set({ stockSyncEnabled: true, stockDryRun: false }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
+    const listings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, empik.id)).orderBy(orm.asc(s.productListings.id));
+    const [refused, deleted, ...rest] = listings;
+    // A product that exists only on the marketplace, not on Shopify, still follows the app's stock.
+    const [offShopify] = await db.select().from(s.products).where(orm.eq(s.products.id, rest[0].productId!));
+    await db.update(s.products).set({ shopifyVariantId: null }).where(orm.eq(s.products.id, offShopify.id));
+    await db.update(s.productListings).set({ lastPushedQty: null, lastPushError: null }).where(orm.eq(s.productListings.accountId, empik.id));
+
+    const spy = vi.spyOn(MockMarketplaceAdapter.prototype, 'setStock').mockImplementation(async (updates) => [
+      { externalId: refused.externalId, message: 'quantity rejected' },
+      { externalId: deleted.externalId, message: 'Offer does not exist', gone: true },
+    ].filter((f) => updates.some((u) => u.externalId === f.externalId)));
+    try {
+      const result = await m.inventory.runStockPush(empik.id);
+      const rows = new Map((await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, empik.id))).map((r) => [r.id, r]));
+      expect(result.pushed).toBe(rows.size - 2);
+      expect(rows.get(refused.id)).toMatchObject({ lastPushError: 'quantity rejected', lastPushedQty: null, active: true });
+      expect(rows.get(deleted.id)).toMatchObject({ lastPushError: 'Offer does not exist', active: false });
+      expect(rows.get(rest[0].id)!.lastPushedQty).toBe(Math.max(0, offShopify.stock));
+      const status = (await m.inventory.stockSyncStatus()).get(empik.id)!;
+      expect(status).toMatchObject({ failing: 1, firstError: 'quantity rejected' });
+      expect(status.lastSuccessAt).toBeInstanceOf(Date);
+    } finally {
+      spy.mockRestore();
+      await db.update(s.products).set({ shopifyVariantId: offShopify.shopifyVariantId }).where(orm.eq(s.products.id, offShopify.id));
+      await db
+        .update(s.productListings)
+        .set({ active: true, lastPushedQty: null, lastPushedAt: null, lastPushError: null })
+        .where(orm.eq(s.productListings.accountId, empik.id));
+      await db.update(s.marketplaceAccounts).set({ stockDryRun: true }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
+      await db.delete(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, empik.id));
+    }
   });
 
   it('builds the product list from Shopify and matches Allegro / Empik listings to it', async () => {

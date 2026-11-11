@@ -5,6 +5,7 @@ export type PluralForms = { one: string; few: string; many: string; other: strin
  * Polish has four categories: one (1), few (2–4, 22–24 …), many (0, 5–21 …) and other (fractions).
  */
 export const PL_PLURALS_ALL: Record<string, PluralForms> = {
+  "{n} offer refused": { one: "{n} oferta odrzucona", few: "{n} oferty odrzucone", many: "{n} ofert odrzuconych", other: "{n} oferty odrzuconej" },
   "{n} order": { one: "{n} zamówienie", few: "{n} zamówienia", many: "{n} zamówień", other: "{n} zamówienia" },
   "{n} sale": { one: "{n} sprzedaż", few: "{n} sprzedaże", many: "{n} sprzedaży", other: "{n} sprzedaży" },
   "{n} different price": { one: "{n} inna cena", few: "{n} inne ceny", many: "{n} innych cen", other: "{n} innej ceny" },
