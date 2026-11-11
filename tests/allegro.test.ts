@@ -243,3 +243,35 @@ describe('AllegroAdapter.listingEans', () => {
     ]);
   });
 });
+
+describe('AllegroAdapter.setStock', () => {
+  it('keeps going past an offer Allegro refuses, and marks a deleted offer as gone', async () => {
+    const sent: string[] = [];
+    server.use(
+      http.patch(`${API}/sale/product-offers/:id`, ({ params }) => {
+        const id = String(params.id);
+        if (id === '404') return HttpResponse.json({ errors: [{ message: 'Offer 404 does not exist.', userMessage: 'Not Found' }] }, { status: 404 });
+        if (id === '422') return HttpResponse.json({ errors: [{ message: 'Invalid stock', userMessage: 'Invalid stock' }] }, { status: 422 });
+        sent.push(id);
+        return new HttpResponse(null, { status: 200 });
+      }),
+    );
+    const ref = {};
+    const failures = await new AllegroAdapter(store()).setStock([
+      { externalId: '404', sku: null, ref, quantity: 1 },
+      { externalId: '1', sku: null, ref, quantity: 2 },
+      { externalId: '422', sku: null, ref, quantity: 3 },
+      { externalId: '2', sku: null, ref, quantity: 4 },
+    ]);
+    expect(sent).toEqual(['1', '2']);
+    expect(failures.map((f) => [f.externalId, f.gone])).toEqual([
+      ['404', true],
+      ['422', false],
+    ]);
+  });
+
+  it('stops the whole run when the login is rejected', async () => {
+    server.use(http.patch(`${API}/sale/product-offers/:id`, () => HttpResponse.json({ error: 'invalid_token' }, { status: 401 })));
+    await expect(new AllegroAdapter(store()).setStock([{ externalId: '1', sku: null, ref: {}, quantity: 1 }])).rejects.toThrow();
+  });
+});

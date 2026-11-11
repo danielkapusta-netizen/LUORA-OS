@@ -15,7 +15,7 @@ import { cn, formatDate, timeAgo } from '@/lib/utils';
 import { can } from '@/lib/permissions';
 import { requireUser } from '@/server/auth';
 import type { Product } from '@/server/db/schema';
-import { desiredQuantity, listProductsWithListings, marketplaceQuantity, matchingGroups, pendingPushCounts, recentStockLog } from '@/server/services/inventory';
+import { desiredQuantity, listProductsWithListings, marketplaceQuantity, matchingGroups, pendingPushCounts, recentStockLog, stockSyncStatus } from '@/server/services/inventory';
 import { SUGGESTION_THRESHOLD } from '@/server/services/matching';
 import { emptyPerformance, productStats, type PerformanceLevel, type ProductPerformance } from '@/server/services/product-stats';
 import { listMarketplaceAccounts } from '@/server/services/settings';
@@ -205,13 +205,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const winLabel = windowLabel(win, t);
   const periodPresets = [...PERIODS.map((d) => ({ value: String(d), label: t.plural(d, '{n} day', '{n} days') })), { value: 'lastweek', label: t('Last week') }];
   const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'sales';
-  const [{ products, listings }, accounts, matching, log, stats, pending] = await Promise.all([
+  const [{ products, listings }, accounts, matching, log, stats, pending, syncStatus] = await Promise.all([
     listProductsWithListings(),
     listMarketplaceAccounts(),
     matchingGroups(),
     recentStockLog(30),
     productStats(win),
     pendingPushCounts(),
+    stockSyncStatus(),
   ]);
   // Margins only for roles that may see them; marketing gets the percentage, never the profit amount.
   const margins = can(viewer.role, 'margin') ? await productMargins(win) : new Map<string, { units: number; gross: number; profit: number }>();
@@ -287,6 +288,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             </ActionForm>
           </>
         }
+      />
+      <StockSyncStrip
+        accounts={accounts.filter((a) => a.enabled)}
+        status={syncStatus}
+        pending={pending}
+        t={t}
       />
       {dryRun.length > 0 && (
         <p className="-mt-2 mb-4 text-xs text-amber-700">
@@ -575,5 +582,52 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         )}
       </details>
     </>
+  );
+}
+
+/** One chip per marketplace: whether stock gets through, how many offers wait, and what is refused. */
+function StockSyncStrip({
+  accounts,
+  status,
+  pending,
+  t,
+}: {
+  accounts: Awaited<ReturnType<typeof listMarketplaceAccounts>>;
+  status: Awaited<ReturnType<typeof stockSyncStatus>>;
+  pending: Map<string, number>;
+  t: Awaited<ReturnType<typeof getT>>;
+}) {
+  if (accounts.length === 0) return null;
+  return (
+    <div className="-mt-2 mb-4 flex flex-wrap gap-2">
+      {accounts.map((a) => {
+        const s = status.get(a.id);
+        const waiting = pending.get(a.id) ?? 0;
+        const state = !a.stockSyncEnabled ? 'off' : a.stockDryRun ? 'dry' : s?.failing ? 'failing' : 'ok';
+        const tone = state === 'failing' ? 'red' : state === 'ok' ? 'green' : 'amber';
+        const label =
+          state === 'off'
+            ? t('Stock sync off')
+            : state === 'dry'
+              ? t('Dry run')
+              : state === 'failing'
+                ? t.plural(s!.failing, '{n} offer refused', '{n} offers refused')
+                : waiting
+                  ? t('{n} to send', { n: waiting })
+                  : t('Up to date');
+        const title = [
+          s?.lastSuccessAt ? t('Last sent {time}', { time: formatDate(s.lastSuccessAt) }) : t('Never sent'),
+          s?.firstError ?? '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        return (
+          <span key={a.id} title={title} className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-white py-1 pr-1 pl-2.5 text-xs">
+            <span className="font-medium text-ink">{a.name}</span>
+            <Badge tone={tone}>{label}</Badge>
+          </span>
+        );
+      })}
+    </div>
   );
 }

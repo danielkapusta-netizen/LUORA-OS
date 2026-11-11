@@ -1,6 +1,6 @@
 // Fake marketplace used when INTEGRATIONS_MODE=mock. Orders are generated
 // deterministically from their index, so re-syncing never produces duplicates.
-import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockUpdate, TrackingInfo } from '../../types';
+import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockFailure, StockUpdate, TrackingInfo } from '../../types';
 import type { CatalogueMatch, MarketplaceAdapter, OfferDraft, OfferPublisher, SyncResult } from '../types';
 import { msg } from '@/lib/i18n/msg';
 
@@ -326,8 +326,9 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
     return new Map(externalIds.map((id) => [id, MOCK_CATALOG.some((p) => p.sku === sku(id)) ? mockEan(sku(id)) : null]));
   }
 
-  async setStock(updates: StockUpdate[]): Promise<void> {
+  async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
     console.log(`[mock ${this.marketplace}] stock set for ${updates.length} listing(s)`);
+    return [];
   }
 
   /** Accepts every price from 1.00 up; a lower one is refused alone, like a real marketplace's minimum. */

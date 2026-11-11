@@ -10,7 +10,7 @@ import {
   stockSyncLog,
 } from '../db/schema';
 import { cleanShopifyTitle, hasRealSku, normalizeEan, placeholderSku } from '../../lib/sku';
-import type { Listing, StockUpdate } from '../integrations/types';
+import type { Listing, StockFailure, StockUpdate } from '../integrations/types';
 import { enqueue, JOBS } from '../jobs/queue';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { logEvent } from './events';
@@ -456,8 +456,8 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
     })
     .from(productListings)
     .innerJoin(products, eq(products.id, productListings.productId))
-    // Only listings matched to a Shopify product; the rest wait under "Needs matching".
-    .where(and(eq(productListings.accountId, accountId), isNotNull(products.shopifyVariantId)))
+    // Every listing linked to a product follows the app's stock, Shopify product or not; unlinked ones wait under "Needs matching".
+    .where(eq(productListings.accountId, accountId))
     .orderBy(asc(productListings.id));
   const updates = opts.force
     ? pendingUpdatesFor(rows.map((r) => ({ ...r, lastPushedQty: marketplaceQuantity(r) })))
@@ -478,8 +478,9 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
     return { pushed: fresh.length, dryRun: true };
   }
 
+  let failures: StockFailure[];
   try {
-    await getMarketplaceAdapter(account).setStock(updates);
+    failures = await getMarketplaceAdapter(account).setStock(updates);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await db
@@ -494,19 +495,27 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
     throw err;
   }
 
+  // One refused offer doesn't stop the others: it keeps its error and is retried on the next change,
+  // except an offer that no longer exists on the marketplace, which stops being sent to (the next
+  // listings import turns it back on if it reappears).
+  const failed = new Map(failures.map((f) => [f.externalId, f]));
   const now = new Date();
   for (const u of updates) {
+    const f = failed.get(u.externalId);
     await db
       .update(productListings)
-      .set({ lastPushedQty: u.quantity, lastPushedAt: now, lastPushError: null })
+      .set(f ? { lastPushError: f.message, ...(f.gone ? { active: false } : {}) } : { lastPushedQty: u.quantity, lastPushedAt: now, lastPushError: null })
       .where(eq(productListings.id, u.listingId));
   }
   await insertMany(
     db,
     stockSyncLog,
-    updates.map((u) => ({ accountId, listingId: u.listingId, quantity: u.quantity, dryRun: false, ok: true })),
+    updates.map((u) => {
+      const f = failed.get(u.externalId);
+      return { accountId, listingId: u.listingId, quantity: u.quantity, dryRun: false, ok: !f, error: f?.message ?? null };
+    }),
   );
-  return { pushed: updates.length, dryRun: false };
+  return { pushed: updates.length - failed.size, dryRun: false };
 }
 
 /**
@@ -645,12 +654,36 @@ export async function pendingPushCounts(): Promise<Map<string, number>> {
       fixedQty: productListings.fixedQty,
     })
     .from(productListings)
-    .innerJoin(products, eq(products.id, productListings.productId))
-    .where(isNotNull(products.shopifyVariantId));
+    .innerJoin(products, eq(products.id, productListings.productId));
   const counts = new Map<string, number>();
   for (const r of rows) {
     const current = marketplaceQuantity(r);
     if (pendingUpdatesFor([{ ...r, lastPushedQty: current }]).length) counts.set(r.accountId, (counts.get(r.accountId) ?? 0) + 1);
   }
   return counts;
+}
+
+export interface StockSyncStatus {
+  /** When stock last reached this marketplace. */
+  lastSuccessAt: Date | null;
+  /** Active listings whose last update was refused, and the first reason. */
+  failing: number;
+  firstError: string | null;
+}
+
+/** Per marketplace account: did stock last get through, and which listings are being refused. */
+export async function stockSyncStatus(): Promise<Map<string, StockSyncStatus>> {
+  const db = getDb();
+  const [pushed, errors] = await Promise.all([
+    db.all<{ account_id: string; at: number | null }>(sql`
+      select account_id, max(created_at) as at from stock_sync_log where ok = 1 and dry_run = 0 group by account_id`),
+    db.all<{ account_id: string; n: number; error: string | null }>(sql`
+      select account_id, count(*) as n, min(last_push_error) as error from product_listings
+      where last_push_error is not null and active = 1 group by account_id`),
+  ]);
+  const out = new Map<string, StockSyncStatus>();
+  const get = (id: string) => out.get(id) ?? out.set(id, { lastSuccessAt: null, failing: 0, firstError: null }).get(id)!;
+  for (const r of pushed) get(r.account_id).lastSuccessAt = r.at == null ? null : new Date(r.at);
+  for (const r of errors) Object.assign(get(r.account_id), { failing: r.n, firstError: r.error });
+  return out;
 }

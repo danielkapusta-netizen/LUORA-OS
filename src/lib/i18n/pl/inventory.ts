@@ -169,4 +169,9 @@ export const inventory: Record<string, string> = {
   "Update every changed price on this page": "Zaktualizuj każdą zmienioną cenę na tej stronie",
   "not a price": "to nie cena",
   "Update": "Aktualizuj",
+  "Stock sync off": "Synchronizacja stanów wyłączona",
+  "Dry run": "Tryb testowy",
+  "Up to date": "Aktualne",
+  "Last sent {time}": "Ostatnio wysłano {time}",
+  "Never sent": "Jeszcze nie wysłano",
 };

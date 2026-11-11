@@ -192,6 +192,13 @@ export interface PriceFailure {
   message: string;
 }
 
+/** A listing the marketplace refused a stock update for; `gone` when the offer no longer exists there. */
+export interface StockFailure {
+  externalId: string;
+  message: string;
+  gone?: boolean;
+}
+
 export interface ParcelSpec {
   lengthCm: number;
   widthCm: number;
