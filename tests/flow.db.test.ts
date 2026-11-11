@@ -289,11 +289,14 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const spy = vi.spyOn(MockMarketplaceAdapter.prototype, 'setStock').mockImplementation(async (updates) => [
       { externalId: refused.externalId, message: 'quantity rejected' },
       { externalId: deleted.externalId, message: 'Offer does not exist', gone: true },
+      { externalId: rest[1].externalId, message: 'not allowed to be adjusted via API (bundle)', managed: true },
     ].filter((f) => updates.some((u) => u.externalId === f.externalId)));
     try {
       const result = await m.inventory.runStockPush(empik.id);
       const rows = new Map((await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, empik.id))).map((r) => [r.id, r]));
-      expect(result.pushed).toBe(rows.size - 2);
+      expect(result.pushed).toBe(rows.size - 3);
+      // A bundle's stock is Shopify's to work out: the listing moves to "managed on the marketplace".
+      expect(rows.get(rest[1].id)).toMatchObject({ stockMode: 'off', active: true });
       expect(rows.get(refused.id)).toMatchObject({ lastPushError: 'quantity rejected', lastPushedQty: null, active: true });
       expect(rows.get(deleted.id)).toMatchObject({ lastPushError: 'Offer does not exist', active: false });
       expect(rows.get(rest[0].id)!.lastPushedQty).toBe(Math.max(0, offShopify.stock));
@@ -305,7 +308,7 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
       await db.update(s.products).set({ shopifyVariantId: offShopify.shopifyVariantId }).where(orm.eq(s.products.id, offShopify.id));
       await db
         .update(s.productListings)
-        .set({ active: true, lastPushedQty: null, lastPushedAt: null, lastPushError: null })
+        .set({ active: true, stockMode: 'master', lastPushedQty: null, lastPushedAt: null, lastPushError: null })
         .where(orm.eq(s.productListings.accountId, empik.id));
       await db.update(s.marketplaceAccounts).set({ stockDryRun: true }).where(orm.eq(s.marketplaceAccounts.id, empik.id));
       await db.delete(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, empik.id));

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
-import { getDb, insertMany, insertStatements, type Tx } from '../db/client';
+import { chunk, getDb, insertMany, insertStatements, type Tx } from '../db/client';
 import {
   marketplaceAccounts,
   orderItems,
@@ -483,10 +483,10 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
     failures = await getMarketplaceAdapter(account).setStock(updates);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await db
-      .update(productListings)
-      .set({ lastPushError: message })
-      .where(inArray(productListings.id, updates.map((u) => u.listingId)));
+    // In slices: D1 allows 100 bound values per statement.
+    for (const ids of chunk(updates.map((u) => u.listingId))) {
+      await db.update(productListings).set({ lastPushError: message }).where(inArray(productListings.id, ids));
+    }
     await insertMany(
       db,
       stockSyncLog,
@@ -504,7 +504,12 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
     const f = failed.get(u.externalId);
     await db
       .update(productListings)
-      .set(f ? { lastPushError: f.message, ...(f.gone ? { active: false } : {}) } : { lastPushedQty: u.quantity, lastPushedAt: now, lastPushError: null })
+      // A stock the marketplace works out itself (a Shopify bundle) is left to it: "managed on the marketplace".
+      .set(
+        f
+          ? { lastPushError: f.message, ...(f.gone ? { active: false } : {}), ...(f.managed ? { stockMode: 'off' as const } : {}) }
+          : { lastPushedQty: u.quantity, lastPushedAt: now, lastPushError: null },
+      )
       .where(eq(productListings.id, u.listingId));
   }
   await insertMany(
@@ -679,7 +684,7 @@ export async function stockSyncStatus(): Promise<Map<string, StockSyncStatus>> {
       select account_id, max(created_at) as at from stock_sync_log where ok = 1 and dry_run = 0 group by account_id`),
     db.all<{ account_id: string; n: number; error: string | null }>(sql`
       select account_id, count(*) as n, min(last_push_error) as error from product_listings
-      where last_push_error is not null and active = 1 group by account_id`),
+      where last_push_error is not null and active = 1 and stock_mode <> 'off' group by account_id`),
   ]);
   const out = new Map<string, StockSyncStatus>();
   const get = (id: string) => out.get(id) ?? out.set(id, { lastSuccessAt: null, failing: 0, firstError: null }).get(id)!;

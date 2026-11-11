@@ -197,6 +197,8 @@ export interface StockFailure {
   externalId: string;
   message: string;
   gone?: boolean;
+  /** The marketplace works this stock out itself (e.g. a Shopify bundle), so it can't be set. */
+  managed?: boolean;
 }
 
 export interface ParcelSpec {

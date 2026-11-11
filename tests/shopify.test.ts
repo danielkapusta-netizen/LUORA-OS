@@ -219,6 +219,40 @@ describe('ShopifyAdapter', () => {
   });
 });
 
+describe('ShopifyAdapter.setStock with a bundle', () => {
+  it('sends the rest again without the items Shopify refuses, and flags a bundle as managed by Shopify', async () => {
+    const calls: { inventoryItemId: string }[][] = [];
+    server.use(
+      http.post(`${SHOP}/admin/api/2026-07/graphql.json`, async ({ request }) => {
+        const body = (await request.json()) as { variables: { input: { quantities: { inventoryItemId: string }[] } } };
+        const quantities = body.variables.input.quantities;
+        calls.push(quantities);
+        const bundle = quantities.findIndex((q) => q.inventoryItemId.endsWith('/2'));
+        const userErrors =
+          bundle >= 0
+            ? [{ field: ['input', 'quantities', String(bundle), 'inventoryItemId'], message: 'The specified inventory item is not allowed to be adjusted via API. Example: if the inventory item is a parent bundle.', code: 'NON_MUTABLE_INVENTORY_ITEM' }]
+            : [];
+        return HttpResponse.json({ data: { inventorySetQuantities: { inventoryAdjustmentGroup: userErrors.length ? null : { id: 'g' }, userErrors } } });
+      }),
+    );
+    const adapter = new ShopifyAdapter(store({ shopDomain: 'luora.myshopify.com', accessToken: 'shpat_x' }), { locationId: 'gid://shopify/Location/1' });
+    const item = (n: number) => ({ externalId: `v${n}`, sku: null, ref: { inventoryItemId: `gid://shopify/InventoryItem/${n}` }, quantity: n });
+    const failures = await adapter.setStock([item(1), item(2), item(3)]);
+    expect(calls.map((c) => c.map((q) => q.inventoryItemId.split('/').pop()))).toEqual([['1', '2', '3'], ['1', '3']]);
+    expect(failures).toEqual([{ externalId: 'v2', message: expect.stringContaining('parent bundle'), managed: true }]);
+  });
+
+  it('fails the call when Shopify names no item', async () => {
+    server.use(
+      http.post(`${SHOP}/admin/api/2026-07/graphql.json`, () =>
+        HttpResponse.json({ data: { inventorySetQuantities: { inventoryAdjustmentGroup: null, userErrors: [{ field: null, message: 'Location not found' }] } } }),
+      ),
+    );
+    const adapter = new ShopifyAdapter(store({ shopDomain: 'luora.myshopify.com', accessToken: 'shpat_x' }), { locationId: 'gid://shopify/Location/1' });
+    await expect(adapter.setStock([{ externalId: 'v', sku: null, ref: { inventoryItemId: 'gid://shopify/InventoryItem/1' }, quantity: 1 }])).rejects.toThrow('Location not found');
+  });
+});
+
 describe('webhook signature', () => {
   it('accepts the right HMAC only', () => {
     const body = '{"id":1}';

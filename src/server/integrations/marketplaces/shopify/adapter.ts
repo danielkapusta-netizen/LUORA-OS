@@ -377,30 +377,50 @@ export class ShopifyAdapter implements MarketplaceAdapter {
   async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
     if (updates.length === 0) return [];
     const locationId = this.settings.locationId ?? (await this.primaryLocationId());
+    const failures: StockFailure[] = [];
     // inventorySetQuantities accepts up to 250 quantities per call.
     for (let i = 0; i < updates.length; i += 250) {
-      const chunk = updates.slice(i, i + 250);
-      const result = await this.client.graphql<{
-        inventorySetQuantities: { userErrors: { message: string }[] };
-      }>(SET_QUANTITIES, {
-        key: crypto.randomUUID(),
-        input: {
-          name: 'available',
-          reason: 'correction',
-          referenceDocumentUri: 'gid://luora-os/StockSync/master',
-          quantities: chunk.map((u) => ({
-            inventoryItemId: String(u.ref.inventoryItemId),
-            locationId,
-            quantity: u.quantity,
-            // This app is the source of truth, so skip Shopify's compare-and-swap check.
-            changeFromQuantity: null,
-          })),
-        },
-      });
-      const errors = result.inventorySetQuantities.userErrors;
-      if (errors.length) throw new Error(`Shopify stock update failed: ${errors.map((e) => e.message).join('; ')}`);
+      let chunk = updates.slice(i, i + 250);
+      // The call is all-or-nothing: Shopify names the refused items by their index, so those are
+      // reported and the rest are sent again without them.
+      while (chunk.length > 0) {
+        const errors = await this.setQuantities(chunk, locationId);
+        if (errors.length === 0) break;
+        const refused = new Map<number, string>();
+        for (const e of errors) {
+          const index = Number((e.field ?? [])[2]);
+          if (!Number.isInteger(index) || !chunk[index]) throw new Error(`Shopify stock update failed: ${errors.map((x) => x.message).join('; ')}`);
+          refused.set(index, e.message);
+        }
+        for (const [index, message] of refused) {
+          // A bundle's stock comes from its components; Shopify won't let it be set.
+          failures.push({ externalId: chunk[index].externalId, message, managed: /not allowed to be adjusted/i.test(message) });
+        }
+        chunk = chunk.filter((_, index) => !refused.has(index));
+      }
     }
-    return [];
+    return failures;
+  }
+
+  private async setQuantities(chunk: StockUpdate[], locationId: string): Promise<{ field?: string[] | null; message: string }[]> {
+    const result = await this.client.graphql<{
+      inventorySetQuantities: { userErrors: { field?: string[] | null; message: string }[] };
+    }>(SET_QUANTITIES, {
+      key: crypto.randomUUID(),
+      input: {
+        name: 'available',
+        reason: 'correction',
+        referenceDocumentUri: 'gid://luora-os/StockSync/master',
+        quantities: chunk.map((u) => ({
+          inventoryItemId: String(u.ref.inventoryItemId),
+          locationId,
+          quantity: u.quantity,
+          // This app is the source of truth, so skip Shopify's compare-and-swap check.
+          changeFromQuantity: null,
+        })),
+      },
+    });
+    return result.inventorySetQuantities.userErrors;
   }
 
   /** Sets variant prices. Shopify changes variants one product at a time, so a product Shopify refuses fails alone. */
