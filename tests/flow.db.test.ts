@@ -238,7 +238,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
 
     await m.db.getDb().update(m.schema.marketplaceAccounts).set({ stockDryRun: false }).where(m.orm.eq(m.schema.marketplaceAccounts.id, account.id));
     const live = await m.inventory.runStockPush(account.id);
-    expect(live).toEqual({ pushed: 6, dryRun: false });
+    // The demo bundle is left out: Shopify counts a bundle itself.
+    expect(live).toEqual({ pushed: 6, refused: 0, dryRun: false });
     expect((await m.inventory.runStockPush(account.id)).pushed).toBe(0);
   });
 
@@ -325,7 +326,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(await m.inventory.needsMatching()).toHaveLength(0);
     // Allegro offers have no SKU: their EAN was read from the offer and matched to the Shopify barcode.
     const allegroListings = await db.select().from(s.productListings).where(orm.eq(s.productListings.accountId, allegro.id));
-    expect(allegroListings.length).toBe(catalogue.length);
+    // Every product but the bundle, which only Shopify lists.
+    expect(allegroListings.length).toBe(catalogue.length - 1);
     for (const l of allegroListings) {
       expect(l.sku).toBeNull();
       expect(catalogue.find((p) => p.id === l.productId)?.ean).toBe(l.ean);
@@ -391,12 +393,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     await m.inventory.linkListing(empikListing.id, night.id);
     expect((await db.select().from(s.products).where(orm.eq(s.products.id, night.id)))[0].ean).toBe('5909990000017');
     expect((await db.select().from(s.productListings).where(orm.eq(s.productListings.id, allegroListing.id)))[0].productId).toBe(night.id);
-    // "Sync all": re-reads every platform, then pushes wherever a platform shows another number.
+    // A forced push sends wherever the platform shows another number than it should.
     queue.length = 0;
-    await m.inventory.syncAllStock();
-    expect(queue.filter((j) => j.name === 'stock-push').map((j) => j.data)).toEqual(
-      expect.arrayContaining([{ accountId: allegro.id, force: true }, { accountId: empik.id, force: true }]),
-    );
     const pushed = await m.inventory.runStockPush(empik.id, { force: true });
     expect(pushed).toMatchObject({ dryRun: true });
     expect(pushed.pushed).toBeGreaterThan(0);

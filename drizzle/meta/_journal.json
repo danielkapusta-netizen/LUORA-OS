@@ -134,6 +134,13 @@
       "when": 1794266483148,
       "tag": "0018_app_errors",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1794489635739,
+      "tag": "0019_inventory_sync",
+      "breakpoints": true
     }
   ]
 }

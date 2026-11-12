@@ -67,9 +67,9 @@ const VARIANTS_QUERY = `query Variants($first: Int!, $after: String) {
   productVariants(first: $first, after: $after) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id sku barcode price displayName inventoryQuantity inventoryItem { id }
+      id sku barcode price displayName inventoryQuantity requiresComponents inventoryItem { id tracked }
       image { url(transform: { maxWidth: 240 }) }
-      product { id vendor productType featuredImage { url(transform: { maxWidth: 240 }) } }
+      product { id status vendor productType featuredImage { url(transform: { maxWidth: 240 }) } }
     }
   }
 }`;
@@ -136,6 +136,23 @@ const SET_QUANTITIES = `mutation SetQty($input: InventorySetQuantitiesInput!, $k
     userErrors { field message code }
   }
 }`;
+
+interface SetQuantitiesError {
+  field: string[] | null;
+  message: string;
+  code?: string | null;
+}
+
+/** Errors about the call itself (the location, the reason…): every item would fail the same way, so the push stops. */
+const WHOLE_CALL_ERRORS = new Set(['INVALID_LOCATION', 'INVALID_NAME', 'INVALID_REASON', 'INVALID_REFERENCE_DOCUMENT']);
+
+/** Which of the quantities sent an error is about: Shopify names it as ["input", "quantities", "3", "inventoryItemId"]. */
+export function refusedQuantityIndex(field: string[] | null | undefined): number | null {
+  const at = field?.indexOf('quantities') ?? -1;
+  if (at < 0) return null;
+  const index = Number(field![at + 1]);
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
 
 const VARIANT_PRODUCTS = `query VariantProducts($ids: [ID!]!) {
   nodes(ids: $ids) { ... on ProductVariant { id product { id } } }
@@ -262,9 +279,10 @@ export class ShopifyAdapter implements MarketplaceAdapter {
             price?: string | null;
             displayName: string;
             inventoryQuantity: number | null;
-            inventoryItem: { id: string };
+            requiresComponents?: boolean | null;
+            inventoryItem: { id: string; tracked?: boolean | null };
             image: { url: string } | null;
-            product: { id?: string; vendor?: string | null; productType?: string | null; featuredImage: { url: string } | null } | null;
+            product: { id?: string; status?: string | null; vendor?: string | null; productType?: string | null; featuredImage: { url: string } | null } | null;
           }[];
         };
       } = await this.client.graphql(VARIANTS_QUERY, { first: 100, after });
@@ -275,7 +293,12 @@ export class ShopifyAdapter implements MarketplaceAdapter {
           title: v.displayName,
           quantity: v.inventoryQuantity,
           ean: v.barcode?.trim() || null,
-          ref: { inventoryItemId: v.inventoryItem.id, productId: v.product?.id ?? null },
+          // A draft or archived product still holds stock, so it stays a listing stock is sent to; the status is only shown.
+          status: v.product?.status ?? null,
+          // A bundle's quantity is counted by Shopify from its components; Shopify refuses to have it set.
+          stockLocked: v.requiresComponents ? 'bundle' : null,
+          // tracked 0 = Shopify does not track this product's stock: it sells there whatever the number says.
+          ref: { inventoryItemId: v.inventoryItem.id, productId: v.product?.id ?? null, tracked: v.inventoryItem.tracked === false ? 0 : 1 },
           price: v.price ? Number(v.price).toFixed(2) : null,
           imageUrl: v.image?.url ?? v.product?.featuredImage?.url ?? null,
           brand: v.product?.vendor?.trim() || null,
@@ -374,33 +397,63 @@ export class ShopifyAdapter implements MarketplaceAdapter {
     }
   }
 
+  /**
+   * Sets the available quantity at the shop's location. Shopify takes up to 250 quantities per call and applies
+   * a call in full or not at all, so one item it refuses (a bundle, a deleted variant) is taken out and reported,
+   * and the rest are sent again.
+   */
   async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
     if (updates.length === 0) return [];
-    const locationId = this.settings.locationId ?? (await this.primaryLocationId());
-    // inventorySetQuantities accepts up to 250 quantities per call.
-    for (let i = 0; i < updates.length; i += 250) {
-      const chunk = updates.slice(i, i + 250);
-      const result = await this.client.graphql<{
-        inventorySetQuantities: { userErrors: { message: string }[] };
-      }>(SET_QUANTITIES, {
-        key: crypto.randomUUID(),
-        input: {
-          name: 'available',
-          reason: 'correction',
-          referenceDocumentUri: 'gid://luora-os/StockSync/master',
-          quantities: chunk.map((u) => ({
-            inventoryItemId: String(u.ref.inventoryItemId),
-            locationId,
-            quantity: u.quantity,
-            // This app is the source of truth, so skip Shopify's compare-and-swap check.
-            changeFromQuantity: null,
-          })),
-        },
-      });
-      const errors = result.inventorySetQuantities.userErrors;
-      if (errors.length) throw new Error(`Shopify stock update failed: ${errors.map((e) => e.message).join('; ')}`);
+    const failures: StockFailure[] = [];
+    const sendable: StockUpdate[] = [];
+    for (const u of updates) {
+      if (typeof u.ref.inventoryItemId === 'string' && u.ref.inventoryItemId) sendable.push(u);
+      else failures.push({ externalId: u.externalId, message: 'Shopify inventory item unknown; read the listings again' });
     }
-    return [];
+    if (sendable.length === 0) return failures;
+    const locationId = this.settings.locationId ?? (await this.primaryLocationId());
+    for (let i = 0; i < sendable.length; i += 250) failures.push(...(await this.setQuantities(sendable.slice(i, i + 250), locationId)));
+    return failures;
+  }
+
+  private async setQuantities(chunk: StockUpdate[], locationId: string): Promise<StockFailure[]> {
+    if (chunk.length === 0) return [];
+    const result = await this.client.graphql<{ inventorySetQuantities: { userErrors: SetQuantitiesError[] } }>(SET_QUANTITIES, {
+      // A new key per call: each call is a new instruction, never a repeat of an earlier one.
+      key: crypto.randomUUID(),
+      input: {
+        name: 'available',
+        reason: 'correction',
+        referenceDocumentUri: 'gid://luora-os/StockSync/master',
+        quantities: chunk.map((u) => ({
+          inventoryItemId: String(u.ref.inventoryItemId),
+          locationId,
+          quantity: u.quantity,
+          // This app is the source of truth, so skip Shopify's compare-and-swap check.
+          changeFromQuantity: null,
+        })),
+      },
+    });
+    const errors = result.inventorySetQuantities.userErrors;
+    if (errors.length === 0) return [];
+
+    const refused = new Map<number, SetQuantitiesError>();
+    for (const e of errors) {
+      const index = refusedQuantityIndex(e.field);
+      if (index !== null && index < chunk.length && !refused.has(index)) refused.set(index, e);
+    }
+    const describe = (e: SetQuantitiesError) => `Shopify: ${e.message}`;
+    const failure = (u: StockUpdate, e: SetQuantitiesError): StockFailure => ({ externalId: u.externalId, message: describe(e), gone: e.code === 'INVALID_INVENTORY_ITEM' });
+    if (refused.size > 0) {
+      // Nothing was applied: report the items Shopify named and send the others again.
+      const rest = chunk.filter((_, i) => !refused.has(i));
+      return [...[...refused].map(([i, e]) => failure(chunk[i], e)), ...(await this.setQuantities(rest, locationId))];
+    }
+    if (errors.some((e) => WHOLE_CALL_ERRORS.has(e.code ?? ''))) throw new Error(`Shopify stock update failed: ${errors.map((e) => e.message).join('; ')}`);
+    if (chunk.length === 1) return [failure(chunk[0], errors[0])];
+    // Shopify did not say which item it refuses: halve the batch until that item stands alone.
+    const half = Math.ceil(chunk.length / 2);
+    return [...(await this.setQuantities(chunk.slice(0, half), locationId)), ...(await this.setQuantities(chunk.slice(half), locationId))];
   }
 
   /** Sets variant prices. Shopify changes variants one product at a time, so a product Shopify refuses fails alone. */

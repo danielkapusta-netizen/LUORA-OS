@@ -3,7 +3,7 @@ import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import order from './fixtures/empik/order.json';
 import { EmpikAdapter, empikCarrierCode, resolveEmpikCarrier } from '@/server/integrations/marketplaces/empik/adapter';
-import { buildStockCsv } from '@/server/integrations/marketplaces/mirakl/adapter';
+import { buildStockCsv, isMiraklSoldOut } from '@/server/integrations/marketplaces/mirakl/adapter';
 import { mapMiraklOrder, toAlpha2 } from '@/server/integrations/marketplaces/mirakl/mapper';
 
 const server = setupServer();
@@ -262,5 +262,15 @@ describe('EmpikAdapter', () => {
 
   it('never sends negative stock', () => {
     expect(buildStockCsv([{ externalId: '1', sku: 'A;B"C', ref: {}, quantity: -2 }])).toContain('"A;B""C";"0"');
+  });
+});
+
+describe('a Mirakl offer with no units', () => {
+  it('is sold out, and comes back with stock, unless the marketplace gives another reason', () => {
+    expect(isMiraklSoldOut({ active: false, quantity: 0 })).toBe(true);
+    expect(isMiraklSoldOut({ active: false, quantity: 0, inactivity_reasons: ['ZERO_QUANTITY'] })).toBe(true);
+    expect(isMiraklSoldOut({ active: false, quantity: 0, inactivity_reasons: ['ZERO_QUANTITY', 'SHOP_NOT_OPEN'] })).toBe(false);
+    expect(isMiraklSoldOut({ active: false, quantity: 4 })).toBe(false);
+    expect(isMiraklSoldOut({ active: true, quantity: 0 })).toBe(false);
   });
 });

@@ -27,6 +27,18 @@ describe('what a listing is sent', () => {
     expect(desiredQuantity({ stock: 60, stockMode: 'fixed', fixedQty: null })).toBeNull();
   });
 
+  it('still sends to a sold-out listing, so it comes back, but never to a bundle', () => {
+    expect(desiredQuantity({ stock: 60, active: false, soldOut: true })).toBe(60);
+    expect(desiredQuantity({ stock: 60, stockLocked: 'bundle' })).toBeNull();
+    const updates = pendingUpdatesFor([
+      row({ listingId: 'restocked', active: false, soldOut: true }),
+      // Already at zero there: nothing to send.
+      row({ listingId: 'still-empty', active: false, soldOut: true, stock: 0 }),
+      row({ listingId: 'bundle', stockLocked: 'bundle' }),
+    ]);
+    expect(updates.map((u) => [u.listingId, u.quantity])).toEqual([['restocked', 60]]);
+  });
+
   it('queues only the listings whose quantity differs', () => {
     const updates = pendingUpdatesFor([
       row({ listingId: 'same', lastPushedQty: 60 }),

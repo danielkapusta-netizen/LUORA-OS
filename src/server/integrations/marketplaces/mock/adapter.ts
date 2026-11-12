@@ -5,13 +5,35 @@ import type { CatalogueMatch, MarketplaceAdapter, OfferDraft, OfferPublisher, Sy
 import { msg } from '@/lib/i18n/msg';
 
 export const MOCK_CATALOG = [
-  { sku: 'LUO-MUG-01', name: 'Kubek ceramiczny Luora 350 ml', price: 39.99 },
-  { sku: 'LUO-TSH-M', name: 'T-shirt Luora, rozmiar M', price: 79.0 },
-  { sku: 'LUO-TSH-L', name: 'T-shirt Luora, rozmiar L', price: 79.0 },
-  { sku: 'LUO-BAG-01', name: 'Torba bawełniana Luora', price: 49.5 },
-  { sku: 'LUO-CND-01', name: 'Świeca sojowa "Las"', price: 59.0 },
-  { sku: 'LUO-NTB-A5', name: 'Notes A5 w kropki', price: 29.9 },
+  { sku: 'LUO-MUG-01', name: 'Kubek ceramiczny Luora 350 ml', price: 39.99, brand: 'Luora Home' },
+  { sku: 'LUO-TSH-M', name: 'T-shirt Luora, rozmiar M', price: 79.0, brand: 'Luora Wear' },
+  { sku: 'LUO-TSH-L', name: 'T-shirt Luora, rozmiar L', price: 79.0, brand: 'Luora Wear' },
+  { sku: 'LUO-BAG-01', name: 'Torba bawełniana Luora', price: 49.5, brand: 'Luora Wear' },
+  { sku: 'LUO-CND-01', name: 'Świeca sojowa "Las"', price: 59.0, brand: 'Luora Home' },
+  { sku: 'LUO-NTB-A5', name: 'Notes A5 w kropki', price: 29.9, brand: 'Luora Paper' },
 ];
+
+/** Only the demo Shopify lists it: a bundle, whose quantity Shopify counts itself and never lets anyone set. */
+export const MOCK_BUNDLE = { sku: 'LUO-SET-01', name: 'Zestaw Luora: kubek + notes', price: 64.9, brand: 'Luora Home' };
+
+/** Every product the demo creates, for seeding costs and for removing the demo again. */
+export const MOCK_PRODUCTS = [...MOCK_CATALOG, MOCK_BUNDLE];
+
+/**
+ * What the demo marketplaces "show" for an offer. Kept for the life of the process, so a quantity that was sent is the
+ * quantity read back, as on a real marketplace. `off` = taken off sale by hand there.
+ */
+interface MockOffer {
+  quantity: number;
+  off: boolean;
+}
+
+/** The demo starts with one sold-out Allegro offer and one Empik offer switched off by hand, to show both. */
+function initialOffer(marketplace: Marketplace, sku: string): MockOffer {
+  if (marketplace === 'allegro' && sku === 'LUO-CND-01') return { quantity: 0, off: false };
+  if (marketplace === 'empik' && sku === 'LUO-NTB-A5') return { quantity: 12, off: true };
+  return { quantity: 60 + (hash(`${marketplace}${sku}`) % 60), off: false };
+}
 
 /** Placeholder product photo: a soft tile with the product's initials (demo mode only). */
 export function mockProductImage(sku: string, name: string): string {
@@ -75,8 +97,14 @@ export const MOCK_HISTORY_ORDERS = 120;
 const HISTORY_PAGE = 50;
 /** History orders use their own index range, so they never collide with live ones. */
 const HISTORY_BASE = 5000;
-const globalMock = globalThis as unknown as { __luoraMockAccepted?: Set<string> };
+const globalMock = globalThis as unknown as { __luoraMockAccepted?: Set<string>; __luoraMockOffers?: Map<string, MockOffer> };
 const accepted = (globalMock.__luoraMockAccepted ??= new Set<string>());
+const offers = (globalMock.__luoraMockOffers ??= new Map<string, MockOffer>());
+
+/** Forgets every quantity the demo marketplaces were sent (tests start from the same offers each time). */
+export function resetMockOffers(): void {
+  offers.clear();
+}
 /** Follow-up syncs per account (adapters are created per call, so the count lives here). */
 const syncCounts = new Map<string, number>();
 
@@ -103,10 +131,28 @@ function hash(text: string): number {
 }
 
 export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublisher {
+  /** Only the demo Allegro has a call that restarts an offer; the others come back (or not) with the quantity alone. */
+  activate?: (update: StockUpdate) => Promise<void>;
+
   constructor(
     readonly marketplace: Marketplace,
     private readonly accountKey: string,
-  ) {}
+  ) {
+    if (marketplace === 'allegro') {
+      this.activate = async (update) => {
+        if (update.quantity <= 0) throw new Error(msg('There is no stock to put on sale'));
+        this.offer(String(update.ref.sku)).off = false;
+        this.offer(String(update.ref.sku)).quantity = update.quantity;
+      };
+    }
+  }
+
+  private offer(sku: string): MockOffer {
+    const key = `${this.accountKey}:${sku}`;
+    let offer = offers.get(key);
+    if (!offer) offers.set(key, (offer = initialOffer(this.marketplace, sku)));
+    return offer;
+  }
 
   async checkConnection(): Promise<string> {
     return `Mock ${this.marketplace} account`;
@@ -307,16 +353,41 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
 
   async *listListings(): AsyncIterable<Listing> {
     for (const p of MOCK_CATALOG) {
-      // Like the real platforms: Allegro offers carry no SKU (matched by EAN), the others do.
+      const offer = this.offer(p.sku);
+      // Like the real platforms: with no units left Allegro ends the offer and Empik and HEBE switch it off; Shopify and Von Halsky keep it, at 0.
+      const closes = this.marketplace === 'allegro' || this.marketplace === 'empik' || this.marketplace === 'hebe';
+      const active = !offer.off && !(closes && offer.quantity === 0);
+      const status = this.marketplace === 'allegro' ? (active ? 'ACTIVE' : 'ENDED') : this.marketplace === 'shopify' ? 'ACTIVE' : active ? 'active' : 'inactive';
+      // Allegro offers carry no SKU (matched by EAN), the others do.
       yield {
         externalId: `${this.marketplace}-${p.sku}`,
         sku: this.marketplace === 'allegro' ? null : p.sku,
         title: p.name,
-        quantity: 60 + (hash(`${this.marketplace}${p.sku}`) % 60),
+        quantity: offer.quantity,
+        active,
+        status,
+        soldOut: !active && offer.quantity === 0,
         ean: this.marketplace === 'allegro' ? undefined : mockEan(p.sku),
-        ref: { sku: p.sku },
+        ref: { sku: p.sku, ...(this.marketplace === 'allegro' ? { status } : {}), ...(this.marketplace === 'shopify' ? { tracked: 1 } : {}) },
         price: mockPrice(this.marketplace, p.price),
         currency: 'PLN',
+        brand: this.marketplace === 'shopify' ? p.brand : undefined,
+      };
+    }
+    if (this.marketplace === 'shopify') {
+      const p = MOCK_BUNDLE;
+      yield {
+        externalId: `shopify-${p.sku}`,
+        sku: p.sku,
+        title: p.name,
+        quantity: 8,
+        status: 'ACTIVE',
+        stockLocked: 'bundle',
+        ean: mockEan(p.sku),
+        ref: { sku: p.sku, tracked: 1 },
+        price: mockPrice('shopify', p.price),
+        currency: 'PLN',
+        brand: p.brand,
       };
     }
   }
@@ -328,7 +399,12 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
 
   async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
     console.log(`[mock ${this.marketplace}] stock set for ${updates.length} listing(s)`);
-    return [];
+    const failures: StockFailure[] = [];
+    for (const u of updates) {
+      if (u.ref.sku === MOCK_BUNDLE.sku) failures.push({ externalId: u.externalId, message: 'Demo Shopify: a bundle\'s stock cannot be set' });
+      else this.offer(String(u.ref.sku)).quantity = Math.max(0, u.quantity);
+    }
+    return failures;
   }
 
   /** Accepts every price from 1.00 up; a lower one is refused alone, like a real marketplace's minimum. */

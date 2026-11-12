@@ -614,8 +614,12 @@ export const productListings = sqliteTable(
     lastPushError: text('last_push_error'),
     /** False while the offer is ended, inactive or not yet published: its quantity is not for sale, and nothing is sent to it. */
     active: bool('active').notNull().default(true),
-    /** The marketplace's own status text (Allegro: ACTIVE, INACTIVE, ENDED...), for display. */
+    /** The marketplace's own status text (Allegro: ACTIVE, INACTIVE, ENDED...), for display. GONE = no longer there. */
     listingStatus: text('listing_status'),
+    /** Off sale only because its quantity there is zero: stock is still sent, and a quantity above zero puts it back on sale. */
+    soldOut: bool('sold_out').notNull().default(false),
+    /** Why Luora must never send a quantity to it: 'bundle' = Shopify counts it from its components. */
+    stockLocked: text('stock_locked'),
     /** What is sent to this listing: the product's master stock, a fixed quantity, or nothing (managed on the marketplace). */
     stockMode: text('stock_mode', { enum: ['master', 'fixed', 'off'] }).notNull().default('master'),
     fixedQty: integer('fixed_qty'),
@@ -663,7 +667,7 @@ export const stockMovements = sqliteTable(
       .notNull()
       .references(() => products.id, { onDelete: 'cascade' }),
     delta: integer('delta').notNull(),
-    /** order | cancel | manual | import */
+    /** order | cancel | manual | import | marketplace (the number was taken from a marketplace, e.g. Shopify) */
     reason: text('reason').notNull(),
     orderId: text('order_id').references(() => orders.id, { onDelete: 'set null' }),
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
@@ -688,6 +692,45 @@ export const stockSyncLog = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index('stock_sync_log_created_idx').on(t.createdAt)],
+);
+
+export const stockSyncStepValues = ['waiting', 'reading', 'sending', 'checking', 'done', 'failed', 'skipped'] as const;
+
+/** One marketplace's part of a full stock update. */
+export interface StockSyncAccountResult {
+  accountId: string;
+  name: string;
+  type: (typeof marketplaceTypeValues)[number];
+  step: (typeof stockSyncStepValues)[number];
+  /** Sending is switched on for the account; false = dry run, nothing was sent. */
+  live: boolean;
+  /** Offers read from the marketplace. */
+  read: number;
+  /** Offers that were sent a new quantity, and those the marketplace refused. */
+  sent: number;
+  refused: number;
+  /** After the check: offers that show what they should, and those that still show another number. */
+  matching: number;
+  differing: number;
+  /** Why the account could not be read or sent to, or why it was skipped. */
+  error?: string | null;
+  /** Up to a few offers that still differ or were refused, for the page. */
+  problems?: { title: string; want: number; has: number | null; reason?: string | null }[];
+}
+
+/** A full stock update ("Update all stock" or the schedule): read every marketplace, send, then check. */
+export const stockSyncRuns = sqliteTable(
+  'stock_sync_runs',
+  {
+    id: id(),
+    trigger: text('trigger', { enum: ['manual', 'schedule'] }).notNull(),
+    status: text('status', { enum: ['running', 'done', 'failed'] }).notNull().default('running'),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    accounts: json<StockSyncAccountResult[]>('accounts').notNull().$defaultFn(() => []),
+    startedAt: ts('started_at').notNull().$defaultFn(() => new Date()),
+    finishedAt: ts('finished_at'),
+  },
+  (t) => [index('stock_sync_runs_started_idx').on(t.startedAt)],
 );
 
 // ---------------------------------------------------------------- accounting
@@ -1086,6 +1129,7 @@ export type ShippingRule = typeof shippingRules.$inferSelect;
 export type PackagePreset = typeof packagePresets.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type ProductListing = typeof productListings.$inferSelect;
+export type StockSyncRun = typeof stockSyncRuns.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type AccountingSettingsRow = typeof accountingSettings.$inferSelect;
 export type OrderFee = typeof orderFees.$inferSelect;

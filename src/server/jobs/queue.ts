@@ -18,6 +18,8 @@ export const JOBS = {
   stockPush: 'stock-push',
   stockReconcile: 'stock-reconcile',
   stockSyncAll: 'stock-sync-all',
+  stockSyncAccount: 'stock-sync-account',
+  stockSyncVerify: 'stock-sync-verify',
   orderBackfill: 'order-backfill',
   invoiceAuto: 'invoice-auto',
   invoiceCreate: 'invoice-create',
@@ -46,8 +48,12 @@ export interface JobPayloads {
   [JOBS.shopifyCatalogue]: Record<string, never>;
   /** force: compare with the quantity last read from the marketplace, not with our last push. */
   [JOBS.stockPush]: { accountId: string; force?: boolean };
+  /** Starts a full stock update on the schedule. */
   [JOBS.stockReconcile]: Record<string, never>;
-  [JOBS.stockSyncAll]: Record<string, never>;
+  /** A full stock update, by run: first Shopify, then one job per other marketplace, then a check of each. */
+  [JOBS.stockSyncAll]: { runId?: string };
+  [JOBS.stockSyncAccount]: { runId: string; accountId: string };
+  [JOBS.stockSyncVerify]: { runId: string; accountId: string; attempt: number };
   [JOBS.orderBackfill]: Record<string, never>;
   [JOBS.invoiceAuto]: { orderId: string };
   [JOBS.invoiceCreate]: { invoiceId: string };
@@ -101,6 +107,9 @@ export const RETRY_POLICY: Record<JobName, { retries: number; delaySeconds: numb
   [JOBS.stockPush]: { retries: 3, delaySeconds: 60 },
   [JOBS.stockReconcile]: { retries: 0, delaySeconds: 0 },
   [JOBS.stockSyncAll]: { retries: 0, delaySeconds: 0 },
+  // Marketplace errors are written to the run; a retry is only for the job itself failing (a database hiccup).
+  [JOBS.stockSyncAccount]: { retries: 1, delaySeconds: 30 },
+  [JOBS.stockSyncVerify]: { retries: 1, delaySeconds: 30 },
   [JOBS.orderBackfill]: { retries: 0, delaySeconds: 0 },
   [JOBS.invoiceAuto]: { retries: 2, delaySeconds: 60 },
   // Issuing is not retried automatically: the invoice id is saved first, but a lost response could still issue twice.

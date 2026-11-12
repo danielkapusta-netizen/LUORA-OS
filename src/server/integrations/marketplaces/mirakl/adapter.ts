@@ -54,6 +54,21 @@ interface OrdersPage {
   total_count: number;
 }
 
+/**
+ * A Mirakl offer with no units is switched off by the marketplace and comes back by itself with a quantity above
+ * zero. Any other reason it gives (the shop is closed, the offer is not validated…) is not about stock.
+ */
+export function isMiraklSoldOut(offer: { active?: boolean; quantity?: number | null; inactivity_reasons?: string[] | null }): boolean {
+  if (offer.active !== false || (offer.quantity ?? 0) > 0) return false;
+  return (offer.inactivity_reasons ?? []).every((r) => r === 'ZERO_QUANTITY');
+}
+
+/** "inactive", with the marketplace's reasons when it gives them: "inactive: shop not open". */
+function miraklInactiveStatus(reasons: string[]): string {
+  const shown = reasons.map((r) => r.toLowerCase().replace(/_/g, ' '));
+  return shown.length ? `inactive: ${shown.join(', ')}` : 'inactive';
+}
+
 /** Builds the STO01 stock import CSV: one line per offer, global (not per-warehouse) quantity. */
 export function buildStockCsv(updates: StockUpdate[]): string {
   const quote = (v: string) => `"${v.replace(/"/g, '""')}"`;
@@ -308,18 +323,21 @@ export class MiraklAdapter implements MarketplaceAdapter, OfferPublisher {
           price?: number | string | null;
           currency_iso_code?: string | null;
           active?: boolean;
+          inactivity_reasons?: string[] | null;
           product_references?: { reference: string; reference_type: string }[];
         }[];
         total_count: number;
       }>('GET', '/offers', { query: { max: PAGE, offset } });
       for (const offer of page.offers) {
+        const reasons = offer.inactivity_reasons ?? [];
         yield {
           externalId: String(offer.offer_id),
           sku: offer.shop_sku || null,
           title: offer.product_title,
           quantity: offer.quantity,
           active: offer.active,
-          status: offer.active === undefined ? null : offer.active ? 'active' : 'inactive',
+          status: offer.active === undefined ? null : offer.active ? 'active' : miraklInactiveStatus(reasons),
+          soldOut: isMiraklSoldOut(offer),
           ean: offer.product_references?.find((r) => /^(EAN|GTIN|EAN13)$/i.test(r.reference_type))?.reference ?? null,
           ref: { shopSku: offer.shop_sku },
           price: offer.price != null && offer.price !== '' ? Number(offer.price).toFixed(2) : null,
