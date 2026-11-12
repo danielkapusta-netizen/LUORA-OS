@@ -270,6 +270,53 @@ describe('AllegroAdapter.setStock', () => {
     ]);
   });
 
+  it('restarts an offer that ended because it sold out, and leaves the others as they are', async () => {
+    const bodies: Record<string, unknown> = {};
+    server.use(
+      http.patch(`${API}/sale/product-offers/:id`, async ({ params, request }) => {
+        bodies[String(params.id)] = await request.json();
+        return new HttpResponse(null, { status: 200 });
+      }),
+    );
+    await new AllegroAdapter(store()).setStock([
+      { externalId: 'sold-out', sku: null, ref: { status: 'ENDED' }, quantity: 5 },
+      { externalId: 'live', sku: null, ref: { status: 'ACTIVE' }, quantity: 7 },
+    ]);
+    expect(bodies).toEqual({
+      'sold-out': { stock: { available: 5 }, publication: { status: 'ACTIVE' } },
+      live: { stock: { available: 7 } },
+    });
+  });
+
+  it('activates an offer and reads it back, reporting what Allegro says when it stays off', async () => {
+    let status = 'ACTIVE';
+    let errors: { userMessage: string }[] = [];
+    server.use(
+      http.patch(`${API}/sale/product-offers/:id`, () => new HttpResponse(null, { status: 200 })),
+      http.get(`${API}/sale/product-offers/:id`, () => HttpResponse.json({ publication: { status }, validation: { errors } })),
+    );
+    const update = { externalId: '9', sku: null, ref: { status: 'ENDED' }, quantity: 3 };
+    await expect(new AllegroAdapter(store()).activate(update)).resolves.toBeUndefined();
+    status = 'ENDED';
+    await expect(new AllegroAdapter(store()).activate(update)).rejects.toThrow(/left the offer ended/);
+    errors = [{ userMessage: 'Uzupełnij dane producenta' }];
+    await expect(new AllegroAdapter(store()).activate(update)).rejects.toThrow(/Uzupełnij dane producenta/);
+    await expect(new AllegroAdapter(store()).activate({ ...update, quantity: 0 })).rejects.toThrow(/no stock/);
+  });
+
+  it('reads an offer that ended with no units left as sold out', async () => {
+    const offer = (id: string, status: string, available: number) => ({ id, name: id, stock: { available }, publication: { status } });
+    server.use(http.get(`${API}/sale/offers`, () => HttpResponse.json({ offers: [offer('a', 'ACTIVE', 4), offer('b', 'ENDED', 0), offer('c', 'ENDED', 6)], totalCount: 3 })));
+    const listings = [];
+    for await (const l of new AllegroAdapter(store()).listListings()) listings.push(l);
+    expect(listings.map((l) => [l.externalId, l.active, l.soldOut])).toEqual([
+      ['a', true, false],
+      ['b', false, true],
+      // Ended by hand: it still has its units.
+      ['c', false, false],
+    ]);
+  });
+
   it('stops the whole run when the login is rejected', async () => {
     server.use(http.patch(`${API}/sale/product-offers/:id`, () => HttpResponse.json({ error: 'invalid_token' }, { status: 401 })));
     await expect(new AllegroAdapter(store()).setStock([{ externalId: '1', sku: null, ref: {}, quantity: 1 }])).rejects.toThrow();

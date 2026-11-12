@@ -156,6 +156,13 @@ export interface Listing {
   active?: boolean;
   /** The marketplace's status text, shown as is. */
   status?: string | null;
+  /**
+   * Off sale only because its quantity is zero (Allegro ends such an offer, Mirakl deactivates it). Stock is
+   * still sent to it, and a quantity above zero puts it back on sale.
+   */
+  soldOut?: boolean;
+  /** Set when the marketplace manages this quantity itself, so it must never be sent: 'bundle' = a Shopify bundle, counted from its components. */
+  stockLocked?: string | null;
   /** Barcode (EAN/GTIN), when the marketplace exposes it. */
   ean?: string | null;
   /** Provider ids needed to update stock later (inventory item id, offer sku, ...). */

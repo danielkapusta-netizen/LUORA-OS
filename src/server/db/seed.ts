@@ -4,7 +4,7 @@ import { eq, inArray } from 'drizzle-orm';
 import type { Role } from '../../lib/permissions';
 import { hashPassword } from '../crypto';
 import { isMockMode } from '../env';
-import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
+import { MOCK_PRODUCTS } from '../integrations/marketplaces/mock/adapter';
 import { setProductCost } from '../services/costs';
 import { importListings } from '../services/inventory';
 import { createDefaultRules, ensureDefaultPresets } from '../services/settings';
@@ -64,9 +64,9 @@ export async function seed(admin: { email?: string; password?: string } = {}): P
   // Demo products: every mock listing shares the same SKUs, so they link across marketplaces.
   for (const account of created) await importListings(account.id);
   // Demo landed costs, so margins show from the start.
-  const demo = await db.select({ id: products.id, sku: products.sku }).from(products).where(inArray(products.sku, MOCK_CATALOG.map((p) => p.sku)));
+  const demo = await db.select({ id: products.id, sku: products.sku }).from(products).where(inArray(products.sku, MOCK_PRODUCTS.map((p) => p.sku)));
   for (const p of demo) {
-    const price = MOCK_CATALOG.find((c) => c.sku === p.sku)!.price;
+    const price = MOCK_PRODUCTS.find((c) => c.sku === p.sku)!.price;
     await setProductCost(p.id, { unitCost: Math.round(price * 0.32 * 100) / 100 }, null, 'manual');
   }
   // Two colleagues, so tasks can be shared out in the demo (they share the admin's password).

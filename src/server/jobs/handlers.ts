@@ -7,7 +7,8 @@ import { runHistoryImport } from '../services/history';
 import { recomputeAll, recomputeOrders } from '../services/profit';
 import { resolveMissingCustomers } from '../services/customers';
 import { runCrmSync } from '../services/crm-sync';
-import { importListings, runReconcile, runStockPush, syncAllStock } from '../services/inventory';
+import { importListings, runStockPush } from '../services/inventory';
+import { runSyncAccount, runSyncAll, runSyncVerify, startSyncRun } from '../services/stock-sync';
 import { autoInvoice, runCreateInvoice, runSendKsef, runUploadInvoice } from '../services/invoicing';
 import { backfillOrderDetails, syncAccount } from '../services/orders';
 import { runPollPickup } from '../services/pickups';
@@ -45,8 +46,11 @@ export const handlers: Handlers = {
     return { accounts: accounts.length };
   },
   [JOBS.stockPush]: ({ accountId, force }) => runStockPush(accountId, { force }),
-  [JOBS.stockSyncAll]: () => syncAllStock(),
-  [JOBS.stockReconcile]: () => runReconcile(),
+  [JOBS.stockSyncAll]: (data) => runSyncAll(data?.runId),
+  [JOBS.stockSyncAccount]: ({ runId, accountId }) => runSyncAccount(runId, accountId),
+  [JOBS.stockSyncVerify]: ({ runId, accountId, attempt }) => runSyncVerify(runId, accountId, attempt),
+  // Every two hours stock is read, sent where it differs and checked, so a number that went wrong does not stay wrong.
+  [JOBS.stockReconcile]: async () => ({ started: (await startSyncRun('schedule')).started }),
   [JOBS.orderBackfill]: () => backfillOrderDetails(),
   [JOBS.invoiceAuto]: ({ orderId }) => autoInvoice(orderId),
   [JOBS.invoiceCreate]: ({ invoiceId }) => runCreateInvoice(invoiceId),

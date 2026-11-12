@@ -1,5 +1,5 @@
-import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
-import { getDb, insertMany, insertStatements, type Tx } from '../db/client';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { chunk, getDb, insertMany, insertStatements, type Tx } from '../db/client';
 import {
   marketplaceAccounts,
   orderItems,
@@ -10,6 +10,7 @@ import {
   stockSyncLog,
 } from '../db/schema';
 import { cleanShopifyTitle, hasRealSku, normalizeEan, placeholderSku } from '../../lib/sku';
+import { desiredQuantity, GONE, marketplaceQuantity, type StockTarget } from '../../lib/stock';
 import type { Listing, StockFailure, StockUpdate } from '../integrations/types';
 import { enqueue, JOBS } from '../jobs/queue';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
@@ -17,8 +18,11 @@ import { logEvent } from './events';
 import { createMatcher, isClearSuggestion, type MatchSuggestion } from './matching';
 import { msg } from '@/lib/i18n/msg';
 
+export { desiredQuantity, GONE, marketplaceQuantity, type StockTarget } from '../../lib/stock';
+
 /** Seconds to wait so a burst of orders becomes one stock push per account. */
 const PUSH_DEBOUNCE_SECONDS = 30;
+
 
 /** Takes stock for every matched line of an order. Returns true if any stock changed. */
 export async function applyOrderStock(db: Tx, orderId: string): Promise<boolean> {
@@ -105,17 +109,19 @@ export async function scheduleStockPush(): Promise<void> {
  * - Allegro / Empik listings never create products. They are linked to a Shopify product with the
  *   same SKU or barcode, or wait on the Inventory page to be matched by name.
  */
-export async function importListings(accountId: string): Promise<{ listings: number; created: number; unmatched: number }> {
+export async function importListings(accountId: string): Promise<{ listings: number; created: number; unmatched: number; gone: number }> {
   const db = getDb();
   const account = await loadMarketplaceAccount(accountId);
   const adapter = getMarketplaceAdapter(account);
   const isShopify = account.type === 'shopify';
+  const startedAt = new Date();
   let count = 0;
   let created = 0;
 
   for await (const listing of adapter.listListings()) {
     count++;
     const active = listing.active !== false;
+    const soldOut = !active && listing.soldOut === true;
     // What the marketplace can sell: an ended or inactive offer keeps an old stock figure that means nothing.
     const quantity = active ? listing.quantity : 0;
     let productId: string | null = null;
@@ -138,6 +144,8 @@ export async function importListings(accountId: string): Promise<{ listings: num
         lastSeenAt: new Date(),
         active,
         listingStatus: listing.status ?? null,
+        soldOut,
+        stockLocked: listing.stockLocked ?? null,
         price: listing.price ?? null,
         currency: listing.currency ?? null,
       })
@@ -153,6 +161,8 @@ export async function importListings(accountId: string): Promise<{ listings: num
           lastSeenAt: new Date(),
           active,
           listingStatus: listing.status ?? null,
+          soldOut,
+          stockLocked: listing.stockLocked ?? null,
           // A marketplace that doesn't report prices in its list keeps the one we know.
           price: sql`coalesce(${listing.price ?? null}, ${productListings.price})`,
           currency: sql`coalesce(${listing.currency ?? null}, ${productListings.currency})`,
@@ -160,6 +170,25 @@ export async function importListings(accountId: string): Promise<{ listings: num
           productId: isShopify ? productId : sql`${productListings.productId}`,
         },
       });
+  }
+
+  // The whole list was read (an error above would have thrown), so an offer that was not in it no longer exists there:
+  // a variant deleted in Shopify, an offer removed on Allegro. Nothing is sent to it any more. A marketplace that
+  // answers with nothing at all is not believed.
+  let gone = 0;
+  if (count > 0) {
+    const vanished = await db
+      .update(productListings)
+      .set({ active: false, soldOut: false, listingStatus: GONE, lastSeenQty: 0 })
+      .where(
+        and(
+          eq(productListings.accountId, accountId),
+          or(isNull(productListings.lastSeenAt), lt(productListings.lastSeenAt, startedAt)),
+          or(isNull(productListings.listingStatus), ne(productListings.listingStatus, GONE)),
+        ),
+      )
+      .returning({ id: productListings.id });
+    gone = vanished.length;
   }
 
   if (adapter.listingEans) await readMissingEans(accountId, adapter.listingEans.bind(adapter));
@@ -184,8 +213,8 @@ export async function importListings(accountId: string): Promise<{ listings: num
     .select({ unmatched: sql<number>`count(*)` })
     .from(productListings)
     .leftJoin(products, eq(products.id, productListings.productId))
-    .where(and(eq(productListings.accountId, accountId), isNull(products.shopifyVariantId)));
-  return { listings: count, created, unmatched };
+    .where(and(eq(productListings.accountId, accountId), isNull(products.shopifyVariantId), or(isNull(productListings.listingStatus), ne(productListings.listingStatus, GONE))));
+  return { listings: count, created, unmatched, gone };
 }
 
 async function upsertShopifyProduct(listing: Listing): Promise<{ productId: string; created: boolean }> {
@@ -340,7 +369,14 @@ export async function needsMatching() {
     .from(productListings)
     .innerJoin(marketplaceAccounts, eq(marketplaceAccounts.id, productListings.accountId))
     .leftJoin(products, eq(products.id, productListings.productId))
-    .where(and(ne(marketplaceAccounts.type, 'shopify'), isNull(products.shopifyVariantId)))
+    .where(
+      and(
+        ne(marketplaceAccounts.type, 'shopify'),
+        isNull(products.shopifyVariantId),
+        // An offer that no longer exists on the marketplace has nothing to be matched for.
+        or(isNull(productListings.listingStatus), ne(productListings.listingStatus, GONE)),
+      ),
+    )
     .orderBy(asc(marketplaceAccounts.name), asc(productListings.title));
 }
 
@@ -400,31 +436,22 @@ export async function confirmClearSuggestions(): Promise<number> {
   return linked;
 }
 
-/** The quantity a listing should show, or null when nothing is to be sent to it (inactive, or managed on the marketplace). */
-export function desiredQuantity(r: { stock: number; active?: boolean; stockMode?: 'master' | 'fixed' | 'off'; fixedQty?: number | null }): number | null {
-  if (r.active === false || r.stockMode === 'off') return null;
-  if (r.stockMode === 'fixed') return r.fixedQty == null ? null : Math.max(0, Math.floor(r.fixedQty));
-  return Math.max(0, r.stock);
-}
-
 /** Listings whose marketplace quantity differs from what they should show. */
 export function pendingUpdatesFor(
-  rows: {
+  rows: (StockTarget & {
     listingId: string;
     externalId: string;
     sku: string | null;
     ref: Record<string, string | number | null>;
-    stock: number;
     lastPushedQty: number | null;
-    active?: boolean;
-    stockMode?: 'master' | 'fixed' | 'off';
-    fixedQty?: number | null;
-  }[],
+  })[],
 ): (StockUpdate & { listingId: string })[] {
   const out: (StockUpdate & { listingId: string })[] = [];
   for (const r of rows) {
     const quantity = desiredQuantity(r);
     if (quantity === null || r.lastPushedQty === quantity) continue;
+    // A sold-out offer already stands at zero; sending it zero again only invites a refusal.
+    if (r.active === false && r.soldOut && quantity === 0) continue;
     out.push({ listingId: r.listingId, externalId: r.externalId, sku: r.sku, ref: r.ref, quantity });
   }
   return out;
@@ -434,10 +461,10 @@ export function pendingUpdatesFor(
  * Sends master stock to one marketplace account (or only logs it in dry-run mode). Normally only
  * listings whose last push differs; with force, every listing whose marketplace quantity differs.
  */
-export async function runStockPush(accountId: string, opts: { force?: boolean } = {}): Promise<{ pushed: number; dryRun: boolean }> {
+export async function runStockPush(accountId: string, opts: { force?: boolean } = {}): Promise<{ pushed: number; refused: number; dryRun: boolean }> {
   const db = getDb();
   const account = await loadMarketplaceAccount(accountId);
-  if (!account.stockSyncEnabled || !account.enabled) return { pushed: 0, dryRun: account.stockDryRun };
+  if (!account.stockSyncEnabled || !account.enabled) return { pushed: 0, refused: 0, dryRun: account.stockDryRun };
 
   const rows = await db
     .select({
@@ -451,6 +478,8 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
       lastSeenQty: productListings.lastSeenQty,
       lastSeenAt: productListings.lastSeenAt,
       active: productListings.active,
+      soldOut: productListings.soldOut,
+      stockLocked: productListings.stockLocked,
       stockMode: productListings.stockMode,
       fixedQty: productListings.fixedQty,
     })
@@ -462,7 +491,7 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
   const updates = opts.force
     ? pendingUpdatesFor(rows.map((r) => ({ ...r, lastPushedQty: marketplaceQuantity(r) })))
     : pendingUpdatesFor(rows);
-  if (updates.length === 0) return { pushed: 0, dryRun: account.stockDryRun };
+  if (updates.length === 0) return { pushed: 0, refused: 0, dryRun: account.stockDryRun };
 
   if (account.stockDryRun) {
     // Nothing is sent, so the same difference would be logged on every push; only log changes.
@@ -475,7 +504,7 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
     if (fresh.length) {
       await insertMany(db, stockSyncLog, fresh.map((u) => ({ accountId, listingId: u.listingId, quantity: u.quantity, dryRun: true, ok: true })));
     }
-    return { pushed: fresh.length, dryRun: true };
+    return { pushed: fresh.length, refused: 0, dryRun: true };
   }
 
   let failures: StockFailure[];
@@ -499,12 +528,23 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
   // except an offer that no longer exists on the marketplace, which stops being sent to (the next
   // listings import turns it back on if it reappears).
   const failed = new Map(failures.map((f) => [f.externalId, f]));
+  const wasSoldOut = new Set(rows.filter((r) => !r.active && r.soldOut).map((r) => r.listingId));
   const now = new Date();
   for (const u of updates) {
     const f = failed.get(u.externalId);
     await db
       .update(productListings)
-      .set(f ? { lastPushError: f.message, ...(f.gone ? { active: false } : {}) } : { lastPushedQty: u.quantity, lastPushedAt: now, lastPushError: null })
+      .set(
+        f
+          ? { lastPushError: f.message, ...(f.gone ? { active: false, soldOut: false, listingStatus: GONE } : {}) }
+          : {
+              lastPushedQty: u.quantity,
+              lastPushedAt: now,
+              lastPushError: null,
+              // A sold-out offer that was sent units is on sale again; the next read confirms it, or says otherwise.
+              ...(wasSoldOut.has(u.listingId) && u.quantity > 0 ? { active: true, soldOut: false } : {}),
+            },
+      )
       .where(eq(productListings.id, u.listingId));
   }
   await insertMany(
@@ -515,44 +555,7 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
       return { accountId, listingId: u.listingId, quantity: u.quantity, dryRun: false, ok: !f, error: f?.message ?? null };
     }),
   );
-  return { pushed: updates.length - failed.size, dryRun: false };
-}
-
-/**
- * "Sync all stocks": re-reads every marketplace (Shopify first, as it defines the products), then
- * sends the master stock wherever a marketplace shows a different number. Accounts in dry run only log.
- */
-export async function syncAllStock(): Promise<void> {
-  const accounts = await getDb()
-    .select()
-    .from(marketplaceAccounts)
-    .where(eq(marketplaceAccounts.enabled, true))
-    .orderBy(sql`${marketplaceAccounts.type} = 'shopify' desc`);
-  for (const account of accounts) {
-    try {
-      await importListings(account.id);
-    } catch (err) {
-      console.error(`[stock sync] import ${account.name}:`, err);
-    }
-  }
-  for (const account of accounts.filter((a) => a.stockSyncEnabled)) {
-    await enqueue(JOBS.stockPush, { accountId: account.id, force: true });
-  }
-}
-
-/** Nightly: re-reads listing quantities so the inventory page can show drift. */
-export async function runReconcile(): Promise<void> {
-  const accounts = await getDb()
-    .select()
-    .from(marketplaceAccounts)
-    .where(and(eq(marketplaceAccounts.enabled, true), eq(marketplaceAccounts.stockSyncEnabled, true)));
-  for (const account of accounts) {
-    try {
-      await importListings(account.id);
-    } catch (err) {
-      console.error(`[reconcile] ${account.name}:`, err);
-    }
-  }
+  return { pushed: updates.length - failed.size, refused: failed.size, dryRun: false };
 }
 
 /** Does master stock cover every matched line of the order? Unmatched lines count as covered. */
@@ -587,6 +590,9 @@ export async function listProductsWithListings() {
       lastPushError: productListings.lastPushError,
       active: productListings.active,
       listingStatus: productListings.listingStatus,
+      soldOut: productListings.soldOut,
+      stockLocked: productListings.stockLocked,
+      ref: productListings.ref,
       stockMode: productListings.stockMode,
       fixedQty: productListings.fixedQty,
     })
@@ -595,12 +601,6 @@ export async function listProductsWithListings() {
     .where(isNotNull(productListings.productId))
     .orderBy(asc(marketplaceAccounts.type), asc(productListings.title));
   return { products: productRows, listings: listingRows };
-}
-
-/** What the marketplace most likely shows now: our last push, unless an import read it later. */
-export function marketplaceQuantity(l: { lastSeenQty: number | null; lastSeenAt: Date | null; lastPushedQty: number | null; lastPushedAt: Date | null }): number | null {
-  if (l.lastPushedAt && l.lastPushedQty !== null && (!l.lastSeenAt || l.lastPushedAt >= l.lastSeenAt)) return l.lastPushedQty;
-  return l.lastSeenQty;
 }
 
 export async function recentStockLog(limit = 50) {
@@ -650,6 +650,8 @@ export async function pendingPushCounts(): Promise<Map<string, number>> {
       lastSeenAt: productListings.lastSeenAt,
       lastPushedAt: productListings.lastPushedAt,
       active: productListings.active,
+      soldOut: productListings.soldOut,
+      stockLocked: productListings.stockLocked,
       stockMode: productListings.stockMode,
       fixedQty: productListings.fixedQty,
     })
@@ -686,4 +688,97 @@ export async function stockSyncStatus(): Promise<Map<string, StockSyncStatus>> {
   for (const r of pushed) get(r.account_id).lastSuccessAt = r.at == null ? null : new Date(r.at);
   for (const r of errors) Object.assign(get(r.account_id), { failing: r.n, firstError: r.error });
   return out;
+}
+
+/**
+ * Takes a marketplace's numbers as the master stock: for the chosen products, or for every product where the two
+ * differ. Used once to start from Shopify's stock, and per product whenever the marketplace turns out to be right.
+ * The listings must have been read just before. Returns how many products changed.
+ */
+export async function adoptMarketplaceStock(input: { accountId: string; productIds?: string[]; userId: string | null }): Promise<number> {
+  const db = getDb();
+  const account = await loadMarketplaceAccount(input.accountId);
+  const rows = await db
+    .select({ productId: products.id, stock: products.stock, seen: productListings.lastSeenQty, ref: productListings.ref })
+    .from(productListings)
+    .innerJoin(products, eq(products.id, productListings.productId))
+    .where(and(eq(productListings.accountId, input.accountId), eq(productListings.active, true), isNotNull(productListings.lastSeenQty)))
+    .orderBy(asc(productListings.id));
+  const wanted = input.productIds ? new Set(input.productIds) : null;
+  const done = new Set<string>();
+  const changes: { productId: string; delta: number }[] = [];
+  for (const r of rows) {
+    if (done.has(r.productId) || (wanted && !wanted.has(r.productId))) continue;
+    done.add(r.productId);
+    // Shopify keeps no count for a product it does not track, so there is no number to take.
+    if (r.ref.tracked === 0) continue;
+    if (r.seen !== null && r.seen !== r.stock) changes.push({ productId: r.productId, delta: r.seen - r.stock });
+  }
+  for (const part of chunk(changes, 25)) {
+    // Relative, so an order arriving meanwhile isn't overwritten.
+    await db.batch([
+      ...part.map((c) => db.update(products).set({ stock: sql`${products.stock} + ${c.delta}` }).where(eq(products.id, c.productId))),
+      ...insertStatements(db, stockMovements, part.map((c) => ({ productId: c.productId, delta: c.delta, reason: 'marketplace', userId: input.userId, note: `Taken from ${account.name}` }))),
+    ] as unknown as Parameters<Tx['batch']>[0]);
+  }
+  if (changes.length) await scheduleStockPush();
+  return changes.length;
+}
+
+export interface ActivationResult {
+  accountName: string;
+  quantity: number;
+  /** Whether the marketplace shows the offer on sale when read back straight away. */
+  onSale: boolean;
+  /** The marketplace's own status when it is still off sale. */
+  status: string | null;
+}
+
+/**
+ * Puts an off-sale offer back on sale with the stock it should show. Allegro has a call for that; elsewhere the
+ * quantity is sent and the marketplace decides. The offer is then read back, because only the marketplace knows.
+ */
+export async function activateListing(listingId: string): Promise<ActivationResult> {
+  const db = getDb();
+  const [row] = await db
+    .select({ listing: productListings, stock: products.stock })
+    .from(productListings)
+    .innerJoin(products, eq(products.id, productListings.productId))
+    .where(eq(productListings.id, listingId));
+  if (!row) throw new Error(msg('Listing not found'));
+  const { listing } = row;
+  const account = await loadMarketplaceAccount(listing.accountId);
+  if (!account.enabled || !account.stockSyncEnabled) throw new Error(msg('Stock sync is switched off for this account (Settings → Integrations)'));
+  if (account.stockDryRun) throw new Error(msg('This account is in dry run, so nothing is sent to it. Switch dry run off in Settings → Integrations first.'));
+  if (listing.stockLocked) throw new Error(msg('The marketplace counts this quantity itself'));
+  if (listing.stockMode === 'off') throw new Error(msg('This listing is set to “Nothing (manage there)”'));
+  // What it would show if it were on sale.
+  const quantity = desiredQuantity({ stock: row.stock, stockMode: listing.stockMode, fixedQty: listing.fixedQty }) ?? 0;
+  if (quantity <= 0) throw new Error(msg('There is no stock to put on sale'));
+
+  const adapter = getMarketplaceAdapter(account);
+  const update: StockUpdate = { externalId: listing.externalId, sku: listing.sku, ref: listing.ref, quantity };
+  const log = (ok: boolean, error: string | null) => db.insert(stockSyncLog).values({ accountId: account.id, listingId, quantity, dryRun: false, ok, error });
+  try {
+    if (adapter.activate) await adapter.activate(update);
+    else {
+      const [refused] = await adapter.setStock([update]);
+      if (refused) throw new Error(refused.message);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await db.update(productListings).set({ lastPushError: message }).where(eq(productListings.id, listingId));
+    await log(false, message);
+    throw err;
+  }
+  await db.update(productListings).set({ lastPushedQty: quantity, lastPushedAt: new Date(), lastPushError: null }).where(eq(productListings.id, listingId));
+  await log(true, null);
+
+  try {
+    await importListings(account.id);
+  } catch (err) {
+    console.error(`[activate] reading ${account.name} back:`, err);
+  }
+  const [after] = await db.select().from(productListings).where(eq(productListings.id, listingId));
+  return { accountName: account.name, quantity, onSale: Boolean(after?.active), status: after?.listingStatus ?? null };
 }

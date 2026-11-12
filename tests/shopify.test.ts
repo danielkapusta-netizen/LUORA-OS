@@ -219,6 +219,103 @@ describe('ShopifyAdapter', () => {
   });
 });
 
+describe('ShopifyAdapter stock', () => {
+  const adapter = () => new ShopifyAdapter(store({ shopDomain: 'luora.myshopify.com', accessToken: 'shpat_x' }), { locationId: 'gid://shopify/Location/1' });
+  const update = (n: number) => ({ externalId: `v${n}`, sku: null, ref: { inventoryItemId: `gid://shopify/InventoryItem/${n}` }, quantity: n });
+
+  it('flags bundles, drafts and untracked products when it reads the variants', async () => {
+    const variant = (id: number, over: Record<string, unknown> = {}) => ({
+      id: `gid://shopify/ProductVariant/${id}`,
+      sku: null,
+      barcode: null,
+      price: '10.00',
+      displayName: `Product ${id}`,
+      inventoryQuantity: 4,
+      requiresComponents: false,
+      inventoryItem: { id: `gid://shopify/InventoryItem/${id}`, tracked: true },
+      image: null,
+      product: { id: `gid://shopify/Product/${id}`, status: 'ACTIVE', vendor: 'Abib', productType: '', featuredImage: null },
+      ...over,
+    });
+    server.use(
+      http.post(`${SHOP}/admin/api/2026-07/graphql.json`, async ({ request }) => {
+        const { query } = (await request.json()) as { query: string };
+        expect(query).toContain('requiresComponents');
+        return HttpResponse.json({
+          data: {
+            productVariants: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [
+                variant(1),
+                variant(2, { requiresComponents: true }),
+                variant(3, { inventoryItem: { id: 'gid://shopify/InventoryItem/3', tracked: false }, product: { id: 'p3', status: 'DRAFT', vendor: 'Abib', productType: '', featuredImage: null } }),
+              ],
+            },
+          },
+        });
+      }),
+    );
+    const listings = [];
+    for await (const l of adapter().listListings()) listings.push(l);
+    expect(listings.map((l) => [l.stockLocked, l.status, l.ref.tracked])).toEqual([
+      [null, 'ACTIVE', 1],
+      ['bundle', 'ACTIVE', 1],
+      [null, 'DRAFT', 0],
+    ]);
+  });
+
+  it('reports the item Shopify refuses and still sends the others', async () => {
+    const calls: string[][] = [];
+    server.use(
+      http.post(`${SHOP}/admin/api/2026-07/graphql.json`, async ({ request }) => {
+        const { variables } = (await request.json()) as { variables: { input: { quantities: { inventoryItemId: string }[] } } };
+        const ids = variables.input.quantities.map((q) => q.inventoryItemId.split('/').pop()!);
+        calls.push(ids);
+        // Shopify applies a call in full or not at all: a bundle in it fails the whole call.
+        const userErrors = ids.flatMap((id, i) =>
+          id === '2'
+            ? [{ field: ['input', 'quantities', String(i), 'inventoryItemId'], message: 'The specified inventory item is not allowed to be adjusted via API.', code: 'NON_MUTABLE_INVENTORY_ITEM' }]
+            : id === '4'
+              ? [{ field: ['input', 'quantities', String(i), 'inventoryItemId'], message: 'The specified inventory item could not be found.', code: 'INVALID_INVENTORY_ITEM' }]
+              : [],
+        );
+        return HttpResponse.json({ data: { inventorySetQuantities: { inventoryAdjustmentGroup: userErrors.length ? null : { id: 'g' }, userErrors } } });
+      }),
+    );
+    const failures = await adapter().setStock([1, 2, 3, 4, 5].map(update));
+    expect(calls).toEqual([['1', '2', '3', '4', '5'], ['1', '3', '5']]);
+    expect(failures.map((f) => [f.externalId, f.gone])).toEqual([
+      ['v2', false],
+      ['v4', true],
+    ]);
+    expect(failures[0].message).toContain('not allowed to be adjusted');
+  });
+
+  it('finds the refused item by halving the batch when Shopify does not name it', async () => {
+    let calls = 0;
+    server.use(
+      http.post(`${SHOP}/admin/api/2026-07/graphql.json`, async ({ request }) => {
+        calls++;
+        const { variables } = (await request.json()) as { variables: { input: { quantities: { inventoryItemId: string }[] } } };
+        const bad = variables.input.quantities.some((q) => q.inventoryItemId.endsWith('/3'));
+        return HttpResponse.json({ data: { inventorySetQuantities: { userErrors: bad ? [{ field: null, message: 'Something is wrong', code: null }] : [] } } });
+      }),
+    );
+    const failures = await adapter().setStock([1, 2, 3, 4].map(update));
+    expect(failures.map((f) => f.externalId)).toEqual(['v3']);
+    expect(calls).toBeLessThanOrEqual(5);
+  });
+
+  it('stops when the error is about the call itself', async () => {
+    server.use(
+      http.post(`${SHOP}/admin/api/2026-07/graphql.json`, () =>
+        HttpResponse.json({ data: { inventorySetQuantities: { userErrors: [{ field: ['input', 'reason'], message: 'The specified reason is invalid.', code: 'INVALID_REASON' }] } } }),
+      ),
+    );
+    await expect(adapter().setStock([1, 2].map(update))).rejects.toThrow(/reason is invalid/);
+  });
+});
+
 describe('webhook signature', () => {
   it('accepts the right HMAC only', () => {
     const body = '{"id":1}';

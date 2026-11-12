@@ -323,15 +323,18 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
         totalCount: number;
       }>('GET', '/sale/offers', { query: { limit: 1000, offset } });
       for (const offer of page.offers) {
+        const status = offer.publication?.status ?? null;
         yield {
           externalId: offer.id,
           sku: offer.external?.id || null,
           title: offer.name,
           quantity: offer.stock?.available ?? null,
           // An ended or inactive offer keeps its old stock figure; it is not for sale.
-          active: offer.publication?.status ? offer.publication.status === 'ACTIVE' : undefined,
-          status: offer.publication?.status ?? null,
-          ref: { offerId: offer.id },
+          active: status ? status === 'ACTIVE' : undefined,
+          status,
+          // Allegro ends an offer when its last unit is gone; one ended by hand keeps the units it had.
+          soldOut: status === 'ENDED' && (offer.stock?.available ?? 0) === 0,
+          ref: { offerId: offer.id, status },
           price: offer.sellingMode?.price?.amount ? Number(offer.sellingMode.price.amount).toFixed(2) : null,
           currency: offer.sellingMode?.price?.currency ?? null,
         };
@@ -377,13 +380,18 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
     return out;
   }
 
-  /** One offer at a time, so an offer Allegro refuses (e.g. one deleted there) can't hold up the others. */
+  /**
+   * One offer at a time, so an offer Allegro refuses (e.g. one deleted there) can't hold up the others.
+   * A higher quantity does not restart an ended offer by itself, so an offer that ended because it sold out
+   * is restarted in the same request once there is something to sell.
+   */
   async setStock(updates: StockUpdate[]): Promise<StockFailure[]> {
     const failures: StockFailure[] = [];
     for (const u of updates) {
+      const restart = u.ref.status === 'ENDED' && u.quantity > 0;
       try {
         await this.client.call('PATCH', `/sale/product-offers/${u.externalId}`, {
-          body: { stock: { available: u.quantity } },
+          body: { stock: { available: u.quantity }, ...(restart ? { publication: { status: 'ACTIVE' } } : {}) },
           responseType: 'none',
         });
       } catch (err) {
@@ -393,6 +401,31 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
       }
     }
     return failures;
+  }
+
+  /**
+   * Puts an ended or inactive offer on sale with this quantity, then reads it back: Allegro checks an offer
+   * after answering, so only the offer itself says whether it is on sale.
+   */
+  async activate(update: StockUpdate): Promise<void> {
+    if (update.quantity <= 0) throw new Error(msg('There is no stock to put on sale'));
+    const path = `/sale/product-offers/${update.externalId}`;
+    await this.client.call('PATCH', path, {
+      body: { stock: { available: update.quantity }, publication: { status: 'ACTIVE' } },
+      responseType: 'none',
+    });
+    type Offer = { publication?: { status?: string | null } | null; validation?: { errors?: { userMessage?: string; message?: string; path?: string }[] } | null };
+    let offer: Offer = {};
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await httpConfig.sleep(800);
+      offer = await this.client.call<Offer>('GET', path);
+      const errors = offer.validation?.errors ?? [];
+      if (errors.length) throw new Error(`Allegro did not put the offer on sale: ${describeAllegroErrors(errors)}`);
+      if (offer.publication?.status === 'ACTIVE') return;
+    }
+    // ACTIVATING: Allegro has accepted it and is still switching it on.
+    if (offer.publication?.status === 'ACTIVATING') return;
+    throw new Error(`Allegro left the offer ${(offer.publication?.status ?? 'off sale').toLowerCase()}`);
   }
 
   /** One offer at a time; an offer Allegro refuses is reported with Allegro's reason and the others still go through. */

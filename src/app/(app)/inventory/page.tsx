@@ -1,25 +1,24 @@
-import { Boxes, PackageX, RefreshCw, ShoppingBag, TrendingUp, Trophy } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { MarketplaceBadge } from '@/components/badges';
-import { ExpandableRow } from '@/components/expandable-row';
 import { ActionForm, SubmitButton } from '@/components/forms';
-import { Gauge } from '@/components/gauge';
-import { productMargins } from '@/server/analytics/dataset';
 import { Badge, buttonClass, Card, EmptyState, Input, PageHeader, Select } from '@/components/ui';
 import { RangeControl } from '@/components/analytics/period-control';
 import { resolveDayWindow, windowLabel } from '@/lib/analytics/window';
-import { hasRealSku } from '@/lib/sku';
-import { cn, formatDate, timeAgo } from '@/lib/utils';
-import { can } from '@/lib/permissions';
+import { cellFor, FILTERS, groupByBrand, productFlags, SORTS, sortProducts, type InventoryFilter, type InventorySort } from '@/lib/inventory-view';
+import { cn, MARKETPLACE_LABELS, timeAgo } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
-import type { Product } from '@/server/db/schema';
-import { desiredQuantity, listProductsWithListings, marketplaceQuantity, matchingGroups, pendingPushCounts, recentStockLog, stockSyncStatus } from '@/server/services/inventory';
+import { listProductsWithListings, matchingGroups, pendingPushCounts, recentStockLog, stockSyncStatus } from '@/server/services/inventory';
 import { SUGGESTION_THRESHOLD } from '@/server/services/matching';
-import { emptyPerformance, productStats, type PerformanceLevel, type ProductPerformance } from '@/server/services/product-stats';
+import { emptyPerformance, productStats, type ProductPerformance } from '@/server/services/product-stats';
 import { listMarketplaceAccounts } from '@/server/services/settings';
-import { adjustStockAction, confirmClearSuggestionsAction, importListingsAction, linkGroupAction, setListingStockAction, syncAllStockAction, unlinkListingAction } from './actions';
+import { latestSyncRun } from '@/server/services/stock-sync';
+import { adoptStockAction, confirmClearSuggestionsAction, goLiveAction, importListingsAction, linkGroupAction, syncAllStockAction } from './actions';
+import { BrandGroup } from './brand-group';
+import { ProductRow, type ListingRow } from './product-table';
+import { SyncPanel } from './sync-panel';
 import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
@@ -28,19 +27,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('Inventory') };
 }
 
-type ListingRow = Awaited<ReturnType<typeof listProductsWithListings>>['listings'][number];
-
-const PAGE_SIZE = 20;
+/** Rows per page in the flat lists; the brand view shows every product, folded by brand. */
+const PAGE_SIZE = 50;
 const PERIODS = [7, 30, 90] as const;
-const SORTS = { sales: msg('Best selling'), name: msg('Name'), stock: msg('Lowest stock'), new: msg('Newest') } as const;
-type Sort = keyof typeof SORTS;
+const SORT_LABEL: Record<InventorySort, string> = { brand: msg('Brand'), sales: msg('Best selling'), name: msg('Name'), stock: msg('Lowest stock'), new: msg('Newest') };
+const FILTER_LABEL: Record<InventoryFilter, string> = { all: msg('All'), out: msg('Out of stock'), low: msg('Low stock'), differs: msg('Differs somewhere'), off: msg('Off sale with stock') };
 const PLATFORMS = ['shopify', 'allegro', 'empik', 'hebe', 'vonhalsky'] as const;
-const PLATFORM_LABEL: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', hebe: 'HEBE', vonhalsky: 'Von Halsky' };
-const LEVEL_LABEL: Record<PerformanceLevel, string> = { excellent: msg('Excellent'), good: msg('Good'), low: msg('Low'), none: msg('No sales') };
-const LEVEL_TONE: Record<PerformanceLevel, string> = { excellent: 'text-emerald-600', good: 'text-emerald-600', low: 'text-amber-600', none: 'text-slate-400' };
-
-const compact = new Intl.NumberFormat('pl-PL', { notation: 'compact', maximumFractionDigits: 1 });
-const pln = (v: number) => `${v < 1000 ? Math.round(v) : compact.format(v)} zł`;
 
 function hrefWith(params: Record<string, string | undefined>, change: Record<string, string | undefined>) {
   const merged = { ...params, ...change };
@@ -48,164 +40,21 @@ function hrefWith(params: Record<string, string | undefined>, change: Record<str
   return `/inventory${qs.size ? `?${qs}` : ''}`;
 }
 
-function ProductPhoto({ product, size = 'size-14' }: { product: Pick<Product, 'imageUrl'>; size?: string }) {
-  return product.imageUrl ? (
-    // eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers
-    <img src={product.imageUrl} alt="" className={cn(size, 'shrink-0 rounded-xl border border-slate-100 bg-white object-contain')} />
-  ) : (
-    <span className={cn(size, 'flex shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-300')}>
-      <Boxes className="size-5" />
-    </span>
-  );
-}
-
-function Label({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs text-slate-500">{children}</p>;
-}
-
-/** Green / amber / grey dot per platform: same stock as here, different, or not listed. */
-async function PlatformDots({ listings, stock }: { listings: ListingRow[]; stock: number }) {
-  const t = await getT();
-  return (
-    <div className="mt-1.5 flex gap-2">
-      {PLATFORMS.map((m) => {
-        const own = listings.filter((l) => l.marketplace === m);
-        const quantities = own.map(marketplaceQuantity);
-        const live = own.filter((l) => l.active);
-        const drifting = live.some((l) => {
-          const want = desiredQuantity({ stock, ...l });
-          return want !== null && marketplaceQuantity(l) !== want;
-        });
-        const state = own.length === 0 ? 'none' : live.length === 0 ? 'inactive' : own.some((l) => l.lastPushError) ? 'error' : drifting ? 'drift' : 'ok';
-        const title =
-          own.length === 0
-            ? `${PLATFORM_LABEL[m]}: not listed`
-            : live.length === 0
-              ? `${PLATFORM_LABEL[m]}: inactive or ended`
-              : `${PLATFORM_LABEL[m]}: ${quantities.map((q) => q ?? '?').join(' / ')}`;
-        return (
-          <span key={m} title={title} className="inline-flex items-center gap-1 text-[11px] text-slate-500">
-            <span
-              className={cn(
-                'size-2 rounded-full',
-                state === 'ok' && 'bg-emerald-500',
-                state === 'drift' && 'bg-amber-400',
-                state === 'error' && 'bg-red-500',
-                state === 'none' && 'bg-slate-200',
-                state === 'inactive' && 'bg-slate-300 ring-1 ring-slate-400',
-              )}
-            />
-            {PLATFORM_LABEL[m]}
-            {own.length > 0 && (state === 'inactive' ? <span className="text-slate-400">{t('inactive')}</span> : <span className="tabular-nums text-slate-700">{quantities.map((q) => q ?? '?').join('/')}</span>)}
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
-async function ListingDetails({ listings, stock }: { listings: ListingRow[]; stock: number }) {
-  const t = await getT();
-  if (listings.length === 0) return <p className="px-2 py-3 text-sm text-slate-500">{t('Not linked to any platform listing.')}</p>;
-  return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-      <table className="min-w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs text-slate-500">
-          <tr>
-            <th className="px-3 py-2 font-medium">{t('Platform')}</th>
-            <th className="px-3 py-2 font-medium">{t('Name on the platform')}</th>
-            <th className="px-3 py-2 text-right font-medium">{t('Stock there')}</th>
-            <th className="px-3 py-2 font-medium">{t('Send')}</th>
-            <th className="px-3 py-2 font-medium">{t('Last sync')}</th>
-            <th className="px-3 py-2" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {listings.map((l) => {
-            const qty = marketplaceQuantity(l);
-            const want = desiredQuantity({ stock, ...l });
-            return (
-              <tr key={l.id} className={cn(!l.active && 'bg-slate-50/70 text-slate-500')}>
-                <td className="px-3 py-2 align-top">
-                  <MarketplaceBadge marketplace={l.marketplace} />
-                </td>
-                <td className="px-3 py-2 align-top">
-                  {l.title}
-                  {!l.active && (
-                    <Badge tone="gray" className="ml-2">
-                      {l.listingStatus ? t('Not on sale: {status}', { status: l.listingStatus.toLowerCase() }) : t('Not on sale')}
-                    </Badge>
-                  )}
-                </td>
-                <td className={cn('px-3 py-2 text-right align-top font-semibold tabular-nums', l.active && want !== null && qty !== null && qty !== want && 'text-amber-700')}>
-                  {l.active ? (qty ?? '?') : <span title={t('The offer is not on sale, so its stock figure does not count')}>0</span>}
-                </td>
-                <td className="px-3 py-2 align-top">
-                  {l.active ? (
-                    <ActionForm action={setListingStockAction.bind(null, l.id)} className="flex items-center gap-1.5" showOk={false}>
-                      <Select name="mode" defaultValue={l.stockMode} className="h-8 w-36 text-xs" aria-label={t('What is sent to this listing')}>
-                        <option value="master">{t('Master stock ({n})', { n: Math.max(0, stock) })}</option>
-                        <option value="fixed">{t('Fixed quantity')}</option>
-                        <option value="off">{t('Nothing (manage there)')}</option>
-                      </Select>
-                      <Input name="qty" inputMode="numeric" defaultValue={l.fixedQty ?? ''} placeholder={t('qty')} aria-label={t('Fixed quantity')} className="h-8 w-16 text-center text-xs" />
-                      <SubmitButton size="sm" variant="secondary" pendingText="…">
-                        {t('Save')}
-                      </SubmitButton>
-                    </ActionForm>
-                  ) : (
-                    <span className="text-xs">{t('Nothing is sent while it is off sale')}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2 align-top text-xs text-slate-500">
-                  {l.lastPushError ? (
-                    <span className="text-red-700">{t('Not sent:')} {l.lastPushError}</span>
-                  ) : l.lastPushedAt ? (
-                    <>
-                      {t('sent {n}', { n: l.lastPushedQty ?? 0 })} · {formatDate(l.lastPushedAt, true, t.locale)}
-                    </>
-                  ) : l.lastSeenAt ? (
-                    <>{t('read {date}', { date: formatDate(l.lastSeenAt, true, t.locale) })}</>
-                  ) : (
-                    '—'
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right align-top">
-                  {l.marketplace !== 'shopify' && (
-                    <ActionForm action={unlinkListingAction.bind(null, l.id)} showOk={false}>
-                      <SubmitButton size="sm" variant="ghost" pendingText="…">
-                        {t('Unlink')}
-                      </SubmitButton>
-                    </ActionForm>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Stat({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={cn('min-w-0 px-5 py-4', className)}>
-      <p className="text-xs text-slate-500">{label}</p>
-      <div className="mt-1.5 flex min-w-0 items-center gap-2">{children}</div>
-    </div>
-  );
-}
-
-export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ q?: string; sort?: string; days?: string; from?: string; to?: string; page?: string }> }) {
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; sort?: string; filter?: string; days?: string; from?: string; to?: string; page?: string }>;
+}) {
   const t = await getT();
   const viewer = await requireUser();
+  const admin = viewer.role === 'admin';
   const params = await searchParams;
   const win = resolveDayWindow(params, PERIODS, 30);
   const winLabel = windowLabel(win, t);
   const periodPresets = [...PERIODS.map((d) => ({ value: String(d), label: t.plural(d, '{n} day', '{n} days') })), { value: 'lastweek', label: t('Last week') }];
-  const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'sales';
-  const [{ products, listings }, accounts, matching, log, stats, pending, syncStatus] = await Promise.all([
+  const sort: InventorySort = (SORTS as readonly string[]).includes(params.sort ?? '') ? (params.sort as InventorySort) : 'brand';
+  const filter: InventoryFilter = (FILTERS as readonly string[]).includes(params.filter ?? '') ? (params.filter as InventoryFilter) : 'all';
+  const [{ products, listings }, allAccounts, matching, log, stats, pending, syncStatus, run] = await Promise.all([
     listProductsWithListings(),
     listMarketplaceAccounts(),
     matchingGroups(),
@@ -213,128 +62,157 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     productStats(win),
     pendingPushCounts(),
     stockSyncStatus(),
+    latestSyncRun(),
   ]);
-  // Margins only for roles that may see them; marketing gets the percentage, never the profit amount.
-  const margins = can(viewer.role, 'margin') ? await productMargins(win) : new Map<string, { units: number; gross: number; profit: number }>();
-  const showProfit = can(viewer.role, 'profit');
+  const accounts = allAccounts.filter((a) => a.enabled);
+  const sending = new Set(accounts.filter((a) => a.stockSyncEnabled && !a.stockDryRun).map((a) => a.id));
+  const isLive = (accountId: string) => sending.has(accountId);
+  const platforms = PLATFORMS.filter((m) => accounts.some((a) => a.type === m));
   const perf = (id: string): ProductPerformance => stats.byProduct.get(id) ?? emptyPerformance();
   const byProduct = new Map<string, ListingRow[]>();
   for (const l of listings) byProduct.set(l.productId!, [...(byProduct.get(l.productId!) ?? []), l]);
   const productName = new Map(products.map((p) => [p.id, p.name]));
 
-  // Summary
-  const sold = products.filter((p) => perf(p.id).units > 0);
-  const best = [...sold].sort((a, b) => perf(b.id).units - perf(a.id).units)[0];
-  const units = products.reduce((sum, p) => sum + perf(p.id).units, 0);
-  const revenue = products.reduce((sum, p) => sum + perf(p.id).revenue, 0);
-  const outOfStock = products.filter((p) => p.stock <= 0).length;
-  const share = products.length ? sold.length / products.length : 0;
+  // Where an offer is created for a marketplace the product is not on yet (admins only, like those pages).
+  const publishHref: Record<string, string | undefined> = {};
+  if (admin) {
+    for (const a of accounts) {
+      if (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe') publishHref[a.type] ??= `/inventory/publish/${a.id}`;
+      if (a.type === 'vonhalsky') publishHref.vonhalsky = '/inventory/vonhalsky';
+    }
+  }
+
+  // How every product stands on every marketplace.
+  const view = products.map((p) => {
+    const own = byProduct.get(p.id) ?? [];
+    const cells = platforms.map((platform) => ({ platform, cell: cellFor(own.filter((l) => l.marketplace === platform), p.stock, isLive) }));
+    return { product: p, own, cells, flags: productFlags(cells.map((c) => c.cell), p.stock) };
+  });
 
   // List
   const needle = params.q?.toLowerCase().trim();
-  const filtered = needle
-    ? products.filter((p) => [p.sku, p.name, p.ean ?? '', ...(byProduct.get(p.id) ?? []).map((l) => l.title)].some((v) => v.toLowerCase().includes(needle)))
-    : products;
-  const sorted = [...filtered].sort((a, b) =>
-    sort === 'name'
-      ? a.name.localeCompare(b.name, 'pl')
-      : sort === 'stock'
-        ? a.stock - b.stock
-        : sort === 'new'
-          ? b.createdAt.getTime() - a.createdAt.getTime()
-          : perf(b.id).units - perf(a.id).units || a.name.localeCompare(b.name, 'pl'),
-  );
-  const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const searched = needle ? view.filter((v) => [v.product.sku, v.product.name, v.product.ean ?? '', v.product.brand ?? '', ...v.own.map((l) => l.title)].some((x) => x.toLowerCase().includes(needle))) : view;
+  const counts: Record<InventoryFilter, number> = {
+    all: searched.length,
+    out: searched.filter((v) => v.flags.out).length,
+    low: searched.filter((v) => v.flags.low).length,
+    differs: searched.filter((v) => v.flags.differs).length,
+    off: searched.filter((v) => v.flags.off).length,
+  };
+  const filtered = filter === 'all' ? searched : searched.filter((v) => v.flags[filter]);
+  const rowOf = new Map(filtered.map((v) => [v.product.id, v]));
+  const grouped = sort === 'brand' ? groupByBrand(filtered.map((v) => v.product)) : null;
+  const sorted = sortProducts(filtered.map((v) => v.product), sort, (id) => perf(id).units);
+  const pages = grouped ? 1 : Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number(params.page) || 1));
   const shown = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const colSpan = 4 + platforms.length + 1;
 
   const clear = matching.filter((m) => m.clear && !m.eanDiffers).length;
   const offerCount = matching.reduce((n, g) => n + g.listings.length, 0);
-  const busy = listings.some((l) => {
-    const acct = accounts.find((a) => a.id === l.accountId);
-    const p = products.find((x) => x.id === l.productId);
-    return p && acct?.stockSyncEnabled && !acct.stockDryRun && !l.lastPushError && l.lastPushedQty !== Math.max(0, p.stock);
-  });
-  const dryRun = accounts.filter((a) => a.enabled && a.stockSyncEnabled && a.stockDryRun);
+  // Accounts stock sync is switched on for, but nothing is sent to yet: someone has to look and decide.
+  const review = accounts
+    .filter((a) => a.stockSyncEnabled && a.stockDryRun)
+    .map((a) => ({
+      account: a,
+      differing: view.filter((v) => v.cells.some((c) => c.platform === a.type && c.cell.accountId === a.id && c.cell.kind === 'differs' && !c.cell.untracked)).length,
+    }));
+  const running = run?.status === 'running';
+  const settling = view.some((v) => v.cells.some((c) => c.cell.kind === 'differs' && !c.cell.held));
+
+  const row = (id: string) => {
+    const v = rowOf.get(id)!;
+    return <ProductRow key={id} product={v.product} listings={v.own} cells={v.cells} perf={perf(id)} publishHref={publishHref} isLive={isLive} colSpan={colSpan} t={t} />;
+  };
 
   return (
     <>
-      <AutoRefresh active={busy} seconds={10} />
+      <AutoRefresh active={running || settling} seconds={running ? 5 : 15} />
       <PageHeader
         title={t('Inventory')}
-        description={t('Products and photos come from Shopify; Allegro, Empik and HEBE offers are matched by EAN. One stock number for every platform.')}
+        description={t('One stock number per product, sent to every marketplace. Products and photos come from Shopify; Allegro, Empik and HEBE offers are matched by EAN.')}
         actions={
           <>
-            {viewer.role === 'admin' &&
-              accounts
-                .filter((a) => a.enabled && (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe'))
-                .map((a) => (
-                  <Link key={a.id} className={buttonClass('secondary')} href={`/inventory/publish/${a.id}`}>
-                    {t('Publish to {platform}', { platform: PLATFORM_LABEL[a.type] })}
-                  </Link>
-                ))}
-            <Link className={buttonClass('secondary')} href="/inventory/vonhalsky">
-              {t('Von Halsky offers')}
-            </Link>
-            <ActionForm action={importListingsAction}>
-              <SubmitButton variant="secondary" pendingText={t('Importing…')}>
-                {t('Import listings')}
-              </SubmitButton>
-            </ActionForm>
-            <ActionForm action={syncAllStockAction}>
-              <SubmitButton pendingText={t('Starting…')}>
-                <RefreshCw className="size-4" /> {t('Sync all stocks')}
-              </SubmitButton>
+            <details className="relative">
+              <summary className={cn(buttonClass('secondary'), 'list-none [&::-webkit-details-marker]:hidden')}>{t('More')}</summary>
+              <div className="absolute right-0 z-20 mt-2 flex w-64 flex-col gap-1 rounded-2xl border border-black/[0.08] bg-white p-2 shadow-[0_16px_40px_-16px_rgba(28,27,25,0.35)] max-md:left-0 max-md:right-auto">
+                <ActionForm action={importListingsAction} className="[&>p]:px-3 [&>p]:text-xs">
+                  <SubmitButton variant="ghost" className="w-full justify-start" pendingText={t('Importing…')}>
+                    {t('Import listings')}
+                  </SubmitButton>
+                </ActionForm>
+                {admin &&
+                  accounts
+                    .filter((a) => a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe')
+                    .map((a) => (
+                      <Link key={a.id} className={cn(buttonClass('ghost'), 'justify-start')} href={`/inventory/publish/${a.id}`}>
+                        {t('Publish to {platform}', { platform: MARKETPLACE_LABELS[a.type] })}
+                      </Link>
+                    ))}
+                <Link className={cn(buttonClass('ghost'), 'justify-start')} href="/inventory/vonhalsky">
+                  {t('Von Halsky offers')}
+                </Link>
+              </div>
+            </details>
+            <ActionForm action={syncAllStockAction} showOk={false}>
+              <span title={t('Reads every marketplace, sends the stock in Luora wherever a marketplace shows another number, then checks that it arrived.')}>
+                <SubmitButton pendingText={t('Starting…')}>
+                  <RefreshCw className="size-4" aria-hidden /> {t('Update all stock')}
+                </SubmitButton>
+              </span>
             </ActionForm>
           </>
         }
       />
-      <StockSyncStrip
-        accounts={accounts.filter((a) => a.enabled)}
-        status={syncStatus}
-        pending={pending}
-        t={t}
-      />
-      {dryRun.length > 0 && (
-        <p className="-mt-2 mb-4 text-xs text-amber-700">
-          {t('Dry run on {accounts}: stock changes are only logged, not sent. Switch it off in Settings → Integrations.', { accounts: dryRun.map((a) => `${a.name} (${t('{n} to send', { n: pending.get(a.id) ?? 0 })})`).join(', ') })}
-        </p>
-      )}
 
-      <Card className="mb-5 grid grid-cols-2 divide-slate-100 md:grid-cols-3 md:divide-x xl:grid-cols-6">
-        <Stat label={t('Products')}>
-          <span className="text-2xl font-semibold tabular-nums">{products.length}</span>
-        </Stat>
-        <Stat label={t('Best seller · {period}', { period: winLabel })} className="col-span-2 md:col-span-1">
-          {best ? (
-            <>
-              <ProductPhoto product={best} size="size-8" />
-              <span className="truncate font-semibold" title={best.name}>
-                {best.name}
-              </span>
-            </>
-          ) : (
-            <span className="text-slate-400">—</span>
-          )}
-        </Stat>
-        <Stat label={t('Products selling')}>
-          <Gauge value={share} tone={share >= 0.5 ? 'excellent' : share > 0 ? 'low' : 'none'} />
-          <span className="font-semibold tabular-nums">
-            {sold.length} <span className="text-sm font-normal text-slate-500">{t('of {n}', { n: products.length })}</span>
-          </span>
-        </Stat>
-        <Stat label={t('Units sold · {period}', { period: winLabel })}>
-          <span className="text-2xl font-semibold tabular-nums">{units.toLocaleString('pl-PL')}</span>
-        </Stat>
-        <Stat label={t('Revenue · {period}', { period: winLabel })}>
-          <span className="text-2xl font-semibold tabular-nums">{pln(revenue)}</span>
-          {stats.missingRates.length > 0 && <span className="text-xs text-amber-700">{t('without {currencies}', { currencies: stats.missingRates.join(', ') })}</span>}
-        </Stat>
-        <Stat label={t('Out of stock')}>
-          <PackageX className={cn('size-5', outOfStock ? 'text-red-500' : 'text-slate-300')} />
-          <span className={cn('text-2xl font-semibold tabular-nums', outOfStock && 'text-red-700')}>{outOfStock}</span>
-        </Stat>
-      </Card>
+      <SyncPanel accounts={accounts} status={syncStatus} pending={pending} run={run} t={t} />
+
+      {review.map(({ account, differing }) => (
+        <section key={account.id} className="mb-5 rounded-3xl border border-butter/60 bg-butter-tint px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 text-sm text-butter-ink">
+              <p className="font-semibold">{t('Nothing is sent to {account} yet', { account: account.name })}</p>
+              <p className="mt-0.5">
+                {differing
+                  ? t.plural(differing, '{n} product shows another stock there than in Luora.', '{n} products show another stock there than in Luora.')
+                  : t('Every product shows the same stock there as in Luora.')}{' '}
+                {account.type === 'shopify' && differing > 0
+                  ? t('Take its numbers where it is right, correct the rest here, then start sending: from then on the stock in Luora replaces the numbers there.')
+                  : t('Check the numbers, then start sending: from then on the stock in Luora replaces the numbers there.')}
+              </p>
+            </div>
+            {admin ? (
+              <div className="flex flex-wrap items-start gap-2">
+                {account.type === 'shopify' && differing > 0 && (
+                  <ActionForm action={adoptStockAction.bind(null, account.id, null)}>
+                    <SubmitButton
+                      variant="secondary"
+                      pendingText={t('Reading {account}…', { account: account.name })}
+                      confirm={t.plural(differing, 'Set the stock of {n} product in Luora to the number {account} shows?', 'Set the stock of {n} products in Luora to the numbers {account} shows?', { account: account.name })}
+                    >
+                      {t('Take {account}’s numbers ({n})', { account: account.name, n: differing })}
+                    </SubmitButton>
+                  </ActionForm>
+                )}
+                <ActionForm action={goLiveAction.bind(null, account.id)}>
+                  <SubmitButton
+                    pendingText={t('Starting…')}
+                    confirm={
+                      differing
+                        ? t.plural(differing, 'For {n} product the stock in Luora will replace the number in {account}. Start sending?', 'For {n} products the stock in Luora will replace the numbers in {account}. Start sending?', { account: account.name })
+                        : t('Start sending stock to {account}?', { account: account.name })
+                    }
+                  >
+                    {t('Start sending to {account}', { account: account.name })}
+                  </SubmitButton>
+                </ActionForm>
+              </div>
+            ) : (
+              <p className="text-xs text-butter-ink">{t('An admin switches sending on.')}</p>
+            )}
+          </div>
+        </section>
+      ))}
 
       {matching.length > 0 && (
         <details className="group mb-5 rounded-2xl border border-amber-200 bg-amber-50/40" open={matching.length <= 10}>
@@ -350,9 +228,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
           <div className="border-t border-amber-200 bg-white">
             {clear > 0 && (
               <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-2.5 text-sm text-slate-600">
-                <span>
-                  {t.plural(clear, '{n} product has a clear match by name.', '{n} products have a clear match by name.')}
-                </span>
+                <span>{t.plural(clear, '{n} product has a clear match by name.', '{n} products have a clear match by name.')}</span>
                 <ActionForm action={confirmClearSuggestionsAction}>
                   <SubmitButton size="sm" variant="secondary" pendingText={t('Linking…')}>
                     {t.plural(clear, 'Link {n} clear match', 'Link {n} clear matches')}
@@ -420,10 +296,11 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         </details>
       )}
 
-      <Card className="mb-5 overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
+      <Card className="mb-5 overflow-clip">
+        <div className="flex flex-wrap items-center gap-2 border-b border-black/[0.06] px-5 py-3">
           <form action="/inventory" className="mr-auto max-md:w-full">
-            {sort !== 'sales' && <input type="hidden" name="sort" value={sort} />}
+            {sort !== 'brand' && <input type="hidden" name="sort" value={sort} />}
+            {filter !== 'all' && <input type="hidden" name="filter" value={filter} />}
             {win.custom ? (
               <>
                 <input type="hidden" name="from" value={win.custom.from} />
@@ -432,135 +309,109 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             ) : (
               win.key !== '30' && <input type="hidden" name="days" value={win.key} />
             )}
-            <Input name="q" defaultValue={params.q} placeholder={t('Search name, SKU, EAN')} className="h-8 w-60 max-md:w-full" type="search" enterKeyHint="search" />
+            <Input name="q" defaultValue={params.q} placeholder={t('Search name, brand, SKU, EAN')} aria-label={t('Search name, brand, SKU, EAN')} className="h-8 w-64 max-md:w-full" type="search" enterKeyHint="search" />
           </form>
           <RangeControl path="/inventory" current={params} presets={periodPresets} active={win.key} param="days" custom={win.custom} reset={['page']} label={t('Sales period')} />
-          <div className="flex max-w-full overflow-x-auto rounded-full border border-slate-200 p-0.5 text-xs max-md:scrollbar-none">
-            {(Object.keys(SORTS) as Sort[]).map((s) => (
+          <div className="flex max-w-full overflow-x-auto rounded-full border border-black/[0.08] p-0.5 text-xs max-md:scrollbar-none" role="group" aria-label={t('Order')}>
+            {SORTS.map((s) => (
               <Link
                 key={s}
-                href={hrefWith(params, { sort: s === 'sales' ? undefined : s, page: undefined })}
-                className={cn('shrink-0 rounded-full px-3 py-1 whitespace-nowrap max-md:px-4 max-md:py-2 max-md:text-sm', s === sort ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50')}
+                href={hrefWith(params, { sort: s === 'brand' ? undefined : s, page: undefined })}
+                aria-current={s === sort ? 'true' : undefined}
+                className={cn('shrink-0 rounded-full px-3 py-1 whitespace-nowrap max-md:px-4 max-md:py-2 max-md:text-sm', s === sort ? 'bg-ink text-white' : 'text-slate-600 hover:bg-black/[0.04]')}
               >
-                {t(SORTS[s])}
+                {t(SORT_LABEL[s])}
               </Link>
             ))}
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-black/[0.06] px-5 py-2.5 text-xs">
+          {FILTERS.map((f) => (
+            <Link
+              key={f}
+              href={hrefWith(params, { filter: f === 'all' ? undefined : f, page: undefined })}
+              aria-current={f === filter ? 'true' : undefined}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 whitespace-nowrap max-md:px-3 max-md:py-2',
+                f === filter ? 'border-ink bg-ink text-white' : 'border-black/[0.08] text-slate-600 hover:border-black/20',
+                f !== filter && counts[f] === 0 && 'opacity-60',
+              )}
+            >
+              {t(FILTER_LABEL[f])}
+              <span className={cn('font-mono tabular-nums', f === filter ? 'text-white/80' : 'text-slate-500')}>{counts[f]}</span>
+            </Link>
+          ))}
+        </div>
 
-        {shown.length === 0 ? (
-          <EmptyState title={products.length ? t('No product matches the search') : t('No products yet')}>
-            {products.length ? null : t('Press “Import listings” to load your products and photos from Shopify.')}
+        {filtered.length === 0 ? (
+          <EmptyState title={products.length ? t('No product matches') : t('No products yet')}>
+            {products.length ? null : t('Press “Update all stock” to load your products and photos from Shopify.')}
           </EmptyState>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto lg:overflow-visible">
             <table className="min-w-full max-md:block">
-              <tbody className="divide-y divide-slate-100 max-md:block">
-                {shown.map((p) => {
-                  const own = byProduct.get(p.id) ?? [];
-                  const f = perf(p.id);
+              <thead className="max-md:hidden">
+                <tr className="text-left text-[11px] text-slate-500 [&>th]:bg-white [&>th]:font-medium [&>th]:shadow-[inset_0_-1px_0_rgba(0,0,0,0.06)] lg:[&>th]:sticky lg:[&>th]:top-14 lg:[&>th]:z-10 2xl:[&>th]:top-0">
+                  <th className="w-10" />
+                  <th className="py-2 pr-3 pl-2 md:min-w-44">{t('Product')}</th>
+                  <th className="px-3 py-2 whitespace-nowrap">{t('Sold · {period}', { period: winLabel })}</th>
+                  <th className="px-3 py-2">{t('Stock')}</th>
+                  {platforms.map((m) => (
+                    <th key={m} className="px-2 py-2 text-center whitespace-nowrap">
+                      {MARKETPLACE_LABELS[m]}
+                    </th>
+                  ))}
+                  <th className="hidden" />
+                </tr>
+              </thead>
+              {grouped ? (
+                grouped.map((g) => {
+                  const units = g.products.reduce((sum, p) => sum + Math.max(0, p.stock), 0);
+                  const out = g.products.filter((p) => p.stock <= 0).length;
                   return (
-                    <ExpandableRow key={p.id} colSpan={6} label={t('listings')} stack className="align-middle" details={<ListingDetails listings={own} stock={p.stock} />}>
-                      <td className="py-3 pr-4 pl-2 max-md:order-1 max-md:px-0 max-md:pr-12">
-                        <div className="flex min-w-64 items-center gap-3 max-md:min-w-0">
-                          <ProductPhoto product={p} />
-                          <div className="min-w-0">
-                            <p className="font-medium leading-snug">{p.name}</p>
-                            <p className="mt-0.5 text-xs">
-                              {hasRealSku(p.sku) ? <span className="font-mono text-slate-500">{p.sku}</span> : <Badge tone="amber">{t('No SKU')}</Badge>}
-                              {p.ean && <span className="ml-2 font-mono text-slate-400">{p.ean}</span>}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap max-md:order-3 max-md:border-l-0 max-md:px-0 max-md:py-1">
-                        <Label>
-                          {t('Performance')} <span className={cn('ml-1 font-medium', LEVEL_TONE[f.level])}>{t(LEVEL_LABEL[f.level])}</span>
-                        </Label>
-                        <p className="mt-1 flex items-center gap-2 text-sm tabular-nums">
-                          <TrendingUp className="size-3.5 text-slate-400" /> {f.units}
-                          <span className="text-slate-300">·</span>
-                          <ShoppingBag className="size-3.5 text-slate-400" /> {pln(f.revenue)}
-                        </p>
-                        {margins.get(p.id) && margins.get(p.id)!.gross > 0 && (
-                          <p className="mt-0.5 text-xs text-slate-500" title={t('Profit after VAT, fees, product cost, shipping and refunds')}>
-                            {t('Margin')}{' '}
-                            <span className={cn('font-medium tabular-nums', margins.get(p.id)!.profit < 0 ? 'text-red-700' : 'text-slate-800')}>
-                              {((margins.get(p.id)!.profit / margins.get(p.id)!.gross) * 100).toFixed(1)}%
-                            </span>{' '}
-                            {showProfit && <>· {t('{amount} profit', { amount: pln(margins.get(p.id)!.profit) })}</>}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-2 py-3 max-md:hidden">
-                        <Gauge value={f.percentile} tone={f.level} className="h-10 w-16" label={t('{level} performance', { level: t(LEVEL_LABEL[f.level]) })} />
-                      </td>
-                      <td className="border-l border-slate-100 px-4 py-3 whitespace-nowrap max-md:hidden">
-                        <Label>{t('Sales rank')}</Label>
-                        {f.rank ? (
-                          <>
-                            <p className="mt-0.5 flex items-center gap-1 text-lg font-semibold tabular-nums">
-                              {f.rank === 1 && <Trophy className="size-4 text-amber-500" />}#{f.rank}
-                              <span className="text-xs font-normal text-slate-400">{t('of {n}', { n: products.length })}</span>
-                            </p>
-                            <p className="text-[11px] text-slate-500">
-                              {PLATFORMS.filter((m) => f.rankByMarketplace[m])
-                                .map((m) => `${PLATFORM_LABEL[m]} #${f.rankByMarketplace[m]}`)
-                                .join(' · ')}
-                            </p>
-                          </>
-                        ) : (
-                          <p className="mt-0.5 text-lg text-slate-300">—</p>
-                        )}
-                      </td>
-                      <td className="border-l border-slate-100 px-4 py-3 max-md:order-2 max-md:border-l-0 max-md:px-0 max-md:py-2">
-                        <Label>{t('Stock')} {p.stock <= 0 && <span className="ml-1 font-medium text-red-600">{t('out of stock')}</span>}</Label>
-                        <ActionForm action={adjustStockAction.bind(null, p.id)} className="mt-1 flex items-center gap-1.5" showOk={false}>
-                          <input type="hidden" name="mode" value="set" />
-                          <Input
-                            name="value"
-                            inputMode="numeric"
-                            aria-label={t('Stock of {name}', { name: p.name })}
-                            defaultValue={p.stock}
-                            key={p.stock}
-                            className={cn('h-8 w-20 text-center font-semibold tabular-nums', p.stock <= 0 && 'text-red-700', p.stock > 0 && p.stock < 5 && 'text-amber-700')}
-                            required
-                          />
-                          <SubmitButton size="sm" variant="secondary" pendingText="…">
-                            {t('Update all')}
-                          </SubmitButton>
-                        </ActionForm>
-                        <PlatformDots listings={own} stock={p.stock} />
-                      </td>
-                    </ExpandableRow>
+                    <BrandGroup
+                      key={g.key || 'none'}
+                      label={g.label ?? t('No brand')}
+                      colSpan={colSpan}
+                      summary={
+                        <>
+                          {t.plural(g.products.length, '{n} product', '{n} products')} · {t('{n} in stock', { n: units.toLocaleString('pl-PL') })}
+                          {out > 0 && <span className="text-red-700"> · {t('{n} out of stock', { n: out })}</span>}
+                        </>
+                      }
+                    >
+                      {g.products.map((p) => row(p.id))}
+                    </BrandGroup>
                   );
-                })}
-              </tbody>
+                })
+              ) : (
+                <tbody className="max-md:block [&>tr+tr]:border-t [&>tr+tr]:border-black/[0.04]">{shown.map((p) => row(p.id))}</tbody>
+              )}
             </table>
           </div>
         )}
-        <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-sm text-slate-500">
-          {page > 1 ? (
-            <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page - 1) })}>
-              {t('Previous')}
-            </Link>
-          ) : (
-            <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Previous')}</span>
-          )}
-          <span>
-            {t('Page {page} of {pages}', { page, pages })}
-          </span>
-          {page < pages ? (
-            <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page + 1) })}>
-              {t('Next')}
-            </Link>
-          ) : (
-            <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Next')}</span>
-          )}
-        </div>
+        {pages > 1 && (
+          <div className="flex items-center justify-between border-t border-black/[0.06] px-5 py-3 text-sm text-slate-500">
+            {page > 1 ? (
+              <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page - 1) })}>
+                {t('Previous')}
+              </Link>
+            ) : (
+              <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Previous')}</span>
+            )}
+            <span>{t('Page {page} of {pages}', { page, pages })}</span>
+            {page < pages ? (
+              <Link className={buttonClass('secondary', 'sm')} href={hrefWith(params, { page: String(page + 1) })}>
+                {t('Next')}
+              </Link>
+            ) : (
+              <span className={cn(buttonClass('secondary', 'sm'), 'pointer-events-none opacity-40')}>{t('Next')}</span>
+            )}
+          </div>
+        )}
       </Card>
 
-      <details className="rounded-2xl border border-slate-200 bg-white">
+      <details className="rounded-2xl border border-black/[0.06] bg-white">
         <summary className="cursor-pointer px-5 py-3 text-sm font-semibold">{t('Recent stock pushes')}</summary>
         {log.length === 0 ? (
           <EmptyState title={t('Nothing sent yet')} />
@@ -574,7 +425,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   {e.dryRun ? <Badge tone="amber">{t('dry run')}</Badge> : e.ok ? <Badge tone="green">{t('sent')}</Badge> : <Badge tone="red">{t('failed')}</Badge>}
-                  <span className="text-xs text-slate-400">{timeAgo(e.createdAt, t)}</span>
+                  <span className="text-xs text-slate-500">{timeAgo(e.createdAt, t)}</span>
                 </span>
               </li>
             ))}
@@ -582,52 +433,5 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         )}
       </details>
     </>
-  );
-}
-
-/** One chip per marketplace: whether stock gets through, how many offers wait, and what is refused. */
-function StockSyncStrip({
-  accounts,
-  status,
-  pending,
-  t,
-}: {
-  accounts: Awaited<ReturnType<typeof listMarketplaceAccounts>>;
-  status: Awaited<ReturnType<typeof stockSyncStatus>>;
-  pending: Map<string, number>;
-  t: Awaited<ReturnType<typeof getT>>;
-}) {
-  if (accounts.length === 0) return null;
-  return (
-    <div className="-mt-2 mb-4 flex flex-wrap gap-2">
-      {accounts.map((a) => {
-        const s = status.get(a.id);
-        const waiting = pending.get(a.id) ?? 0;
-        const state = !a.stockSyncEnabled ? 'off' : a.stockDryRun ? 'dry' : s?.failing ? 'failing' : 'ok';
-        const tone = state === 'failing' ? 'red' : state === 'ok' ? 'green' : 'amber';
-        const label =
-          state === 'off'
-            ? t('Stock sync off')
-            : state === 'dry'
-              ? t('Dry run')
-              : state === 'failing'
-                ? t.plural(s!.failing, '{n} offer refused', '{n} offers refused')
-                : waiting
-                  ? t('{n} to send', { n: waiting })
-                  : t('Up to date');
-        const title = [
-          s?.lastSuccessAt ? t('Last sent {time}', { time: formatDate(s.lastSuccessAt) }) : t('Never sent'),
-          s?.firstError ?? '',
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        return (
-          <span key={a.id} title={title} className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-white py-1 pr-1 pl-2.5 text-xs">
-            <span className="font-medium text-ink">{a.name}</span>
-            <Badge tone={tone}>{label}</Badge>
-          </span>
-        );
-      })}
-    </div>
   );
 }

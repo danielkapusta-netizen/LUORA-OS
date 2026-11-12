@@ -56,8 +56,8 @@ describe('cron', () => {
     vi.mocked(runJob).mockImplementation(async (name) => {
       if (name === 'stock-reconcile') throw new Error('marketplace down');
     });
-    await handleScheduled({ cron: '30 2 * * *' } as never, {} as never);
+    await handleScheduled({ cron: '15 */2 * * *' } as never, {} as never);
     expect(runJob).toHaveBeenCalledWith('stock-reconcile', {});
-    expect(runJob).toHaveBeenCalledWith('fx-sync', {});
+    expect(runJob).toHaveBeenCalledWith('delivery-check', {});
   });
 });

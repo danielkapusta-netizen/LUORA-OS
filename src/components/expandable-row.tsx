@@ -13,6 +13,7 @@ export function ExpandableRow({
   className,
   label,
   stack = false,
+  dense = false,
 }: {
   children: React.ReactNode;
   details: React.ReactNode;
@@ -21,6 +22,8 @@ export function ExpandableRow({
   label?: string;
   /** On a phone, show the row as a card: its cells stack and the +/− button moves to the corner. The table around it must be block too. */
   stack?: boolean;
+  /** A shorter row: the button sits in the middle with less room around it. */
+  dense?: boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -29,7 +32,7 @@ export function ExpandableRow({
   return (
     <>
       <tr className={cn(open && 'bg-slate-50', stack && 'max-md:relative max-md:flex max-md:flex-col max-md:px-4 max-md:py-3', className)}>
-        <td className={cn('w-10 py-3 pr-0 pl-4 align-top', stack && 'max-md:absolute max-md:top-1.5 max-md:right-1 max-md:w-auto max-md:p-0')}>
+        <td className={cn('w-10 pr-0 pl-4', dense ? 'py-1.5 align-middle' : 'py-3 align-top', stack && 'max-md:absolute max-md:top-1.5 max-md:right-1 max-md:w-auto max-md:p-0')}>
           <button
             type="button"
             onClick={() => setOpen(!open)}

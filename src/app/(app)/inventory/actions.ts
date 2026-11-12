@@ -2,10 +2,15 @@
 
 import { revalidatePath } from 'next/cache';
 import { attempt, type ActionResult } from '@/lib/action-result';
-import { requireUser } from '@/server/auth';
+import { eq } from 'drizzle-orm';
+import { requireAdmin, requireUser } from '@/server/auth';
+import { getDb } from '@/server/db/client';
+import { marketplaceAccounts } from '@/server/db/schema';
 import { enqueue, JOBS } from '@/server/jobs/queue';
-import { adjustStock, confirmClearSuggestions, linkGroup, linkListing, setListingStock } from '@/server/services/inventory';
+import { loadMarketplaceAccount } from '@/server/services/accounts';
+import { activateListing, adjustStock, adoptMarketplaceStock, confirmClearSuggestions, importListings, linkGroup, linkListing, setListingStock } from '@/server/services/inventory';
 import { listMarketplaceAccounts } from '@/server/services/settings';
+import { startSyncRun } from '@/server/services/stock-sync';
 import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
@@ -60,21 +65,65 @@ export async function importListingsAction(): Promise<ActionResult> {
   });
 }
 
+/** "Update all stock": every marketplace is read, sent the stock it should show, and read again to check. */
 export async function syncAllStockAction(): Promise<ActionResult> {
+  const user = await requireUser();
+  return attempt(async () => {
+    const { started } = await startSyncRun('manual', user.id);
+    revalidatePath('/inventory');
+    return started ? msg('Update started: every marketplace is read, sent its stock and checked.') : msg('An update is already running.');
+  });
+}
+
+/** Puts one off-sale offer back on sale with the stock it should show, and says what the marketplace answered. */
+export async function activateListingAction(listingId: string): Promise<ActionResult> {
   await requireUser();
   return attempt(async () => {
-    const accounts = (await listMarketplaceAccounts()).filter((a) => a.enabled);
-    await enqueue(JOBS.stockSyncAll, {});
-    const off = accounts.filter((a) => !a.stockSyncEnabled).map((a) => a.name);
-    const dry = accounts.filter((a) => a.stockSyncEnabled && a.stockDryRun).map((a) => a.name);
-    const live = accounts.filter((a) => a.stockSyncEnabled && !a.stockDryRun).map((a) => a.name);
-    return [
-      live.length ? `Re-reading every platform and sending stock to ${live.join(', ')}.` : 'Re-reading every platform, but nothing is sent:',
-      dry.length ? `${dry.join(', ')} ${dry.length > 1 ? 'are' : 'is'} in dry run (only logged); switch it off in Settings → Integrations to really send.` : '',
-      off.length ? `Stock sync is off for ${off.join(', ')}.` : '',
-    ]
-      .filter(Boolean)
-      .join(' ');
+    let result: Awaited<ReturnType<typeof activateListing>>;
+    try {
+      result = await activateListing(listingId);
+    } finally {
+      revalidatePath('/inventory');
+    }
+    const t = await getT();
+    if (result.onSale) return t('On sale on {account} with {n} in stock', { account: result.accountName, n: result.quantity });
+    throw new Error(
+      t('{account} was sent {n}, but still shows the offer off sale{status}. If it stays off, put it on sale in the marketplace’s own panel.', {
+        account: result.accountName,
+        n: result.quantity,
+        status: result.status ? ` (${result.status.toLowerCase()})` : '',
+      }),
+    );
+  });
+}
+
+/**
+ * Takes the marketplace's number as the stock: of one product, or (admins) of every product where the two differ.
+ * The marketplace is read first, so the number taken is the one it shows now.
+ */
+export async function adoptStockAction(accountId: string, productId: string | null): Promise<ActionResult> {
+  const user = productId ? await requireUser() : await requireAdmin();
+  return attempt(async () => {
+    const account = await loadMarketplaceAccount(accountId);
+    await importListings(accountId);
+    const changed = await adoptMarketplaceStock({ accountId, productIds: productId ? [productId] : undefined, userId: user.id });
+    revalidatePath('/inventory');
+    const t = await getT();
+    if (changed === 0) return t('Stock already matches {account}', { account: account.name });
+    return t.plural(changed, 'Stock of {n} product now matches {account}', 'Stock of {n} products now match {account}', { account: account.name });
+  });
+}
+
+/** Ends the review of an account: from now on stock is really sent to it, starting with a full update. */
+export async function goLiveAction(accountId: string): Promise<ActionResult> {
+  const user = await requireAdmin();
+  return attempt(async () => {
+    const account = await loadMarketplaceAccount(accountId);
+    await getDb().update(marketplaceAccounts).set({ stockSyncEnabled: true, stockDryRun: false }).where(eq(marketplaceAccounts.id, accountId));
+    await startSyncRun('manual', user.id);
+    revalidatePath('/inventory');
+    const t = await getT();
+    return t('Stock is now sent to {account}. A full update has started.', { account: account.name });
   });
 }
 

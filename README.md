@@ -16,9 +16,13 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - Creating a label does **not** move the order: it stays on the tab it is on (usually New) with a "Label ready" chip, until someone presses **Packed**. Then it moves to Shipped (once the tracking has reached the marketplace).
   - The **Label created** tab lists the orders that have a label but are not packed yet. Unticking Packed puts a shipped order back on New.
 - **Stock sync:**
-  - The app's stock is the master; every sale lowers it.
-  - The new quantity is pushed to every listing with the same SKU.
-  - A dry-run switch per account lets you watch what would be sent before going live.
+  - The app's stock is the master; every sale lowers it. Type stock only in Luora OS: a number typed in a marketplace is replaced at the next update.
+  - The new quantity is pushed to every listing linked to the product.
+  - **Inventory** lists products by brand (or best selling, name, lowest stock, newest), one compact row each, with one column per marketplace: the number it shows, amber when it differs, "off sale", or "—" when there is no offer.
+  - **Update all stock** reads every marketplace, sends the stock wherever a marketplace shows another number, then reads it back and reports per marketplace how many offers match, differ or were refused. The same update runs by itself every two hours.
+  - An offer that went off sale because it sold out (Allegro ends it, Empik and HEBE switch it off) is still sent stock and goes back on sale by itself. One ended by hand gets an **Activate** button; nothing is sent to it until then.
+  - A Shopify bundle is never sent a quantity (Shopify counts it from its components), and one item Shopify refuses no longer blocks the rest. An offer that disappears from a marketplace is marked removed and left alone.
+  - A dry-run switch per account lets you watch what would be sent before going live. While an account is in dry run, Inventory shows how many products differ and a **Start sending** button (admins); for Shopify also **Take Shopify's numbers**, which copies Shopify's stock into Luora for every product that differs.
 - **Pricing:** one tab each for Shopify, Von Halsky, Empik and Allegro, with every product's gross price on that platform. Type a new price and press Update (or Enter) to send it to the platform right away; "Update every changed price" sends the whole page. A platform that refuses a price gives its reason on that row and the other prices still go through. Admin and Marketing only.
   - Prices are not held back by the stock dry-run switch: pressing Update is the decision.
   - Von Halsky offers Luora created follow Shopify + markup ("Update prices of Luora offers"); a price set on the Pricing page is skipped by that rule.
@@ -42,7 +46,7 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
 | Web app (Next.js) | **Workers**, via [OpenNext](https://opennext.js.org/cloudflare) |
 | Database | **D1** (SQLite), schema in `src/server/db/schema.ts`, migrations in `drizzle/` |
 | Background jobs | **Queues** (`luora-jobs`, with a dead-letter queue) |
-| Schedules | **Cron Triggers** (order sync, label sweep, delivery check, nightly stock check) |
+| Schedules | **Cron Triggers** (order sync, label sweep, delivery check, stock update every two hours) |
 | Label files | **R2** (`luora-labels`) |
 
 Queues and Cron Triggers need the **Workers Paid** plan.
@@ -181,7 +185,7 @@ Migration `0012_roles` turns the old `staff` users into `logistics`.
 One Worker (src/worker/cloudflare.ts)
    ├─ fetch      Next.js app: UI, server actions, API routes      ─┐
    ├─ scheduled  Cron Triggers → sync all accounts, label sweep,    ├── D1 (orders, labels, stock, job locks)
-   │             delivery check, nightly stock reconcile           │   R2 (label PDFs/ZPL)
+   │             delivery check, two-hourly stock update            │   R2 (label PDFs/ZPL)
    └─ queue      luora-jobs consumer:                              ─┘
         orders-sync      upsert orders, take stock
         shipment-create  buy label → shipment-poll until the carrier confirms → store file in R2

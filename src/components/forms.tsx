@@ -54,6 +54,7 @@ export function ActionForm({
   resetOnSuccess,
   showOk = true,
   popup,
+  quiet = false,
 }: {
   action: Action;
   children: ReactNode;
@@ -62,6 +63,8 @@ export function ActionForm({
   showOk?: boolean;
   /** Also shows the result as a pop-up in the corner (title = what finished). */
   popup?: string;
+  /** No message under the form at all, for a button inside a narrow table cell; give it a `popup` so errors still show. */
+  quiet?: boolean;
 }) {
   const t = useT();
   const [state, formAction] = useActionState(action, null);
@@ -79,8 +82,8 @@ export function ActionForm({
   return (
     <form ref={ref} action={formAction} className={className}>
       {children}
-      {state?.error && <p className="mt-2 text-sm text-red-700">{t(state.error)}</p>}
-      {state?.ok && showOk && <p className="mt-2 text-sm text-emerald-700">{t(state.ok)}</p>}
+      {state?.error && !quiet && <p className="mt-2 text-sm text-red-700">{t(state.error)}</p>}
+      {state?.ok && showOk && !quiet && <p className="mt-2 text-sm text-emerald-700">{t(state.ok)}</p>}
       {popup && shown && (
         <div
           role="status"

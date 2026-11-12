@@ -21,7 +21,7 @@ import {
 import type { SenderSettings } from '../integrations/types';
 import { BUYER_CHOICE } from '../integrations/carriers/allegro-shipping/adapter';
 import { MiraklAdapter } from '../integrations/marketplaces/mirakl/adapter';
-import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
+import { MOCK_PRODUCTS } from '../integrations/marketplaces/mock/adapter';
 import { getCarrierAdapter, getMarketplaceAdapter, loadCarrierAccount, loadMarketplaceAccount, readCredentials, withConfigured } from './accounts';
 import { removeDemoTasks } from './tasks';
 import { msg } from '@/lib/i18n/msg';
@@ -112,7 +112,7 @@ export async function removeDemoData(): Promise<{ accounts: number; carriers: nu
   for (const ids of chunk(marketIds)) await db.delete(marketplaceAccounts).where(inArray(marketplaceAccounts.id, ids));
 
   // Demo products that no longer have listings or order lines.
-  const demoSkus = MOCK_CATALOG.map((p) => p.sku);
+  const demoSkus = MOCK_PRODUCTS.map((p) => p.sku);
   await db.run(sql`
     delete from products where sku in (${sql.join(demoSkus.map((s) => sql`${s}`), sql`, `)})
       and not exists (select 1 from product_listings l where l.product_id = products.id)

@@ -80,6 +80,12 @@ export interface MarketplaceAdapter {
   setStock(updates: StockUpdate[]): Promise<StockFailure[]>;
 
   /**
+   * Puts an offer that is off sale back on sale with this quantity, where the marketplace needs more than a
+   * quantity for that (Allegro). Throws with the marketplace's reason when the offer does not come back.
+   */
+  activate?(update: StockUpdate): Promise<void>;
+
+  /**
    * Sets gross selling prices. Offers the marketplace refuses are returned (the rest still go
    * through); a call that fails as a whole, e.g. a rejected login, throws.
    */
