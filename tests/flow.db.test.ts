@@ -274,6 +274,24 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     await db.delete(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, empik.id));
   });
 
+  it('prunes stock log lines older than a month and leaves recent ones', async () => {
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const [account] = await db.select().from(s.marketplaceAccounts).where(orm.eq(s.marketplaceAccounts.type, 'empik'));
+    const day = 86_400_000;
+    const at = (daysAgo: number) => new Date(Date.now() - daysAgo * day);
+    await db.insert(s.stockSyncLog).values([
+      { accountId: account.id, quantity: 1, dryRun: false, ok: false, error: 'old', createdAt: at(45) },
+      { accountId: account.id, quantity: 2, dryRun: true, ok: true, createdAt: at(31) },
+      { accountId: account.id, quantity: 3, dryRun: false, ok: true, createdAt: at(2) },
+    ]);
+    expect(await m.inventory.pruneStockLog()).toBeGreaterThanOrEqual(2);
+    const left = await db.select().from(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, account.id));
+    expect(left.every((r) => r.createdAt.getTime() > Date.now() - 30 * day)).toBe(true);
+    expect(left.some((r) => r.quantity === 3)).toBe(true);
+    await db.delete(s.stockSyncLog).where(orm.eq(s.stockSyncLog.accountId, account.id));
+  });
+
   it('keeps sending stock when one offer is refused, stops sending to a deleted one, and includes products not on Shopify', async () => {
     const db = m.db.getDb();
     const { schema: s, orm } = m;

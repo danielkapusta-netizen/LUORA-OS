@@ -691,7 +691,12 @@ export const stockSyncLog = sqliteTable(
     error: text('error'),
     createdAt: createdAt(),
   },
-  (t) => [index('stock_sync_log_created_idx').on(t.createdAt)],
+  (t) => [
+    index('stock_sync_log_created_idx').on(t.createdAt),
+    // "What was last logged for this listing" and "when did stock last get through": without these the table is scanned.
+    index('stock_sync_log_listing_idx').on(t.listingId, t.dryRun, t.createdAt),
+    index('stock_sync_log_account_idx').on(t.accountId, t.ok, t.dryRun, t.createdAt),
+  ],
 );
 
 export const stockSyncStepValues = ['waiting', 'reading', 'sending', 'checking', 'done', 'failed', 'skipped'] as const;

@@ -495,11 +495,15 @@ export async function runStockPush(accountId: string, opts: { force?: boolean } 
 
   if (account.stockDryRun) {
     // Nothing is sent, so the same difference would be logged on every push; only log changes.
-    const lastLogged = await db.all<{ listing_id: string; quantity: number }>(sql`
-      select l.listing_id, l.quantity from stock_sync_log l
-      where l.account_id = ${accountId} and l.dry_run = 1
-        and l.created_at = (select max(x.created_at) from stock_sync_log x where x.listing_id = l.listing_id and x.dry_run = 1)`);
-    const previous = new Map(lastLogged.map((r) => [r.listing_id, r.quantity]));
+    // Only the listings being pushed, newest first, so the first row seen per listing is its last log.
+    const previous = new Map<string, number>();
+    for (const ids of chunk(updates.map((u) => u.listingId))) {
+      const rows = await db.all<{ listing_id: string; quantity: number }>(sql`
+        select listing_id, quantity from stock_sync_log
+        where listing_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) and dry_run = 1
+        order by created_at desc`);
+      for (const r of rows) if (!previous.has(r.listing_id)) previous.set(r.listing_id, r.quantity);
+    }
     const fresh = updates.filter((u) => previous.get(u.listingId) !== u.quantity);
     if (fresh.length) {
       await insertMany(db, stockSyncLog, fresh.map((u) => ({ accountId, listingId: u.listingId, quantity: u.quantity, dryRun: true, ok: true })));
@@ -676,9 +680,16 @@ export interface StockSyncStatus {
 /** Per marketplace account: did stock last get through, and which listings are being refused. */
 export async function stockSyncStatus(): Promise<Map<string, StockSyncStatus>> {
   const db = getDb();
+  const accountIds = (await db.select({ id: marketplaceAccounts.id }).from(marketplaceAccounts)).map((a) => a.id);
   const [pushed, errors] = await Promise.all([
-    db.all<{ account_id: string; at: number | null }>(sql`
-      select account_id, max(created_at) as at from stock_sync_log where ok = 1 and dry_run = 0 group by account_id`),
+    // One indexed lookup per account; a scan over the whole log on every page view overloaded the database.
+    Promise.all(
+      accountIds.map(async (id) => {
+        const [row] = await db.all<{ at: number | null }>(sql`
+          select max(created_at) as at from stock_sync_log where account_id = ${id} and ok = 1 and dry_run = 0`);
+        return { account_id: id, at: row?.at ?? null };
+      }),
+    ),
     db.all<{ account_id: string; n: number; error: string | null }>(sql`
       select account_id, count(*) as n, min(last_push_error) as error from product_listings
       where last_push_error is not null and active = 1 group by account_id`),
@@ -781,4 +792,20 @@ export async function activateListing(listingId: string): Promise<ActivationResu
   }
   const [after] = await db.select().from(productListings).where(eq(productListings.id, listingId));
   return { accountName: account.name, quantity, onSale: Boolean(after?.active), status: after?.listingStatus ?? null };
+}
+
+const STOCK_LOG_KEEP_DAYS = 30;
+
+/** Drops log lines older than a month, a slice at a time so a big backlog can't overload the database. */
+export async function pruneStockLog(now = new Date()): Promise<number> {
+  const db = getDb();
+  const cutoff = now.getTime() - STOCK_LOG_KEEP_DAYS * 86_400_000;
+  let removed = 0;
+  for (let round = 0; round < 25; round++) {
+    const rows = await db.all<{ id: string }>(sql`select id from stock_sync_log where created_at < ${cutoff} limit 2000`);
+    if (rows.length === 0) break;
+    for (const ids of chunk(rows.map((r) => r.id))) await db.delete(stockSyncLog).where(inArray(stockSyncLog.id, ids));
+    removed += rows.length;
+  }
+  return removed;
 }
