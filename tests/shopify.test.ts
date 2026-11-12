@@ -51,6 +51,8 @@ describe('mapShopifyOrder', () => {
     // No pickup attribute: the code is read from the shipping line, app-only lockers included.
     const fromTitle = mapShopifyOrder({ ...order, customAttributes: [], shippingLine: { ...order.shippingLine, title: 'Inpost Paczkomat · KRA03BAPP' } });
     expect(fromTitle.pickupPointId).toBe('KRA03BAPP');
+    const fourLetters = mapShopifyOrder({ ...order, customAttributes: [], shippingLine: { ...order.shippingLine, title: 'Inpost Paczkomat · STOB01BAPP' } });
+    expect(fourLetters.pickupPointId).toBe('STOB01BAPP');
   });
 
   it('treats cash on delivery as ready even when unpaid', () => {

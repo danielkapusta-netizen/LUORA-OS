@@ -408,7 +408,7 @@ const BACKFILL_LIMIT = 20;
  * Re-reads orders whose stored data is incomplete. Regular sync only revisits orders with new
  * marketplace events, so these would otherwise stay incomplete:
  * - orders that asked for an invoice before invoice requests were stored;
- * - open Empik Paczkomat orders without a pickup point (imported before the point was read);
+ * - open Empik and Shopify Paczkomat orders without a pickup point (imported before the point was read or recognised);
  * - items without a photo, or with a relative Empik photo path: the per-item lookup (e.g. Allegro's
  *   offer photo, a separate call per offer) can fail or get rate-limited during a big sync.
  */
@@ -419,8 +419,11 @@ export async function backfillOrderDetails(limit = BACKFILL_LIMIT): Promise<{ ch
     .from(orders)
     .where(
       and(
-        eq(orders.marketplace, 'empik'),
-        eq(orders.deliveryMethodId, 'PACKSTATION'),
+        or(
+          and(eq(orders.marketplace, 'empik'), eq(orders.deliveryMethodId, 'PACKSTATION')),
+          // A Shopify order whose locker code wasn't recognised when it was imported.
+          and(eq(orders.marketplace, 'shopify'), like(orders.deliveryMethodName, '%Paczkomat%')),
+        ),
         isNull(orders.pickupPointId),
         inArray(orders.status, EDITABLE),
         eq(orders.historical, false),
