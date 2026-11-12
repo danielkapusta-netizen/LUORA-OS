@@ -58,6 +58,12 @@ describe('findLockerCode', () => {
     expect(findLockerCode('InPost Paczkomat 24/7')).toBeNull();
     // App-only lockers end in "APP".
     expect(findLockerCode('Inpost Paczkomat · KRA03BAPP')).toBe('KRA03BAPP');
+    // Some places have a four-letter city part.
+    expect(findLockerCode('Inpost Paczkomat · STOB01BAPP')).toBe('STOB01BAPP');
+    expect(findLockerCode('stob01bapp')).toBe('STOB01BAPP');
+    // Ordinary words with a number are not lockers.
+    expect(findLockerCode('Wola 12')).toBeNull();
+    expect(findLockerCode('ul. Koźmińska 12b/1')).toBeNull();
     expect(findLockerCode('waw01app')).toBe('WAW01APP');
     expect(findLockerCode('ABC12DEFGH')).toBeNull();
   });
