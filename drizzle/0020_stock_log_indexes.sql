@@ -1,0 +1,2 @@
+CREATE INDEX `stock_sync_log_listing_idx` ON `stock_sync_log` (`listing_id`,`dry_run`,`created_at`);--> statement-breakpoint
+CREATE INDEX `stock_sync_log_account_idx` ON `stock_sync_log` (`account_id`,`ok`,`dry_run`,`created_at`);
