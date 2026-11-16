@@ -2,11 +2,14 @@
 import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { parsePrice, samePrice } from '../../lib/price';
 import { isResearchMarketplace } from '../../lib/pricing-research';
+import { minimumGrossPrice } from '../analytics/economics';
 import { getDb } from '../db/client';
-import { marketplaceAccounts, pricingRecommendations, productListings, products } from '../db/schema';
+import { marketplaceAccounts, pricingRecommendations, productListings, products, type AnalyticsSettings } from '../db/schema';
 import type { PriceUpdate } from '../integrations/types';
 import { getMarketplaceAdapter } from './accounts';
+import { currentCosts, loadAnalyticsSettings } from './costs';
 import { needsMatching } from './inventory';
+import { loadAccounting } from './invoicing';
 
 /** Tab order on the page. */
 export const PRICE_PLATFORMS = ['shopify', 'vonhalsky', 'empik', 'hebe', 'allegro'] as const;
@@ -35,18 +38,57 @@ export interface PricedListing {
   priceManual: boolean;
 }
 
+/**
+ * The lowest gross price on this platform that still earns the minimum margin (Settings → Costs & margins), from the
+ * product's current cost, the platform's commission and shipping, packaging and VAT. `no_cost` until the product has a cost.
+ */
+export interface PricingFloor {
+  state: 'ok' | 'unreachable' | 'no_cost';
+  /** PLN, gross; set when `state` is 'ok'. */
+  price: number | null;
+  /** The parts, for people who may see costs. */
+  unitCost: number | null;
+  commissionShare: number;
+  shipping: number;
+  packaging: number;
+}
+
+/** The floor for one product, or why there isn't one. Pure: everything it needs is passed in. */
+export function priceFloor(
+  platform: PricePlatform,
+  unitCost: number | null,
+  context: { settings: Required<AnalyticsSettings>; vatRate: number; margin: number },
+): PricingFloor {
+  const { settings, vatRate, margin } = context;
+  if (unitCost === null || !Number.isFinite(unitCost)) {
+    return { state: 'no_cost', price: null, unitCost: null, commissionShare: 0, shipping: 0, packaging: 0 };
+  }
+  const floor = minimumGrossPrice({ marketplace: platform, unitCost, vatRate, feeVatRate: vatRate, settings, margin });
+  return { state: floor.price === null ? 'unreachable' : 'ok', price: floor.price, unitCost, commissionShare: floor.commissionShare, shipping: floor.shipping, packaging: floor.packaging };
+}
+
+/** Whether a price is below the floor (by more than a grosz of rounding). Prices in other currencies are not compared. */
+export function belowFloor(price: string | number | null | undefined, currency: string | null | undefined, floor: PricingFloor | null): boolean {
+  if (!floor || floor.price === null || price == null || price === '' || (currency && currency !== 'PLN')) return false;
+  return Number(price) < floor.price - 0.005;
+}
+
 export interface PricingRow {
   product: typeof products.$inferSelect;
   /** What this platform sells it for; empty when the product isn't listed there. */
   listings: PricedListing[];
   /** The Shopify price, to compare with on the other platforms. */
   shopifyPrice: string | null;
+  /** The lowest price that keeps the minimum margin on this platform. */
+  floor: PricingFloor;
   recommendations: PricingRecommendation[];
 }
 
 export type PricingRecommendation = typeof pricingRecommendations.$inferSelect & { accountName: string };
 
 export interface PricingView {
+  /** The margin the floors keep, as a fraction of the gross price (0.1 = 10%). */
+  minimumMargin: number;
   rows: PricingRow[];
   /** Offers on this platform not linked to a Shopify product yet, so they can't be priced here. */
   unlinked: number;
@@ -56,7 +98,7 @@ export interface PricingView {
 
 export async function pricingView(platform: PricePlatform): Promise<PricingView> {
   const db = getDb();
-  const [productRows, listingRows, accounts, pending, research] = await Promise.all([
+  const [productRows, listingRows, accounts, pending, research, settings, accounting, costs] = await Promise.all([
     db.select().from(products).where(isNotNull(products.shopifyVariantId)).orderBy(asc(products.name)),
     db
       .select({
@@ -83,7 +125,11 @@ export async function pricingView(platform: PricePlatform): Promise<PricingView>
     isResearchMarketplace(platform) ? db.select({ recommendation: pricingRecommendations, accountName: marketplaceAccounts.name })
       .from(pricingRecommendations).innerJoin(marketplaceAccounts, eq(marketplaceAccounts.id, pricingRecommendations.accountId))
       .where(and(eq(marketplaceAccounts.type, platform), eq(marketplaceAccounts.enabled, true))) : Promise.resolve([]),
+    loadAnalyticsSettings(),
+    loadAccounting(),
+    currentCosts(),
   ]);
+  const floorContext = { settings, vatRate: accounting.settings.defaultVatRate ?? 0.23, margin: settings.minimumMargin };
 
   const shopifyPrice = new Map<string, string | null>();
   const here = new Map<string, PricedListing[]>();
@@ -92,7 +138,9 @@ export async function pricingView(platform: PricePlatform): Promise<PricingView>
     if (marketplace === platform) here.set(productId!, [...(here.get(productId!) ?? []), listing]);
   }
   return {
+    minimumMargin: settings.minimumMargin,
     rows: productRows.map((product) => ({ product, listings: here.get(product.id) ?? [], shopifyPrice: shopifyPrice.get(product.id) ?? null,
+      floor: priceFloor(platform, costs.has(product.id) ? Number(costs.get(product.id)!.unitCost) : null, floorContext),
       recommendations: research.filter((r) => r.recommendation.productId === product.id).map((r) => ({ ...r.recommendation, accountName: r.accountName })),
     })),
     unlinked: pending.filter((l) => l.marketplace === platform).length,

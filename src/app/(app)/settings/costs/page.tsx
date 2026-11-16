@@ -122,7 +122,10 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
 
             <fieldset>
               <legend className="mb-1 text-sm font-semibold">{t('Margin targets (% of gross revenue)')}</legend>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <Field label={t('Lowest price keeps')} hint={t('The Pricing page shows the lowest price that still earns this.')}>
+                  <Input name="minimumMargin" inputMode="decimal" defaultValue={pct(settings.minimumMargin)} />
+                </Field>
                 <Field label={t('Target')} hint={t('Used for price recommendations.')}>
                   <Input name="targetMargin" inputMode="decimal" defaultValue={pct(settings.targetMargin)} />
                 </Field>

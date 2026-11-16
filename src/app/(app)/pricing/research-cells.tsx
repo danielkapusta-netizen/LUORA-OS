@@ -2,11 +2,14 @@ import { Badge } from '@/components/ui';
 import { getT } from '@/lib/i18n/server';
 import { formatPrice, samePrice } from '@/lib/price';
 import { rationaleParts, recommendationNeedsRefresh, RECOMMENDATION_LABELS } from '@/lib/pricing-research';
-import type { PricedListing, PricingRecommendation } from '@/server/services/pricing';
+import { belowFloor, type PricedListing, type PricingFloor, type PricingRecommendation } from '@/server/services/pricing';
+import { BelowFloorNote } from './floor-cell';
 import { UseRecommendedPrice } from './price-cell';
 
-export async function ResearchCells({ recommendations, listings, productName, multipleAccounts }: {
+export async function ResearchCells({ recommendations, listings, productName, multipleAccounts, floor }: {
   recommendations: PricingRecommendation[]; listings: PricedListing[]; productName: string; multipleAccounts: boolean;
+  /** The lowest price that keeps the minimum margin; null for roles that may not see costs. */
+  floor: PricingFloor | null;
 }) {
   const t = await getT();
   const dateFormat = new Intl.DateTimeFormat(t.locale === 'pl' ? 'pl-PL' : 'en-GB', {
@@ -31,6 +34,7 @@ export async function ResearchCells({ recommendations, listings, productName, mu
               {t('Last researched')}<br />
               <time dateTime={r.researchedAt.toISOString()} title={`${dateFormat.format(r.researchedAt)} · Europe/Warsaw`}>{dateFormat.format(r.researchedAt)}</time>
             </p>
+            {floor && r.recommendedPrice && belowFloor(r.recommendedPrice, 'PLN', floor) && <BelowFloorNote floor={floor} />}
             {refresh && <p className="mt-1 text-xs text-amber-700">{t('Recheck before use: research is old or the current price has changed.')}</p>}
           </div>;
         })}</div>}

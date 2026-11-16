@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Alert, Badge, buttonClass, Card, EmptyState, Input, PageHeader } from '@/components/ui';
 import { can } from '@/lib/permissions';
-import { formatPrice, priceChangePercent } from '@/lib/price';
+import { formatPrice } from '@/lib/price';
 import { hasRealSku } from '@/lib/sku';
 import { cn, timeAgo } from '@/lib/utils';
 import { requireCapability } from '@/server/auth';
 import type { Product } from '@/server/db/schema';
-import { isPricePlatform, MAX_PRICES_PER_PUSH, PRICE_PLATFORM_LABEL, PRICE_PLATFORMS, pricingView, type PricedListing, type PricePlatform, type PricingRow } from '@/server/services/pricing';
+import { belowFloor, isPricePlatform, MAX_PRICES_PER_PUSH, PRICE_PLATFORM_LABEL, PRICE_PLATFORMS, pricingView, type PricedListing, type PricePlatform, type PricingRow } from '@/server/services/pricing';
 import { pushPricesAction, refreshPricesAction } from './actions';
+import { BelowFloorNote, FloorCell } from './floor-cell';
 import { PriceCell, PriceDraftProvider } from './price-cell';
 import { ResearchCells } from './research-cells';
 import { isResearchMarketplace } from '@/lib/pricing-research';
@@ -93,6 +94,9 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
   const sort: Sort = params.sort && params.sort in SORTS ? (params.sort as Sort) : 'name';
   const showAll = params.all === '1';
   const view = await pricingView(platform);
+  // The lowest price is worked out from costs, so it is for roles that may see margins.
+  const showFloor = can(viewer.role, 'margin');
+  const marginPercent = Number((view.minimumMargin * 100).toFixed(1));
 
   const needle = params.q?.toLowerCase().trim();
   const matching = needle
@@ -227,11 +231,18 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                         <th className="px-5 py-2 font-medium">{t('Product')}</th>
                         <th className="px-4 py-2 font-medium">{t('Price on {platform} (gross)', { platform: label })}</th>
                         {showResearch && <><th className="px-4 py-2 font-medium">{t('Recommended price')}</th><th className="px-4 py-2 font-medium">{t('Rationale')}</th></>}
-                        {platform !== 'shopify' && <th className="px-4 py-2 font-medium">{t('Shopify price')}</th>}
+                        {showFloor && (
+                          <th
+                            className="px-4 py-2 font-medium"
+                            title={t('The lowest gross price that still earns this margin on {platform}, after VAT, commission, shipping, packaging and the product cost. Margin is profit divided by the price including VAT, as everywhere in Luora.', { platform: label })}
+                          >
+                            {t('Lowest price at {margin}% margin', { margin: marginPercent })}
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 max-md:block">
-                      {shown.map(({ product, listings, shopifyPrice, recommendations }) => (
+                      {shown.map(({ product, listings, floor, recommendations }) => (
                         <PriceDraftProvider key={`${product.id}:${listings.map((l) => `${l.id}:${l.price}`).join(',')}`}>
                         <tr className="align-top max-md:flex max-md:flex-col max-md:px-4 max-md:py-3">
                           <td className="px-5 py-3 max-md:px-0 max-md:py-1">
@@ -261,17 +272,17 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
                                     )}
                                     <PriceCell key={`${l.id}:${l.price}`} listingId={l.id} current={l.price} label={t('Price of {product} on {platform}', { product: product.name, platform: label })} />
                                     <ListingStatus listing={l} platform={platform} />
+                                    {showFloor && belowFloor(l.price, l.currency, floor) && <BelowFloorNote floor={floor} />}
                                   </div>
                                 ))}
                               </div>
                             )}
                           </td>
-                          {showResearch && <ResearchCells recommendations={recommendations} listings={listings} productName={product.name} multipleAccounts={view.accounts.length > 1} />}
-                          {platform !== 'shopify' && (
-                            <td className="px-4 py-3 whitespace-nowrap max-md:px-0 max-md:py-1 max-md:text-sm max-md:text-slate-500">
-                              <span className="md:hidden">{t('Shopify:')} </span>
-                              <span className="font-medium tabular-nums">{formatPrice(shopifyPrice)}</span>
-                              {listings[0]?.price && shopifyPrice && <ShopifyGap shopify={shopifyPrice} here={listings[0].price} />}
+                          {showResearch && <ResearchCells recommendations={recommendations} listings={listings} productName={product.name} multipleAccounts={view.accounts.length > 1} floor={showFloor ? floor : null} />}
+                          {showFloor && (
+                            <td className="min-w-44 px-4 py-3 max-md:px-0 max-md:py-1 max-md:text-sm max-md:text-slate-500">
+                              <span className="md:hidden">{t('Lowest price:')} </span>
+                              <FloorCell floor={floor} showParts={can(viewer.role, 'profit')} canEditCosts={can(viewer.role, 'settings')} />
                             </td>
                           )}
                         </tr>
@@ -307,12 +318,4 @@ export default async function PricingPage({ searchParams }: { searchParams: Prom
       )}
     </>
   );
-}
-
-/** How much dearer (or cheaper) this platform is than Shopify. */
-async function ShopifyGap({ shopify, here }: { shopify: string; here: string }) {
-  const t = await getT();
-  const gap = priceChangePercent(shopify, here);
-  if (gap === null || Math.abs(gap) < 0.05) return null;
-  return <span className="ml-2 text-xs text-slate-500 tabular-nums">{t('here')} {gap > 0 ? '+' : ''}{gap.toFixed(1)}%</span>;
 }

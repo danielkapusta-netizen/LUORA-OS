@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocate, orderEconomics, vatRateFor, type EconomicsInput } from '@/server/analytics/economics';
+import { allocate, minimumGrossPrice, orderEconomics, vatRateFor, type EconomicsInput } from '@/server/analytics/economics';
 import { DEFAULT_ANALYTICS_SETTINGS } from '@/server/services/costs';
 
 const settings = {
@@ -130,5 +130,51 @@ describe('order economics', () => {
       }),
     );
     expect(lines.map((l) => l.refunds)).toEqual([10, 10]);
+  });
+});
+
+describe('lowest price at a margin', () => {
+  const floorOf = (over: Partial<Parameters<typeof minimumGrossPrice>[0]> = {}) =>
+    minimumGrossPrice({ marketplace: 'allegro', unitCost: 20, vatRate: 0.23, feeVatRate: 0.23, settings, margin: 0.1, ...over });
+
+  it('gives hand-checked prices: VAT, commission (net of deductible VAT), shipping, packaging and cost all count', () => {
+    // Allegro: 10% commission invoiced with VAT = 8.13% of the price; shipping 10 + packaging 2 + cost 20 = 32.
+    // 32 / (1/1.23 − 0.0813 − 0.10) = 50.656… → 50.66
+    expect(floorOf()).toMatchObject({ price: 50.66, shipping: 10, packaging: 2 });
+    expect(floorOf().commissionShare).toBeCloseTo(0.1 / 1.23, 6);
+    // Shopify's commission carries no VAT to deduct: 32 + … = (20 + 12 + 2) / (1/1.23 − 0.02 − 0.10) = 49.06… → 49.07
+    expect(floorOf({ marketplace: 'shopify' }).price).toBe(49.07);
+    // HEBE: (40 + 9 + 2) / (1/1.23 − 0.12/1.23 − 0.10) = 82.867… → 82.87
+    expect(floorOf({ marketplace: 'hebe', unitCost: 40 }).price).toBe(82.87);
+  });
+
+  it('follows the settings: deductible VAT on fees, the margin, and a zero or missing cost', () => {
+    expect(floorOf({ settings: { ...settings, feesVatDeductible: false } }).price).toBe(52.21);
+    expect(floorOf({ margin: 0 }).price).toBe(43.74); // break-even
+    expect(floorOf({ marketplace: 'hebe', unitCost: 0 }).price).toBe(17.88); // shipping and packaging still have to be earned
+    expect(floorOf({ settings: { ...settings, fallbackCommission: {} } }).price).toBeGreaterThan(0); // no commission set: none is assumed
+  });
+
+  it('is not reachable when commission and margin leave nothing to cover the costs', () => {
+    expect(floorOf({ settings: { ...settings, fallbackCommission: { allegro: 0.9 } } }).price).toBeNull();
+    expect(floorOf({ margin: 0.9 }).price).toBeNull();
+  });
+
+  it('agrees with the order margin: an order at the lowest price keeps the margin, a few grosz less does not', () => {
+    for (const marketplace of ['allegro', 'empik', 'hebe', 'shopify', 'vonhalsky'] as const) {
+      for (const unitCost of [5, 20, 80.5]) {
+        for (const margin of [0, 0.1, 0.18]) {
+          const { price } = floorOf({ marketplace, unitCost, margin });
+          expect(price, `${marketplace} ${unitCost} ${margin}`).not.toBeNull();
+          const at = (unitPrice: number) => {
+            const [line] = orderEconomics(input({ marketplace, items: [{ id: 'a', productId: 'p1', quantity: 1, unitPrice, discount: 0, unitCost }] }));
+            return line.profit / line.gross;
+          };
+          // Order lines are rounded to the grosz, so allow that much noise on the percentage.
+          expect(at(price!), `${marketplace} ${unitCost} ${margin} at the floor`).toBeGreaterThanOrEqual(margin - 0.001);
+          expect(at(price! - 0.2), `${marketplace} ${unitCost} ${margin} below the floor`).toBeLessThan(margin);
+        }
+      }
+    }
   });
 });

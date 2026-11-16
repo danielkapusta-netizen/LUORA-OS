@@ -104,7 +104,7 @@ function netFee(fee: EconomicsFee, deductible: boolean, feeVatRate: number): num
 }
 
 /** Marketplaces whose fallback commission is invoiced with Polish VAT (Shopify payment fees carry none). */
-const VAT_INVOICED_FEES = new Set(['allegro', 'empik', 'vonhalsky', 'hebe']);
+const VAT_INVOICED_FEES: ReadonlySet<string> = new Set(['allegro', 'empik', 'vonhalsky', 'hebe']);
 
 export function orderEconomics(input: EconomicsInput): LineEconomics[] {
   const { items, settings: s, fxRate, vatRate } = input;
@@ -186,4 +186,49 @@ export function orderEconomics(input: EconomicsInput): LineEconomics[] {
       profit: round(profit),
     };
   });
+}
+
+export interface FloorInput {
+  marketplace: EconomicsInput['marketplace'];
+  /** Landed unit cost in PLN, without VAT. */
+  unitCost: number;
+  /** VAT charged on the sale (0.23 in Poland). */
+  vatRate: number;
+  /** VAT rate deducted from fees that are invoiced with VAT. */
+  feeVatRate: number;
+  settings: Pick<Required<AnalyticsSettings>, 'fallbackCommission' | 'sellerShipping' | 'packagingCost' | 'feesVatDeductible'>;
+  /** The margin to keep, as a share of the gross price (0.1 = 10%), the way margin is shown everywhere in Luora. */
+  margin: number;
+}
+
+export interface PriceFloor {
+  /** Lowest gross price in PLN that keeps the margin, rounded up to a grosz; null when no price can. */
+  price: number | null;
+  /** Commission as a share of the gross price, after the VAT the business deducts on fees. */
+  commissionShare: number;
+  /** What we pay to ship one order (net) and to pack it. */
+  shipping: number;
+  packaging: number;
+}
+
+/**
+ * The lowest gross price at which one unit sold on `marketplace`, with free delivery for the buyer, still earns `margin`.
+ * It is `orderEconomics` solved for the price, using the same rules for VAT, the commission estimate, shipping and packaging,
+ * so a one-unit order at this price comes out at the margin and not below it:
+ *
+ *   profit = P / (1 + VAT) − P · commission / d − cost − shipping − packaging,   margin = profit / P
+ *   P      = (cost + shipping + packaging) / (1 / (1 + VAT) − commission / d − margin)
+ */
+export function minimumGrossPrice(input: FloorInput): PriceFloor {
+  const { settings: s, marketplace } = input;
+  const deductible = s.feesVatDeductible && VAT_INVOICED_FEES.has(marketplace);
+  const commissionShare = (s.fallbackCommission[marketplace] ?? 0) / (deductible ? 1 + input.feeVatRate : 1);
+  const shipping = s.sellerShipping[marketplace] ?? 0;
+  const packaging = s.packagingCost;
+  const denominator = 1 / (1 + input.vatRate) - commissionShare - input.margin;
+  // Commission and margin leave (almost) nothing of the net price to cover the costs: no price reaches the margin.
+  if (denominator <= 0.001) return { price: null, commissionShare, shipping, packaging };
+  const raw = (input.unitCost + shipping + packaging) / denominator;
+  // Up to the next grosz, so the margin is never below the target.
+  return { price: Math.ceil(raw * 100 - 1e-6) / 100, commissionShare, shipping, packaging };
 }
