@@ -46,6 +46,41 @@ describe('pricing (D1, demo marketplaces)', { timeout: 60_000 }, () => {
     rmSync(persistTo, { recursive: true, force: true });
   });
 
+  it('shows the lowest price that keeps the minimum margin, per marketplace, and says when a product has no cost', async () => {
+    const costs = await import('@/server/services/costs');
+    const rows = (await m.pricing.pricingView('allegro')).rows;
+    const [withCost, withoutCost] = [rows[0], rows[1]];
+    await costs.setProductCost(withCost.product.id, { unitCost: 20 }, null, 'manual');
+    for (const c of await costs.costHistory(withoutCost.product.id)) await costs.deleteProductCost(c.id);
+
+    const view = await m.pricing.pricingView('allegro');
+    expect(view.minimumMargin).toBe(0.1);
+    // Allegro defaults: 12% commission with VAT, 11 zł shipping, 1.50 zł packaging, VAT 23%, 10% margin.
+    expect(view.rows.find((r) => r.product.id === withCost.product.id)!.floor).toMatchObject({ state: 'ok', price: 52.81, unitCost: 20, shipping: 11, packaging: 1.5 });
+    expect(view.rows.find((r) => r.product.id === withoutCost.product.id)!.floor).toMatchObject({ state: 'no_cost', price: null });
+    // Another marketplace uses its own commission and shipping.
+    const hebe = (await m.pricing.pricingView('hebe')).rows.find((r) => r.product.id === withCost.product.id)!.floor;
+    expect(hebe).toMatchObject({ state: 'ok', unitCost: 20, shipping: 9 });
+    expect(hebe.price).not.toBe(52.81);
+
+    // The margin is a setting.
+    await costs.saveAnalyticsSettings({ minimumMargin: 0.2 });
+    const strict = await m.pricing.pricingView('allegro');
+    expect(strict.minimumMargin).toBe(0.2);
+    expect(strict.rows.find((r) => r.product.id === withCost.product.id)!.floor.price).toBe(63.06);
+    await costs.saveAnalyticsSettings({});
+  });
+
+  it('flags a price below the lowest price, and leaves other currencies and missing prices alone', () => {
+    const floor = { state: 'ok', price: 50.66, unitCost: 20, commissionShare: 0.08, shipping: 10, packaging: 2 } as const;
+    expect(m.pricing.belowFloor('49.99', 'PLN', floor)).toBe(true);
+    expect(m.pricing.belowFloor('50.66', 'PLN', floor)).toBe(false);
+    expect(m.pricing.belowFloor('50.66', null, floor)).toBe(false);
+    expect(m.pricing.belowFloor('10.00', 'EUR', floor)).toBe(false);
+    expect(m.pricing.belowFloor(null, 'PLN', floor)).toBe(false);
+    expect(m.pricing.belowFloor('10.00', 'PLN', { ...floor, state: 'no_cost', price: null })).toBe(false);
+  });
+
   it('stores the price each marketplace reports, and shows it per product with the Shopify price beside it', async () => {
     const view = await m.pricing.pricingView('allegro');
     const listed = view.rows.filter((r) => r.listings.length > 0);

@@ -823,6 +823,8 @@ export interface AnalyticsSettings {
   packagingCost?: number;
   /** Fees on marketplace invoices include VAT that the business deducts (count them net). */
   feesVatDeductible?: boolean;
+  /** The margin the Pricing page's "lowest price" keeps, as a fraction of the gross price (0.1 = 10%). */
+  minimumMargin?: number;
   /** Margin thresholds as fractions of gross revenue. */
   targetMargin?: number;
   healthyMargin?: number;

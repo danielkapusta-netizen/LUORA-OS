@@ -54,6 +54,7 @@ export async function saveProfitSettingsAction(_prev: ActionResult, fd: FormData
       sellerShipping,
       packagingCost: amount(fd, 'packagingCost') ?? undefined,
       feesVatDeductible: fd.get('feesVatDeductible') === 'on',
+      minimumMargin: percent(fd, 'minimumMargin'),
       targetMargin: percent(fd, 'targetMargin'),
       healthyMargin: percent(fd, 'healthyMargin'),
       thinMargin: percent(fd, 'thinMargin'),

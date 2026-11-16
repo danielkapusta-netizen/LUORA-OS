@@ -23,6 +23,7 @@ export const DEFAULT_ANALYTICS_SETTINGS: Required<AnalyticsSettings> = {
   defaultLabelCost: 12.5,
   packagingCost: 1.5,
   feesVatDeductible: true,
+  minimumMargin: 0.1,
   targetMargin: 0.18,
   healthyMargin: 0.15,
   thinMargin: 0.1,
@@ -43,10 +44,11 @@ export async function loadAnalyticsSettings(): Promise<Required<AnalyticsSetting
 }
 
 export async function saveAnalyticsSettings(settings: AnalyticsSettings): Promise<void> {
-  const { healthyMargin, thinMargin, criticalMargin } = { ...DEFAULT_ANALYTICS_SETTINGS, ...settings };
+  const { healthyMargin, thinMargin, criticalMargin, minimumMargin } = { ...DEFAULT_ANALYTICS_SETTINGS, ...settings };
   if (!(criticalMargin < thinMargin && thinMargin < healthyMargin)) {
     throw new Error(msg('Margin bands must rise: critical < thin < healthy'));
   }
+  if (!(minimumMargin >= 0 && minimumMargin < 0.6)) throw new Error(msg('The lowest-price margin must be between 0 and 60%'));
   await getDb()
     .insert(analyticsSettings)
     .values({ id: 'main', settings })
