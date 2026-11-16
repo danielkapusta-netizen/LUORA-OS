@@ -26,7 +26,9 @@ function html(body: string, title: string, status = 200, headers?: Headers): Res
   out.set('X-Frame-Options', 'DENY');
   // No form-action: approving ends in a redirect to the client (e.g. chatgpt.com), which Chrome would block under it.
   out.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'");
-  out.set('Referrer-Policy', 'no-referrer');
+  // Not no-referrer: with it browsers send `Origin: null` on the form post. same-origin still sends no referrer to other
+  // sites, so the authorization URL is not leaked to the client on the redirect.
+  out.set('Referrer-Policy', 'same-origin');
   const page = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${escape(title)}</title><style>
 body{margin:0;background:#fbfaf7;color:#1c1b19;font:16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif}
 main{max-width:30rem;margin:0 auto;padding:3rem 1rem}
@@ -71,9 +73,16 @@ ${scopes}
 </form>`;
 }
 
+/**
+ * Whether a form post comes from this site, as an extra layer next to the one-time form handle and the SameSite cookie.
+ * Browsers send `Origin: null` for some same-site form posts, so `null` is accepted only when the browser also says the
+ * post is same-origin (`Sec-Fetch-Site`, which a page's script cannot set). A missing Origin is a non-browser client.
+ */
 function sameOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin) return true;
+  if (origin === new URL(request.url).origin) return true;
+  return origin === 'null' && request.headers.get('sec-fetch-site') === 'same-origin';
 }
 
 function errorPage(t: T, message: string, status = 400): Response {

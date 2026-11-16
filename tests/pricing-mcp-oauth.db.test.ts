@@ -257,6 +257,64 @@ describe('pricing MCP behind OAuth', () => {
     expect((await exchange(clientId, code, verifier)).status).toBe(200);
   });
 
+  /** Opens the consent screen and returns what a browser would post back: the form handle and the binding cookies. */
+  async function openConsent(session: { cookie: string }, clientId: string, challenge: string) {
+    const page = await get(authorizeUrl(clientId, challenge), { cookie: session.cookie });
+    expect(page.status).toBe(200);
+    const handle = /name="handle" value="([^"]+)"/.exec(await page.text())![1];
+    return { page, handle, binding: page.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ') };
+  }
+  const submit = (session: { cookie: string }, opened: { handle: string; binding: string }, clientId: string, challenge: string, headers: Record<string, string>) =>
+    post(authorizeUrl(clientId, challenge), form({ handle: opened.handle, decision: 'approve', scope: ['pricing:read', 'pricing:write'] }), {
+      'content-type': 'application/x-www-form-urlencoded', cookie: `${session.cookie}; ${opened.binding}`, ...headers,
+    });
+
+  it('accepts the form post a real browser sends, and refuses a cross-site one', async () => {
+    const session = await signIn('marketing', 'browser@example.test');
+    const clientId = await registerClient();
+    const { challenge } = pkce();
+
+    // The page sets a referrer policy that lets same-site posts carry their real Origin, and sends no referrer elsewhere.
+    const first = await openConsent(session, clientId, challenge);
+    expect(first.page.headers.get('referrer-policy')).toBe('same-origin');
+
+    // Chrome sends `Origin: null` on a form post when the page's referrer policy is no-referrer, with Sec-Fetch-Site: same-origin.
+    const nullOrigin = await submit(session, first, clientId, challenge, { origin: 'null', 'sec-fetch-site': 'same-origin' });
+    expect(nullOrigin.status).toBe(302);
+    expect(new URL(nullOrigin.headers.get('location')!).searchParams.get('code')).toBeTruthy();
+
+    // A normal same-origin post carries the real origin.
+    const second = await openConsent(session, clientId, challenge);
+    expect((await submit(session, second, clientId, challenge, { origin: APP, 'sec-fetch-site': 'same-origin' })).status).toBe(302);
+
+    // Cross-site and unverifiable posts are refused, and issue no code.
+    const crossSite: Record<string, string>[] = [
+      { origin: 'null', 'sec-fetch-site': 'cross-site' },
+      { origin: 'null', 'sec-fetch-site': 'same-site' },
+      { origin: 'null' },
+      { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' },
+      { origin: 'https://evil.example', 'sec-fetch-site': 'same-origin' },
+    ];
+    for (const headers of crossSite) {
+      const opened = await openConsent(session, clientId, challenge);
+      const refused = await submit(session, opened, clientId, challenge, headers);
+      expect(refused.status, JSON.stringify(headers)).toBe(403);
+      expect(refused.headers.get('location')).toBeNull();
+    }
+  });
+
+  it('applies the same browser rule when disconnecting an app', async () => {
+    const session = await signIn('marketing', 'disconnect@example.test');
+    await tokens(session);
+    const html = await (await get('/oauth/connections', { cookie: session.cookie })).text();
+    const grantId = /name="grantId" value="([^"]+)"/.exec(html)![1];
+    const disconnect = (headers: Record<string, string>) => post('/oauth/connections', form({ grantId }), { 'content-type': 'application/x-www-form-urlencoded', cookie: session.cookie, ...headers });
+    expect((await disconnect({ origin: 'null' })).status).toBe(403);
+    expect((await disconnect({ origin: 'null', 'sec-fetch-site': 'cross-site' })).status).toBe(403);
+    expect((await disconnect({ origin: 'https://evil.example' })).status).toBe(403);
+    expect((await disconnect({ origin: 'null', 'sec-fetch-site': 'same-origin' })).status).toBe(303);
+  });
+
   it('lets a person disconnect an app, which ends both its access and refresh tokens', async () => {
     const session = await signIn('marketing', 'rev@example.test');
     const granted = await tokens(session);
