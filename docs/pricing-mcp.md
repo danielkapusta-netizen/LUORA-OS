@@ -107,6 +107,7 @@ Verified **locally** in this repository (no deployment):
 | `401 invalid_token` | Expired, revoked or wrong-audience token; reconnect the plugin. |
 | Tool error "no longer has access to pricing" | The person's role lost the pricing capability. |
 | 403 `insufficient_scope` on import | The connection was approved without write access; disconnect and connect again. |
+| "This request did not come from Luora" on the consent screen or the connections page | The post was refused as cross-site. Fixed for browsers that send `Origin: null` after the first release; if it still appears, check that the browser address matches `APP_URL`. |
 | Consent page says the app "could not be verified" | ChatGPT's client metadata document could not be fetched; check `global_fetch_strictly_public` and the Worker's outbound access. |
 | "Failed to resolve OAuth client" in ChatGPT | Registration failed: check the discovery documents above; try DCR in the plugin builder. |
 
