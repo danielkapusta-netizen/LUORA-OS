@@ -8,6 +8,8 @@ export interface CfEnv {
   DB: D1Database;
   JOBS: Queue<JobMessage>;
   LABELS: R2Bucket;
+  /** OAuth grants and tokens for the MCP endpoint; the endpoint stays closed without it. */
+  OAUTH_KV?: KVNamespace;
 }
 
 const holder = globalThis as unknown as { __luoraCfEnv?: CfEnv };

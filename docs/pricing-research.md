@@ -1,5 +1,7 @@
 # Marketplace research recommendations
 
+ChatGPT Work connects through an MCP server with OAuth instead of this token: see [pricing-mcp.md](pricing-mcp.md). The REST API below is unchanged.
+
 The Empik, HEBE and Allegro pricing tabs show Product → Current marketplace price / Update → Recommended price → Rationale → Shopify price. Shopify and Von Halsky keep their existing columns.
 
 “Last researched” appears below each recommendation, in Europe/Warsaw time. Source labels that occur in the rationale become competitor links; other sources appear below the rationale. Rationale is plain text, never HTML or Markdown. Research is shown in the language supplied by the researcher; interface labels support English and Polish.

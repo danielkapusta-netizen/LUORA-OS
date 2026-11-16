@@ -18,6 +18,9 @@
   // Create with: wrangler r2 bucket create luora-labels
   "r2_buckets": [{ "binding": "LABELS", "bucket_name": "luora-labels" }],
 
+  // Grants and tokens of the OAuth layer in front of /mcp. No id: Cloudflare creates the namespace on first deploy.
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+
   // Keep in sync with CRON_JOBS in src/worker/consumer.ts
   "triggers": { "crons": ["*/3 * * * *", "*/2 * * * *", "15 */2 * * *", "30 2 * * *", "*/15 * * * *"] },
 
