@@ -3,10 +3,14 @@
 import handler from '../../.open-next/worker.js';
 import type { CfEnv } from '../server/cf';
 import type { JobMessage } from '../server/jobs/queue';
+import { withMcp, type WorkerEnv, type WorkerFetch } from '../server/mcp/oauth-app';
 import { handleBatch, handleScheduled } from './consumer';
 
+// Requests to /mcp and /oauth/* go through the OAuth layer; every other request reaches the app unchanged.
+const fetchApp = withMcp(handler.fetch as WorkerFetch);
+
 export default {
-  fetch: handler.fetch,
+  fetch: (request: Request, env: WorkerEnv, ctx: ExecutionContext) => fetchApp(request, env, ctx),
   async queue(batch: MessageBatch<JobMessage>, env: CfEnv) {
     await handleBatch(batch, env);
   },

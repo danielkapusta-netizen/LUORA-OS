@@ -1,16 +1,17 @@
-import { and, eq, gt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { can, type Capability } from '@/lib/permissions';
 import { randomToken, sha256, verifyPassword } from './crypto';
 import { getDb } from './db/client';
-import { sessions, users, type User } from './db/schema';
+import { sessions, users } from './db/schema';
+import { SESSION_COOKIE, userForSessionToken, type SessionUser } from './session';
 import { msg } from '@/lib/i18n/msg';
 
-const COOKIE = 'luora_session';
+const COOKIE = SESSION_COOKIE;
 const SESSION_DAYS = 30;
 
-export type SessionUser = Pick<User, 'id' | 'email' | 'name' | 'role'>;
+export type { SessionUser };
 
 export async function login(email: string, password: string): Promise<boolean> {
   const db = getDb();
@@ -38,14 +39,7 @@ export async function logout(): Promise<void> {
 }
 
 export async function currentUser(): Promise<SessionUser | null> {
-  const token = (await cookies()).get(COOKIE)?.value;
-  if (!token) return null;
-  const [row] = await getDb()
-    .select({ id: users.id, email: users.email, name: users.name, role: users.role })
-    .from(sessions)
-    .innerJoin(users, eq(users.id, sessions.userId))
-    .where(and(eq(sessions.id, sha256(token)), gt(sessions.expiresAt, new Date())));
-  return row ?? null;
+  return userForSessionToken((await cookies()).get(COOKIE)?.value);
 }
 
 /** For pages and server actions: redirects to /login when signed out. */
