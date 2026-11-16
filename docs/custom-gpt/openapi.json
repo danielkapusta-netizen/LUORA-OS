@@ -1,0 +1,361 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Luora OS pricing research",
+    "version": "1.0.0",
+    "description": "Reads Luora's product and offer mapping and imports market research as recommended prices. Importing never changes a price on any marketplace: a person presses Update on the Pricing page."
+  },
+  "servers": [
+    {
+      "url": "https://luora-os.danielkapusta.workers.dev"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/pricing/recommendations/catalog": {
+      "get": {
+        "operationId": "getCatalog",
+        "summary": "Read the products and offers to research",
+        "description": "Returns the enabled marketplace accounts and one page of 50 products with their offers. Call it again with `after` set to `nextCursor` until nextCursor is null. This is a mapping of imported Shopify variants, not a list of currently active products.",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "description": "The nextCursor of the previous page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accounts",
+                    "products",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "marketplace": {
+                            "type": "string",
+                            "enum": [
+                              "allegro",
+                              "empik",
+                              "hebe"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "shopifyVariantId": {
+                            "type": "string"
+                          },
+                          "sku": {
+                            "type": "string"
+                          },
+                          "ean": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "stock": {
+                            "type": "integer"
+                          },
+                          "listings": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "accountId": {
+                                  "type": "string"
+                                },
+                                "marketplace": {
+                                  "type": "string",
+                                  "enum": [
+                                    "shopify",
+                                    "allegro",
+                                    "empik",
+                                    "hebe"
+                                  ]
+                                },
+                                "externalId": {
+                                  "type": "string"
+                                },
+                                "price": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "currency": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "active": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong token."
+          },
+          "503": {
+            "description": "The token is not configured on the server."
+          }
+        }
+      }
+    },
+    "/api/pricing/recommendations": {
+      "post": {
+        "operationId": "importRecommendations",
+        "summary": "Import researched recommendations",
+        "description": "Sends 1 to 100 recommendations, one per product and marketplace account. The whole batch is checked before anything is saved: if one record is rejected (422), nothing in the batch is saved, and the error names the record. Retry a failed batch unchanged after fixing that record. A record only replaces an older one when its researchedAt is strictly newer.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "runId",
+                  "recommendations"
+                ],
+                "properties": {
+                  "runId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "description": "A label for this research run, e.g. luora-research-2026-11-16."
+                  },
+                  "recommendations": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "shopifyVariantId",
+                        "accountId",
+                        "marketplace",
+                        "listingId",
+                        "status",
+                        "recommendedPrice",
+                        "observedLuoraPrice",
+                        "researchedAt",
+                        "rationale",
+                        "sources"
+                      ],
+                      "properties": {
+                        "shopifyVariantId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 150,
+                          "description": "Exact value from the catalog, e.g. gid://shopify/ProductVariant/123. Never match by name."
+                        },
+                        "accountId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "description": "The catalog account id of the marketplace researched. Must match `marketplace`."
+                        },
+                        "marketplace": {
+                          "type": "string",
+                          "enum": [
+                            "allegro",
+                            "empik",
+                            "hebe"
+                          ]
+                        },
+                        "listingId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 100,
+                          "description": "The catalog listing id of Luora's offer on this marketplace. Null only for add_listing, fix_placement without an offer, or needs_review without a match."
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "change_price",
+                            "keep_price",
+                            "fix_placement",
+                            "add_listing",
+                            "needs_review"
+                          ],
+                          "description": "change_price: a verified better price exists. keep_price: verified competitive. fix_placement: an existing offer has a placement, matching or activation problem. add_listing: the product is verifiably missing (listingId must be null). needs_review: page blocked, evidence incomplete or match uncertain."
+                        },
+                        "recommendedPrice": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^\\d{1,5}\\.\\d{2}$",
+                              "description": "Gross PLN amount with exactly two decimals, e.g. \"58.89\". Maximum 99999.99."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Only for change_price; null for every other status."
+                        },
+                        "observedLuoraPrice": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^\\d{1,5}\\.\\d{2}$",
+                              "description": "Gross PLN amount with exactly two decimals, e.g. \"58.89\". Maximum 99999.99."
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "Luora's price as seen on the marketplace during the research. Required for change_price."
+                        },
+                        "researchedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "When the marketplace was actually observed, with a time zone, e.g. 2026-11-16T09:14:00+01:00. Not the upload time and never in the future."
+                        },
+                        "rationale": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 3000,
+                          "description": "Plain text only, no HTML or Markdown: the prices seen, who the main seller is, and what limits the conclusion."
+                        },
+                        "sources": {
+                          "type": "array",
+                          "maxItems": 10,
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "label",
+                              "url"
+                            ],
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120,
+                                "description": "Seller or page name, e.g. \"Main Empik\". Labels that appear in the rationale become links."
+                              },
+                              "url": {
+                                "type": "string",
+                                "format": "uri",
+                                "maxLength": 2000,
+                                "description": "HTTPS page on the researched marketplace (empik.com / empik.pl, allegro.pl or hebe.pl)."
+                              }
+                            }
+                          },
+                          "description": "Evidence links. change_price needs at least one."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "received": {
+                      "type": "integer"
+                    },
+                    "applied": {
+                      "type": "integer"
+                    },
+                    "ignoredOlderOrEqual": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong token."
+          },
+          "413": {
+            "description": "Body over 512 KiB; send fewer records."
+          },
+          "422": {
+            "description": "A record was rejected; the error text names it. Nothing was saved."
+          },
+          "500": {
+            "description": "Storage failure; retry the same batch."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

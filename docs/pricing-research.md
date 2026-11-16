@@ -88,3 +88,5 @@ node scripts/import-pricing-research.mjs --file verified-research.json
 The uploader follows catalog pagination, splits imports into batches of 100, refuses redirects so the bearer token is not forwarded to a different origin, and never prints the token. Reusing a file safely resumes an interrupted upload. API validation remains authoritative.
 
 The existing daily 09:00 Europe/Warsaw task can upload the same evidence used in its workbook and priority overview once the deployed endpoint and secret are configured. Keep the full report and coverage gaps. Do not silently turn this feature into automatic repricing, and do not claim that lower prices guarantee top-offer/main-seller placement: check the resulting seller position after a manual update.
+
+To connect a ChatGPT Custom GPT to these endpoints, see [custom-gpt/](custom-gpt/README.md): an OpenAPI file, ready-made instructions and the setup steps.
