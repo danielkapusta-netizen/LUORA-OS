@@ -104,16 +104,16 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     await db.insert(m.schema.products).values({ sku: 'NEW-E', name: 'Luora new cream E', ean: '5900000000040', stock: 6, imageUrl: 'https://img/e.jpg', shopifyVariantId: 'gid://shopify/ProductVariant/9005' });
     const preview = await m.offers.publishPreview(erli.id);
     const row = preview.rows.find((r) => r.sku === 'NEW-E')!;
-    // Erli has no catalogue; the category comes from the Allegro catalogue product with the same EAN.
-    expect(row).toMatchObject({ catalogue: null, problems: [], allegro: { title: 'Luora new cream E', erliCategory: { source: 'catalogue' } } });
-    expect(row.allegro!.erliCategory!.attributes).toBeGreaterThan(0);
+    // Erli has no catalogue. The page doesn't ask Allegro about every product (it would take minutes): the category
+    // comes from the Allegro catalogue product with the same EAN when the product is created.
+    expect(row).toMatchObject({ catalogue: null, problems: [], allegro: { title: 'Luora new cream E', erliCategory: { source: 'later' } } });
     // A product without a photo can't be created on Erli.
     expect(preview.rows.find((r) => r.sku === 'NEW-A')!.problems).toContain('no photo');
     const product = (await db.select().from(m.schema.products).where(m.orm.eq(m.schema.products.sku, 'NEW-E')))[0];
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const result = await m.offers.publishOffers(erli.id, [product.id]);
     expect(result.created).toEqual(['Luora new cream E']);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('[mock erli] create offer NEW-E'));
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/\[mock erli\] create offer NEW-E .* in Allegro category demo-cat-1 with [1-9]\d* details/));
     log.mockRestore();
   });
 

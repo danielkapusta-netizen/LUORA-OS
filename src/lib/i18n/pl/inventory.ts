@@ -299,4 +299,6 @@ export const inventory: Record<string, string> = {
   "Offers can be created here for Allegro, Empik, HEBE and Erli accounts": "Oferty można tu tworzyć dla kont Allegro, Empik, HEBE i Erli",
   "This is not an Erli account": "To nie jest konto Erli",
   "Loaded {lists} delivery price lists, {persons} responsible persons and {producers} producers from Erli": "Wczytano z Erli cenniki dostaw: {lists}, osoby odpowiedzialne: {persons} i producentów: {producers}",
+  "Reading the products from Shopify and the marketplace…": "Odczytuję produkty z Shopify i marketplace…",
+  "Category: taken from Allegro when the product is created": "Kategoria: pobrana z Allegro przy tworzeniu produktu",
 };

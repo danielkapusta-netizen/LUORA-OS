@@ -184,6 +184,8 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                                 ? t('Category: Shopify type “{type}”, matched by Erli', { type: r.allegro.erliCategory.path ?? '' })
                                 : r.allegro.erliCategory.source === 'none'
                                   ? t('Category: none, Erli will ask in its panel')
+                                  : r.allegro.erliCategory.source === 'later'
+                                    ? t('Category: taken from Allegro when the product is created')
                                   : t('Category: {path}', { path: r.allegro.erliCategory.path ?? '' })}
                             {r.allegro.erliCategory.source === 'suggested' && <span className="text-amber-700"> · {t('suggested')}</span>}
                             {r.allegro.erliCategory.attributes > 0 && <> · {t.plural(r.allegro.erliCategory.attributes, '{n} detail from Allegro', '{n} details from Allegro')}</>}
