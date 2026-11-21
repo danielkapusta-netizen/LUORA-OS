@@ -13,6 +13,7 @@ import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { AllegroAdapter } from '../integrations/marketplaces/allegro/adapter';
 import { offerFieldMetafieldKeys, resolveOfferFields } from '../integrations/marketplaces/mirakl/offer-fields';
 import { allegroDescription, allegroTitle, gpsrChoice } from '../integrations/marketplaces/allegro/offer-content';
+import { parameterMetafieldKeys, productParameters, type AllegroCategoryParameter } from '../integrations/marketplaces/allegro/product-parameters';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { importListings } from './inventory';
 import { miraklOfferFields } from './settings';
@@ -104,6 +105,17 @@ export interface AllegroPreview {
   responsiblePerson: string | null;
   responsibleProducer: string | null;
   gpsrFromProduct: boolean;
+  /** Set when the catalogue doesn't know the product, so it is proposed as a new product in this category. */
+  newProduct?: { categoryId: string | null; categoryPath: string | null; categorySaved: boolean };
+}
+
+/** Products the catalogue doesn't know: their categories per product type and the parameters still to set up. */
+export interface AllegroNewProducts {
+  types: { productType: string; products: number; saved: { id: string; path: string } | null; suggestions: { id: string; path: string }[] }[];
+  /** Parameter names some product still needs, and how many products need each. */
+  missingParameters: { name: string; products: number }[];
+  /** Parameters already set up. */
+  sources: { name: string; metafield: string; fallback: string }[];
 }
 
 /** The Allegro offer's content for one product, and what stops it from being sent. */
@@ -136,6 +148,7 @@ function productMetafieldKeys(settings: MarketplaceSettings, marketplace: string
   const keys = offerFieldMetafieldKeys(settings);
   if (marketplace === 'allegro') {
     for (const k of [settings.allegroResponsiblePersonMetafield, settings.allegroResponsibleProducerMetafield]) if (k?.trim()) keys.push(k.trim());
+    keys.push(...parameterMetafieldKeys(settings.allegroParameterSources));
   }
   return [...new Set(keys)];
 }
@@ -144,6 +157,8 @@ export interface PublishPreview {
   rows: PublishRow[];
   /** What is missing in the account's settings; nothing can be created until it is fixed. */
   setupProblems: string[];
+  /** Allegro: what new products (unknown to the catalogue) need. */
+  allegroNew?: AllegroNewProducts;
 }
 
 type Loaded = {
@@ -151,9 +166,78 @@ type Loaded = {
   match: CatalogueMatch | null;
   details: ShopifyVariantDetails | null;
   gpsr: Pick<OfferDraft, 'responsiblePersonId' | 'responsibleProducerId'>;
+  newProduct?: OfferDraft['allegroNewProduct'];
 };
 
-async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ rows: Loaded[]; setupProblems: string[]; settings: MarketplaceSettings }> {
+/** At most this many category suggestions are asked for per page (Allegro allows 5 per second). */
+const MAX_SUGGESTIONS = 60;
+
+/**
+ * Category and parameters for the products Allegro's catalogue doesn't know. The category is the one saved for the
+ * product type, else Allegro's first suggestion for the type's name (or the title, for products without a type).
+ * Fills each row's problems and preview, and returns the summary for the page.
+ */
+async function prepareNewProducts(pub: OfferPublisher, settings: MarketplaceSettings, rows: (Loaded & { productType: string })[]): Promise<AllegroNewProducts> {
+  const summary: AllegroNewProducts = {
+    types: [],
+    missingParameters: [],
+    sources: Object.entries(settings.allegroParameterSources ?? {}).map(([name, s]) => ({ name, metafield: s.metafield ?? '', fallback: s.fallback ?? '' })),
+  };
+  if (!pub.suggestCategories || !pub.categoryParameters) return summary;
+  const suggestions = new Map<string, { id: string; path: string }[] | Error>();
+  const parameters = new Map<string, AllegroCategoryParameter[] | Error>();
+  const suggest = async (phrase: string) => {
+    if (!suggestions.has(phrase)) {
+      if (suggestions.size >= MAX_SUGGESTIONS) return new Error('too many products at once; save a category for the type');
+      suggestions.set(phrase, await pub.suggestCategories!(phrase).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))));
+    }
+    return suggestions.get(phrase)!;
+  };
+  const paramsOf = async (categoryId: string) => {
+    if (!parameters.has(categoryId)) parameters.set(categoryId, await pub.categoryParameters!(categoryId).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))));
+    return parameters.get(categoryId)!;
+  };
+  const missingCount = new Map<string, number>();
+  const types = new Map<string, AllegroNewProducts['types'][number]>();
+
+  for (const r of rows) {
+    const d = r.details!;
+    const saved = settings.allegroCategoryMap?.[r.productType] ?? null;
+    const phrase = r.productType.trim() || d.title;
+    const found = await suggest(phrase);
+    const list = found instanceof Error ? [] : found;
+    const category = saved ?? list[0] ?? null;
+    const type = types.get(r.productType) ?? { productType: r.productType, products: 0, saved, suggestions: list };
+    type.products++;
+    types.set(r.productType, type);
+
+    r.row.problems = r.row.problems.filter((p) => p !== 'not in the catalogue');
+    if (r.row.allegro) r.row.allegro.newProduct = { categoryId: category?.id ?? null, categoryPath: category?.path ?? null, categorySaved: Boolean(saved) };
+    if (d.imageUrls.length === 0) r.row.problems.push('no photo (a new product needs one)');
+    if (!category) {
+      r.row.problems.push(found instanceof Error ? `no Allegro category (${found.message})` : 'no Allegro category: save one for the product type');
+      continue;
+    }
+    const params = await paramsOf(category.id);
+    if (params instanceof Error) {
+      r.row.problems.push(`Allegro category parameters not read (${params.message})`);
+      continue;
+    }
+    const filled = productParameters(params, { ean: r.row.ean ?? '', brand: d.vendor, metafields: d.metafields }, settings.allegroParameterSources);
+    if (filled.missing.length) r.row.problems.push(`needs: ${filled.missing.join(', ')}`);
+    r.row.problems.push(...filled.invalid);
+    for (const name of filled.missing) missingCount.set(name, (missingCount.get(name) ?? 0) + 1);
+    r.newProduct = { categoryId: category.id, parameters: filled.productParameters, offerParameters: filled.offerParameters };
+  }
+  summary.types = [...types.values()].sort((a, b) => a.productType.localeCompare(b.productType));
+  summary.missingParameters = [...missingCount].map(([name, products]) => ({ name, products })).sort((a, b) => b.products - a.products);
+  return summary;
+}
+
+async function loadRows(
+  accountId: string,
+  onlyIds?: Set<string>,
+): Promise<{ rows: Loaded[]; setupProblems: string[]; settings: MarketplaceSettings; allegroNew?: AllegroNewProducts }> {
   const db = getDb();
   // A Mirakl marketplace's extra offer fields are read once a day; if it can't be asked, its import still decides.
   try {
@@ -222,13 +306,17 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
       gpsr: allegro ? { responsiblePersonId: allegro.responsiblePersonId, responsibleProducerId: allegro.responsibleProducerId } : {},
     };
   });
-  return { rows, setupProblems, settings: account.settings };
+  if (account.type !== 'allegro') return { rows, setupProblems, settings: account.settings };
+  // Products the catalogue doesn't know are proposed as new products, with a category and its parameters.
+  const unknown = rows.filter((r) => r.details && r.match && !r.match.found).map((r) => Object.assign(r, { productType: r.details!.productType ?? '' }));
+  const allegroNew = await prepareNewProducts(pub, account.settings, unknown);
+  return { rows, setupProblems, settings: account.settings, allegroNew };
 }
 
 /** Shopify products that have no offer in this account yet, with what would be sent. */
 export async function publishPreview(accountId: string): Promise<PublishPreview> {
-  const { rows, setupProblems } = await loadRows(accountId);
-  return { rows: rows.map((r) => r.row), setupProblems };
+  const { rows, setupProblems, allegroNew } = await loadRows(accountId);
+  return { rows: rows.map((r) => r.row), setupProblems, ...(allegroNew ? { allegroNew } : {}) };
 }
 
 export interface PublishResult {
@@ -247,7 +335,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
   if (setupProblems.length) throw new Error(`Finish the account settings first: ${setupProblems.join(', ')}`);
 
   const result: PublishResult = { created: [], failed: [], notes: [] };
-  for (const { row, match, details, gpsr } of rows) {
+  for (const { row, match, details, gpsr, newProduct } of rows) {
     if (row.problems.length || !details || !match) {
       result.failed.push({ name: row.name, error: `not ready: ${row.problems.join(', ') || 'missing data'}` });
       continue;
@@ -266,6 +354,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
       currency: 'PLN',
       extraFields: resolveOfferFields(settings, details.metafields).values,
       ...gpsr,
+      ...(newProduct ? { allegroNewProduct: newProduct } : {}),
     };
     try {
       const done = await pub.createOffer(draft, match);
@@ -296,4 +385,28 @@ export async function loadAllegroOptions(accountId: string, force = false, maxAg
     .set({ settings: { ...account.settings, allegroOptions: options } })
     .where(eq(marketplaceAccounts.id, accountId));
   return options;
+}
+
+/** Remembers the Allegro category for new products of a Shopify product type; an empty id forgets it. */
+export async function saveAllegroCategory(accountId: string, productType: string, category: { id: string; path: string } | null): Promise<void> {
+  const account = await loadMarketplaceAccount(accountId);
+  if (account.type !== 'allegro') throw new Error(msg('This is not an Allegro account'));
+  const map = { ...(account.settings.allegroCategoryMap ?? {}) };
+  if (category?.id.trim()) map[productType] = { id: category.id.trim(), path: category.path.trim() || category.id.trim() };
+  else delete map[productType];
+  await getDb().update(marketplaceAccounts).set({ settings: { ...account.settings, allegroCategoryMap: map } }).where(eq(marketplaceAccounts.id, accountId));
+}
+
+/** Where an Allegro product parameter's value comes from, by parameter name; both empty forgets it. */
+export async function saveAllegroParameterSource(accountId: string, name: string, source: { metafield: string; fallback: string }): Promise<void> {
+  const account = await loadMarketplaceAccount(accountId);
+  if (account.type !== 'allegro') throw new Error(msg('This is not an Allegro account'));
+  const key = name.trim();
+  if (!key) throw new Error(msg('Name the parameter'));
+  const sources = { ...(account.settings.allegroParameterSources ?? {}) };
+  const metafield = source.metafield.trim();
+  const fallback = source.fallback.trim();
+  if (metafield || fallback) sources[key] = { ...(metafield ? { metafield } : {}), ...(fallback ? { fallback } : {}) };
+  else delete sources[key];
+  await getDb().update(marketplaceAccounts).set({ settings: { ...account.settings, allegroParameterSources: sources } }).where(eq(marketplaceAccounts.id, accountId));
 }

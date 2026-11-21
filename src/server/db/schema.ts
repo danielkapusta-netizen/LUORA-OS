@@ -128,6 +128,13 @@ export interface MarketplaceSettings {
   allegroLocation?: { province: string; city: string; postCode: string };
   /** Allegro: create offers as inactive drafts instead of publishing them at once. */
   allegroCreateAsDraft?: boolean;
+  /** Allegro: the category for new products (ones the catalogue doesn't know), per Shopify product type ("" = no type). */
+  allegroCategoryMap?: Record<string, { id: string; path: string }>;
+  /**
+   * Allegro: where each product parameter of new products comes from, by parameter name (e.g. "Pojemność"): a Shopify
+   * product metafield, else a fixed value. EAN, brand and condition are filled automatically.
+   */
+  allegroParameterSources?: Record<string, { metafield?: string; fallback?: string }>;
   /** Allegro: the choices above, read from Allegro and cached. */
   allegroOptions?: {
     fetchedAt: string;

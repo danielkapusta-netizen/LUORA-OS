@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ActionForm, SubmitButton } from '@/components/forms';
-import { Badge, buttonClass, Card, CardBody, PageHeader } from '@/components/ui';
+import { Badge, buttonClass, Card, CardBody, CardHeader, Input, PageHeader, Select } from '@/components/ui';
 import { requireAdmin } from '@/server/auth';
 import { publishPreview, type CatalogueState, type PublishPreview } from '@/server/services/marketplace-offers';
 import { listMarketplaceAccounts } from '@/server/services/settings';
-import { createOffersAction, refreshFromShopifyAction } from '../actions';
+import { createOffersAction, refreshFromShopifyAction, saveAllegroCategoryAction, saveAllegroParameterAction } from '../actions';
 import { hasRealSku } from '@/lib/sku';
 import { MARKETPLACE_LABELS } from '@/lib/utils';
 import { getT } from '@/lib/i18n/server';
@@ -40,7 +40,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
   }
-  const { rows, setupProblems } = preview;
+  const { rows, setupProblems, allegroNew } = preview;
   const settingsHref = `/settings/integrations/marketplace/${account.id}`;
   const markup = account.settings.offerMarkupPercent ?? 0;
 
@@ -48,7 +48,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
     <>
       <PageHeader
         title={t('Publish to {platform}', { platform: label })}
-        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup })} ${mirakl ? t('{platform} accepts a product it knows by EAN; if it refuses one, the reason is shown.', { platform: label }) : t('Only products the Allegro catalogue knows by EAN can be listed. Offers show the Shopify title, description and photos.')} ${t('Nothing is created until you tick products and press Create.')}`}
+        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup })} ${mirakl ? t('{platform} accepts a product it knows by EAN; if it refuses one, the reason is shown.', { platform: label }) : t('Offers show the Shopify title, description and photos. Products the Allegro catalogue doesn’t know by EAN are proposed as new products, in the category and with the details set up below.')} ${t('Nothing is created until you tick products and press Create.')}`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
@@ -73,6 +73,69 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
             <Link href={settingsHref} className="font-medium underline">
               {t('Open {platform} settings', { platform: label })}
             </Link>
+          </CardBody>
+        </Card>
+      )}
+
+      {allegroNew && allegroNew.types.length > 0 && (
+        <Card className="mb-5">
+          <CardHeader
+            title={t('Categories for new products')}
+            description={t('Products the Allegro catalogue doesn’t know go into one category per Shopify product type. Allegro’s suggestion is used until you save one.')}
+          />
+          <CardBody className="space-y-3">
+            {allegroNew.types.map((type) => (
+              <ActionForm key={type.productType || '(none)'} action={saveAllegroCategoryAction.bind(null, account.id, type.productType)} className="flex flex-wrap items-center gap-2">
+                <span className="w-48 text-sm font-medium">
+                  {type.productType || t('(no product type)')} <span className="text-xs font-normal text-slate-500">· {type.products}</span>
+                </span>
+                <Select name="category" defaultValue={type.saved ? `${type.saved.id}|${type.saved.path}` : type.suggestions[0] ? `${type.suggestions[0].id}|${type.suggestions[0].path}` : ''} className="max-w-xl min-w-0 flex-1">
+                  <option value="">{t('Choose…')}</option>
+                  {type.saved && !type.suggestions.some((c) => c.id === type.saved!.id) && <option value={`${type.saved.id}|${type.saved.path}`}>{type.saved.path}</option>}
+                  {type.suggestions.map((c) => (
+                    <option key={c.id} value={`${c.id}|${c.path}`}>
+                      {c.path}
+                    </option>
+                  ))}
+                </Select>
+                <Input name="categoryIdTyped" placeholder={t('or category id')} className="w-36" inputMode="numeric" />
+                <SubmitButton size="sm" variant="secondary">
+                  {t('Save')}
+                </SubmitButton>
+                {type.saved ? <Badge tone="green">{t('Saved')}</Badge> : <Badge tone="amber">{t('Suggested')}</Badge>}
+              </ActionForm>
+            ))}
+          </CardBody>
+        </Card>
+      )}
+
+      {allegroNew && (allegroNew.missingParameters.length > 0 || allegroNew.sources.length > 0) && (
+        <Card className="mb-5">
+          <CardHeader
+            title={t('Details Allegro needs for new products')}
+            description={t('EAN, brand and condition are filled in automatically. For the rest, name a Shopify product metafield (namespace.key), a value that fits every product, or both: the metafield wins when the product has it.')}
+          />
+          <CardBody className="space-y-3">
+            {[
+              ...allegroNew.missingParameters.map((p) => ({ name: p.name, products: p.products, metafield: allegroNew.sources.find((s) => s.name === p.name)?.metafield ?? '', fallback: allegroNew.sources.find((s) => s.name === p.name)?.fallback ?? '' })),
+              ...allegroNew.sources.filter((s) => !allegroNew.missingParameters.some((p) => p.name === s.name)).map((s) => ({ ...s, products: 0 })),
+            ].map((p) => (
+              <ActionForm key={p.name} action={saveAllegroParameterAction.bind(null, account.id, p.name)} className="flex flex-wrap items-center gap-2">
+                <span className="w-48 text-sm font-medium">
+                  {p.name}{' '}
+                  {p.products > 0 ? (
+                    <span className="text-xs font-normal text-amber-700">· {t.plural(p.products, 'missing on {n} product', 'missing on {n} products')}</span>
+                  ) : (
+                    <span className="text-xs font-normal text-emerald-700">· {t('set up')}</span>
+                  )}
+                </span>
+                <Input name="metafield" defaultValue={p.metafield} placeholder={t('Shopify metafield, e.g. custom.capacity')} className="w-64" />
+                <Input name="fallback" defaultValue={p.fallback} placeholder={t('or the same value for all')} className="w-48" />
+                <SubmitButton size="sm" variant="secondary">
+                  {t('Save')}
+                </SubmitButton>
+              </ActionForm>
+            ))}
           </CardBody>
         </Card>
       )}
@@ -112,6 +175,12 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                           {r.allegro.responsibleProducer && <> · {t('Producer: {name}', { name: r.allegro.responsibleProducer })}</>}
                           {r.allegro.gpsrFromProduct && <> ({t('from the product')})</>}
                         </p>
+                        {r.allegro.newProduct && (
+                          <p className="truncate">
+                            {t('New product in:')} <span className="text-slate-700">{r.allegro.newProduct.categoryPath ?? t('no category yet')}</span>
+                            {r.allegro.newProduct.categoryPath && !r.allegro.newProduct.categorySaved && <span className="text-amber-700"> · {t('suggested')}</span>}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -123,8 +192,12 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                   </div>
                   <div className="flex w-48 flex-col items-end gap-1">
                     {r.catalogue && (
-                      <Badge tone={mirakl && r.catalogue === 'missing' ? 'amber' : CATALOGUE[r.catalogue].tone}>
-                        {mirakl && r.catalogue === 'missing' ? t('Not found by {platform}’s lookup · you can still try', { platform: label }) : t(CATALOGUE[r.catalogue].label)}
+                      <Badge tone={r.catalogue === 'missing' ? (mirakl ? 'amber' : 'blue') : CATALOGUE[r.catalogue].tone}>
+                        {r.catalogue === 'missing'
+                          ? mirakl
+                            ? t('Not found by {platform}’s lookup · you can still try', { platform: label })
+                            : t('New on Allegro')
+                          : t(CATALOGUE[r.catalogue].label)}
                       </Badge>
                     )}
                     {r.problems.filter((p) => p !== 'not in the catalogue').length > 0 && <Badge tone="amber">{r.problems.filter((p) => p !== 'not in the catalogue').join(', ')}</Badge>}

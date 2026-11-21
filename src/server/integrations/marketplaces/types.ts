@@ -1,3 +1,4 @@
+import type { AllegroCategoryParameter } from './allegro/product-parameters';
 import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockFailure, StockUpdate, TrackingInfo } from '../types';
 
 /** File name marketplaces accept for an invoice: ASCII only, e.g. "faktura-12-10-2026.pdf". */
@@ -110,6 +111,12 @@ export interface OfferDraft {
   /** Allegro: the responsible person and producer (GPSR) chosen for this product; the account defaults when unset. */
   responsiblePersonId?: string;
   responsibleProducerId?: string;
+  /** Allegro: a product the catalogue doesn't know, proposed with the offer (category and filled parameters). */
+  allegroNewProduct?: {
+    categoryId: string;
+    parameters: { id: string; values?: string[]; valuesIds?: string[] }[];
+    offerParameters: { id: string; values?: string[]; valuesIds?: string[] }[];
+  };
 }
 
 /** The marketplace's own catalogue product for an EAN: offers are attached to it. */
@@ -130,6 +137,10 @@ export interface OfferPublisher {
   checkCatalogue(eans: string[]): Promise<Map<string, CatalogueMatch>>;
   /** Creates one offer; throws with the marketplace's reasons when it refuses. Returns a note when it is still being processed. */
   createOffer(draft: OfferDraft, match: CatalogueMatch): Promise<{ externalId?: string; note?: string }>;
+  /** Allegro: categories that fit a product name, best first, for products the catalogue doesn't know. */
+  suggestCategories?(name: string): Promise<{ id: string; path: string }[]>;
+  /** Allegro: the parameters of a category. */
+  categoryParameters?(categoryId: string): Promise<AllegroCategoryParameter[]>;
 }
 
 export function isOfferPublisher(adapter: unknown): adapter is OfferPublisher {

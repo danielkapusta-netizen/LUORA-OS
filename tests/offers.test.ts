@@ -164,6 +164,46 @@ describe('Allegro offers', () => {
     expect(uploaded).toEqual([]);
   });
 
+  it('proposes a new product when the catalogue doesn’t know it', async () => {
+    let body: { name?: string; parameters?: unknown; productSet?: { product: Record<string, unknown> }[] } = {};
+    server.use(
+      http.post(`${API}/sale/product-offers`, async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({ id: 'offer-4' }, { status: 201 });
+      }),
+      http.get(`${API}/sale/product-offers/offer-4`, () => HttpResponse.json({ validation: { errors: [] }, publication: { status: 'INACTIVE' } })),
+    );
+    const allegroNewProduct = { categoryId: '257689', parameters: [{ id: '225693', values: [draft.ean] }], offerParameters: [{ id: '11323', valuesIds: ['11323_1'] }] };
+    const result = await new AllegroAdapter(creds(), settings).createOffer({ ...draft, allegroNewProduct }, { found: false });
+    expect(result.note).toContain('new product proposed');
+    expect(body.productSet?.[0].product).toEqual({ name: 'Luora Night Cream 50 ml', category: { id: '257689' }, parameters: [{ id: '225693', values: [draft.ean] }], images: ['https://a.allegroimg.com/original/1.jpg'] });
+    expect(body.parameters).toEqual([{ id: '11323', valuesIds: ['11323_1'] }]);
+    await expect(new AllegroAdapter(creds(), settings).createOffer({ ...draft, imageUrls: [], allegroNewProduct }, { found: false })).rejects.toThrow('at least one photo');
+  });
+
+  it('reads category suggestions and parameters', async () => {
+    server.use(
+      http.get(`${API}/sale/matching-categories`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get('name')).toBe('Krem do twarzy');
+        return HttpResponse.json({ matchingCategories: [{ id: '257689', name: 'Kremy', parent: { id: '1', name: 'Uroda', parent: null } }] });
+      }),
+      http.get(`${API}/sale/categories/257689/parameters`, () =>
+        HttpResponse.json({
+          parameters: [
+            { id: '248811', name: 'Marka', type: 'dictionary', required: true, requiredForProduct: true, unit: null, options: { describesProduct: true, ambiguousValueId: 'b9', customValuesEnabled: true }, dictionary: [{ id: 'b1', value: 'Luora', dependsOnValueIds: [] }], restrictions: { multipleChoices: false } },
+            { id: '17448', name: 'Pojemność', type: 'float', required: true, requiredForProduct: true, unit: 'ml', options: { describesProduct: true }, restrictions: { min: 0.1, max: 5000, range: false, precision: 2 } },
+          ],
+        }),
+      ),
+    );
+    const adapter = new AllegroAdapter(creds(), settings);
+    expect(await adapter.suggestCategories('Krem do twarzy')).toEqual([{ id: '257689', path: 'Uroda > Kremy' }]);
+    expect(await adapter.categoryParameters('257689')).toEqual([
+      { id: '248811', name: 'Marka', type: 'dictionary', unit: null, required: true, requiredForProduct: true, describesProduct: true, dictionary: [{ id: 'b1', value: 'Luora' }], ambiguousValueId: 'b9', customValuesEnabled: true, multipleChoices: false, range: false },
+      { id: '17448', name: 'Pojemność', type: 'float', unit: 'ml', required: true, requiredForProduct: true, describesProduct: true, ambiguousValueId: null, customValuesEnabled: false, multipleChoices: false, min: 0.1, max: 5000, range: false },
+    ]);
+  });
+
   it('refuses without a catalogue product', async () => {
     await expect(new AllegroAdapter(creds(), settings).createOffer(draft, { found: false })).rejects.toThrow('not in the Allegro catalogue');
   });
