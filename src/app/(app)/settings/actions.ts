@@ -98,6 +98,16 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
     const dim = (name: string, fallback: number) => Number(text(fd, name).replace(',', '.')) || fallback;
     settings.vhBox = { width: dim('vhBoxWidth', 10), height: dim('vhBoxHeight', 10), length: dim('vhBoxLength', 5) };
     settings.vhDaysToShip = Math.max(0, Math.floor(Number(text(fd, 'vhDaysToShip')) || 1));
+  } else if (type === 'erli') {
+    credentials = { ...secrets(fd, ['apiKey']), ...(text(fd, 'baseUrl') ? { baseUrl: text(fd, 'baseUrl') } : {}) };
+    readOfferSettings(fd, settings);
+    settings.erliPriceList = text(fd, 'erliPriceList') || undefined;
+    settings.erliTaxRate = text(fd, 'erliTaxRate') || undefined;
+    settings.erliResponsiblePersonId = text(fd, 'erliResponsiblePersonId') || undefined;
+    settings.erliResponsibleProducerId = text(fd, 'erliResponsibleProducerId') || undefined;
+    settings.erliResponsiblePersonMetafield = text(fd, 'erliResponsiblePersonMetafield') || undefined;
+    settings.erliResponsibleProducerMetafield = text(fd, 'erliResponsibleProducerMetafield') || undefined;
+    settings.erliCreateInactive = bool(fd, 'erliCreateInactive');
   } else if (type === 'empik' || type === 'hebe') {
     credentials = { baseUrl: text(fd, 'baseUrl'), ...secrets(fd, ['apiKey']), ...(text(fd, 'shopId') ? { shopId: text(fd, 'shopId') } : {}) };
     settings.autoAccept = bool(fd, 'autoAccept');

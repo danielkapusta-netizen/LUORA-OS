@@ -81,7 +81,7 @@ export default async function CostsPage({ searchParams }: { searchParams: Promis
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/[0.04]">
-                    {(['allegro', 'empik', 'hebe', 'shopify', 'vonhalsky'] as const).map((m) => (
+                    {(['allegro', 'empik', 'hebe', 'erli', 'shopify', 'vonhalsky'] as const).map((m) => (
                       <tr key={m}>
                         <td className="py-2 pr-3 font-medium text-ink">{MARKETPLACE_LABELS[m]}</td>
                         <td className="py-2 pr-3">

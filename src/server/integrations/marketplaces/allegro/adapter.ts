@@ -468,9 +468,9 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
     for (let i = 0; i < eans.length; i += 5) {
       await Promise.all(
         eans.slice(i, i + 5).map(async (ean) => {
-          const data = await this.client.call<{ products?: { id: string; name?: string }[] }>('GET', '/sale/products', { query: { phrase: ean, mode: 'GTIN' } });
+          const data = await this.client.call<{ products?: { id: string; name?: string; category?: { id?: string } | null }[] }>('GET', '/sale/products', { query: { phrase: ean, mode: 'GTIN' } });
           const hit = data.products?.[0];
-          out.set(ean, hit ? { found: true, ref: hit.id, name: hit.name } : { found: false });
+          out.set(ean, hit ? { found: true, ref: hit.id, name: hit.name, ...(hit.category?.id ? { categoryId: hit.category.id } : {}) } : { found: false });
         }),
       );
     }

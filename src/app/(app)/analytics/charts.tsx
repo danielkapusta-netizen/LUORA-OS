@@ -16,8 +16,8 @@ import {
 
 // Validated categorical slots 1–3 of the reference palette. Colour follows the
 // marketplace everywhere, so a filter never repaints a series.
-export const MARKETPLACE_COLORS: Record<string, string> = { shopify: '#2a78d6', allegro: '#eb6834', empik: '#1baf7a', vonhalsky: '#d4a017', hebe: '#d6338a' };
-const NAMES: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', vonhalsky: 'Von Halsky', hebe: 'HEBE' };
+export const MARKETPLACE_COLORS: Record<string, string> = { shopify: '#2a78d6', allegro: '#eb6834', empik: '#1baf7a', vonhalsky: '#d4a017', hebe: '#d6338a', erli: '#7b3fe4' };
+const NAMES: Record<string, string> = { shopify: 'Shopify', allegro: 'Allegro', empik: 'Empik', vonhalsky: 'Von Halsky', hebe: 'HEBE', erli: 'Erli' };
 const INK = { secondary: '#52514e', muted: '#898781', grid: '#ece9e2', axis: '#ddd9d0' };
 const SINGLE = '#2a78d6';
 

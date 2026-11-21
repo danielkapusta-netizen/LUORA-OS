@@ -15,6 +15,7 @@ const CHANNELS: { value: Channel; label: string }[] = [
   { value: 'shopify', label: 'Shopify' },
   { value: 'vonhalsky', label: 'Von Halsky' },
   { value: 'hebe', label: 'HEBE' },
+  { value: 'erli', label: 'Erli' },
 ];
 
 const VERDICT = {

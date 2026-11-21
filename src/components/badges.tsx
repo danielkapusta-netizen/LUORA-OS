@@ -30,6 +30,7 @@ const MARKETPLACE_FILLS: Record<string, string> = {
   empik: 'from-[#0f7a50] to-[#0b5e3e]',
   vonhalsky: 'from-[#8a6400] to-[#6e5000]',
   hebe: 'from-[#c92f7f] to-[#a3225f]',
+  erli: 'from-[#7b3fe4] to-[#5a2bb0]',
 };
 
 /** The marketplace as a filled chip in its own colour, so the source reads at a glance. */

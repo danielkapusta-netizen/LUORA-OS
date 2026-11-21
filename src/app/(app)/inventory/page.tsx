@@ -32,7 +32,7 @@ const PAGE_SIZE = 50;
 const PERIODS = [7, 30, 90] as const;
 const SORT_LABEL: Record<InventorySort, string> = { brand: msg('Brand'), sales: msg('Best selling'), name: msg('Name'), stock: msg('Lowest stock'), new: msg('Newest') };
 const FILTER_LABEL: Record<InventoryFilter, string> = { all: msg('All'), out: msg('Out of stock'), low: msg('Low stock'), differs: msg('Differs somewhere'), off: msg('Off sale with stock') };
-const PLATFORMS = ['shopify', 'allegro', 'empik', 'hebe', 'vonhalsky'] as const;
+const PLATFORMS = ['shopify', 'allegro', 'empik', 'hebe', 'erli', 'vonhalsky'] as const;
 
 function hrefWith(params: Record<string, string | undefined>, change: Record<string, string | undefined>) {
   const merged = { ...params, ...change };
@@ -77,7 +77,7 @@ export default async function InventoryPage({
   const publishHref: Record<string, string | undefined> = {};
   if (admin) {
     for (const a of accounts) {
-      if (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe') publishHref[a.type] ??= `/inventory/publish/${a.id}`;
+      if (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe' || a.type === 'erli') publishHref[a.type] ??= `/inventory/publish/${a.id}`;
       if (a.type === 'vonhalsky') publishHref.vonhalsky = '/inventory/vonhalsky';
     }
   }
@@ -143,7 +143,7 @@ export default async function InventoryPage({
                 </ActionForm>
                 {admin &&
                   accounts
-                    .filter((a) => a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe')
+                    .filter((a) => a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe' || a.type === 'erli')
                     .map((a) => (
                       <Link key={a.id} className={cn(buttonClass('ghost'), 'justify-start')} href={`/inventory/publish/${a.id}`}>
                         {t('Publish to {platform}', { platform: MARKETPLACE_LABELS[a.type] })}

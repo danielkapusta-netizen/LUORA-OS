@@ -5,7 +5,7 @@ import { attempt, type ActionResult } from '@/lib/action-result';
 import { requireAdmin } from '@/server/auth';
 import { importListings } from '@/server/services/inventory';
 import { listMarketplaceAccounts } from '@/server/services/settings';
-import { loadAllegroOptions, MAX_OFFERS_PER_RUN, publishOffers, saveAllegroCategory, saveAllegroParameterSource } from '@/server/services/marketplace-offers';
+import { loadAllegroOptions, loadErliOptions, MAX_OFFERS_PER_RUN, publishOffers, saveAllegroCategory, saveAllegroParameterSource } from '@/server/services/marketplace-offers';
 import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
@@ -31,6 +31,17 @@ export async function loadAllegroOptionsAction(accountId: string): Promise<Actio
     const o = await loadAllegroOptions(accountId, true);
     revalidatePath(`/settings/integrations/marketplace/${accountId}`);
     return (await getT())('Loaded {rates} shipping rates, {policies} return policies and {warranties} warranty terms from Allegro', { rates: o.shippingRates.length, policies: o.returnPolicies.length, warranties: o.impliedWarranties.length });
+  });
+}
+
+export async function loadErliOptionsAction(accountId: string): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    const o = await loadErliOptions(accountId, true);
+    revalidatePath(`/settings/integrations/marketplace/${accountId}`);
+    const counts = { lists: o.priceLists.length, persons: o.responsiblePersons.length, producers: o.responsibleProducers.length };
+    const t = await getT();
+    return t('Loaded {lists} delivery price lists, {persons} responsible persons and {producers} producers from Erli', counts);
   });
 }
 

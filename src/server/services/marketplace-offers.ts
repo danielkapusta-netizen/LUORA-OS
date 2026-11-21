@@ -11,6 +11,7 @@ import { ShopifyAdapter, type ShopifyVariantDetails } from '../integrations/mark
 import { isOfferPublisher, type CatalogueMatch, type OfferDraft, type OfferPublisher } from '../integrations/marketplaces/types';
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { AllegroAdapter } from '../integrations/marketplaces/allegro/adapter';
+import { ErliAdapter } from '../integrations/marketplaces/erli/adapter';
 import { offerFieldMetafieldKeys, resolveOfferFields } from '../integrations/marketplaces/mirakl/offer-fields';
 import { allegroDescription, allegroTitle, gpsrChoice } from '../integrations/marketplaces/allegro/offer-content';
 import { parameterMetafieldKeys, productParameters, type AllegroCategoryParameter } from '../integrations/marketplaces/allegro/product-parameters';
@@ -69,11 +70,14 @@ async function shopifyDetails(
 }
 
 function publisher(account: Awaited<ReturnType<typeof loadMarketplaceAccount>>): OfferPublisher {
-  if (account.type !== 'allegro' && account.type !== 'empik' && account.type !== 'hebe') throw new Error(msg('Offers can be created here for Allegro, Empik and HEBE accounts'));
+  if (!PUBLISH_MARKETPLACES.includes(account.type as (typeof PUBLISH_MARKETPLACES)[number])) throw new Error(msg('Offers can be created here for Allegro, Empik, HEBE and Erli accounts'));
   const adapter = getMarketplaceAdapter(account);
   if (!isOfferPublisher(adapter)) throw new Error(msg('This account cannot create offers'));
   return adapter;
 }
+
+/** Marketplaces offers can be created on from Shopify. */
+export const PUBLISH_MARKETPLACES = ['allegro', 'empik', 'hebe', 'erli'] as const;
 
 export type CatalogueState = 'found' | 'missing' | 'unverified';
 
@@ -107,6 +111,8 @@ export interface AllegroPreview {
   gpsrFromProduct: boolean;
   /** Set when the catalogue doesn't know the product, so it is proposed as a new product in this category. */
   newProduct?: { categoryId: string | null; categoryPath: string | null; categorySaved: boolean };
+  /** Erli: where the product's category comes from (Allegro's catalogue product, a saved or suggested Allegro category, or the Shopify type). */
+  erliCategory?: { source: 'catalogue' | 'saved' | 'suggested' | 'shop' | 'none'; path: string | null; attributes: number };
 }
 
 /** Products the catalogue doesn't know: their categories per product type and the parameters still to set up. */
@@ -118,12 +124,17 @@ export interface AllegroNewProducts {
   sources: { name: string; metafield: string; fallback: string }[];
 }
 
-/** The Allegro offer's content for one product, and what stops it from being sent. */
-function allegroContent(settings: MarketplaceSettings, d: ShopifyVariantDetails) {
-  const options = settings.allegroOptions;
+/** The Allegro or Erli offer's content for one product, and what stops it from being sent. */
+function allegroContent(settings: MarketplaceSettings, d: ShopifyVariantDetails, marketplace: 'allegro' | 'erli' = 'allegro') {
+  const erli = marketplace === 'erli';
+  const options = erli ? settings.erliOptions : settings.allegroOptions;
   const title = allegroTitle(d.title);
-  const person = gpsrChoice('responsible person', settings.allegroResponsiblePersonMetafield, d.metafields, options?.responsiblePersons, settings.allegroResponsiblePersonId);
-  const producer = gpsrChoice('responsible producer', settings.allegroResponsibleProducerMetafield, d.metafields, options?.responsibleProducers, settings.allegroResponsibleProducerId);
+  const person = erli
+    ? gpsrChoice('responsible person', settings.erliResponsiblePersonMetafield, d.metafields, options?.responsiblePersons, settings.erliResponsiblePersonId)
+    : gpsrChoice('responsible person', settings.allegroResponsiblePersonMetafield, d.metafields, options?.responsiblePersons, settings.allegroResponsiblePersonId);
+  const producer = erli
+    ? gpsrChoice('responsible producer', settings.erliResponsibleProducerMetafield, d.metafields, options?.responsibleProducers, settings.erliResponsibleProducerId)
+    : gpsrChoice('responsible producer', settings.allegroResponsibleProducerMetafield, d.metafields, options?.responsibleProducers, settings.allegroResponsibleProducerId);
   const problems = [title, person, producer].flatMap((c) => (c.ok ? [] : [c.problem]));
   const nameOf = (list: { id: string; name: string }[] | undefined, id: string | undefined) => (id ? list?.find((o) => o.id === id)?.name ?? id : null);
   const preview: AllegroPreview = {
@@ -144,11 +155,16 @@ function allegroContent(settings: MarketplaceSettings, d: ShopifyVariantDetails)
 }
 
 /** Shopify metafields the account reads per product: Mirakl's extra offer fields, Allegro's responsible person and producer. */
-function productMetafieldKeys(settings: MarketplaceSettings, marketplace: string): string[] {
+function productMetafieldKeys(settings: MarketplaceSettings, marketplace: string, allegroSettings?: MarketplaceSettings): string[] {
   const keys = offerFieldMetafieldKeys(settings);
   if (marketplace === 'allegro') {
     for (const k of [settings.allegroResponsiblePersonMetafield, settings.allegroResponsibleProducerMetafield]) if (k?.trim()) keys.push(k.trim());
     keys.push(...parameterMetafieldKeys(settings.allegroParameterSources));
+  }
+  if (marketplace === 'erli') {
+    for (const k of [settings.erliResponsiblePersonMetafield, settings.erliResponsibleProducerMetafield]) if (k?.trim()) keys.push(k.trim());
+    // Erli reuses the Allegro parameters, read from the same metafields.
+    keys.push(...parameterMetafieldKeys(allegroSettings?.allegroParameterSources));
   }
   return [...new Set(keys)];
 }
@@ -167,7 +183,107 @@ type Loaded = {
   details: ShopifyVariantDetails | null;
   gpsr: Pick<OfferDraft, 'responsiblePersonId' | 'responsibleProducerId'>;
   newProduct?: OfferDraft['allegroNewProduct'];
+  erli?: OfferDraft['erli'];
 };
+
+/** Allegro's category suggestions and parameters, each asked for once per page. */
+function allegroLookups(pub: OfferPublisher) {
+  const suggestions = new Map<string, { id: string; path: string }[] | Error>();
+  const parameters = new Map<string, AllegroCategoryParameter[] | Error>();
+  const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)));
+  return {
+    async suggest(phrase: string): Promise<{ id: string; path: string }[] | Error> {
+      if (!pub.suggestCategories) return [];
+      if (!suggestions.has(phrase)) {
+        if (suggestions.size >= MAX_SUGGESTIONS) return new Error('too many products at once; save a category for the type');
+        suggestions.set(phrase, await pub.suggestCategories(phrase).catch(asError));
+      }
+      return suggestions.get(phrase)!;
+    },
+    async paramsOf(categoryId: string): Promise<AllegroCategoryParameter[] | Error> {
+      if (!pub.categoryParameters) return [];
+      if (!parameters.has(categoryId)) parameters.set(categoryId, await pub.categoryParameters(categoryId).catch(asError));
+      return parameters.get(categoryId)!;
+    },
+  };
+}
+
+/** Allegro's filled parameters as Erli attributes (Erli reads Allegro ids). Custom values Allegro's dictionary lacks are left out. */
+export function erliAttributes(params: AllegroCategoryParameter[], filled: { id: string; values?: string[]; valuesIds?: string[] }[]): NonNullable<OfferDraft['erli']>['attributes'] {
+  const out: NonNullable<OfferDraft['erli']>['attributes'] = [];
+  for (const f of filled) {
+    const p = params.find((x) => x.id === f.id);
+    if (!p) continue;
+    if (p.type === 'dictionary') {
+      if (f.values?.length || !f.valuesIds?.length) continue;
+      out.push({ source: 'allegro', id: p.id, type: 'dictionary', values: f.valuesIds.map((id) => ({ id })) });
+    } else if (p.type === 'integer' || p.type === 'float') {
+      out.push({ source: 'allegro', id: p.id, type: 'number', values: (f.values ?? []).map(Number).filter(Number.isFinite) });
+    } else {
+      out.push({ source: 'allegro', id: p.id, type: 'string', values: f.values ?? [] });
+    }
+  }
+  return out;
+}
+
+/**
+ * Erli products take their category and details from Allegro: the category of Allegro's catalogue product with the
+ * same EAN, else the category saved for the product type on Publish → Allegro, else Allegro's suggestion. Without an
+ * Allegro account the Shopify product type is sent, for Erli's own category recognition. Nothing here blocks a product.
+ */
+async function prepareErliProducts(rows: (Loaded & { productType: string })[], allegro: { pub: OfferPublisher; settings: MarketplaceSettings } | null): Promise<void> {
+  const lookups = allegro ? allegroLookups(allegro.pub) : null;
+  const eans = [...new Set(rows.map((r) => r.row.ean).filter((e): e is string => Boolean(e)))];
+  const catalogue = allegro && eans.length ? await allegro.pub.checkCatalogue(eans).catch(() => new Map<string, CatalogueMatch>()) : new Map<string, CatalogueMatch>();
+  for (const r of rows) {
+    const d = r.details!;
+    const match = r.row.ean ? catalogue.get(r.row.ean) : undefined;
+    let category: { id: string; path: string | null; source: 'catalogue' | 'saved' | 'suggested' } | null = null;
+    if (match?.found && match.categoryId) category = { id: match.categoryId, path: null, source: 'catalogue' };
+    else if (allegro && lookups) {
+      const saved = allegro.settings.allegroCategoryMap?.[r.productType];
+      if (saved) category = { ...saved, source: 'saved' };
+      else {
+        const found = await lookups.suggest(r.productType.trim() || d.title);
+        if (!(found instanceof Error) && found[0]) category = { ...found[0], source: 'suggested' };
+      }
+    }
+    let attributes: NonNullable<OfferDraft['erli']>['attributes'] = [];
+    if (category && lookups) {
+      const params = await lookups.paramsOf(category.id);
+      if (!(params instanceof Error)) {
+        const filled = productParameters(params, { ean: r.row.ean ?? '', brand: d.vendor, metafields: d.metafields }, allegro!.settings.allegroParameterSources);
+        attributes = erliAttributes(params, filled.productParameters);
+      }
+    }
+    r.erli = {
+      category: category ? { source: 'allegro', id: category.id } : r.productType.trim() ? { source: 'shop', name: r.productType.trim() } : null,
+      attributes,
+      ...(match?.found && match.ref ? { allegroProductId: match.ref } : {}),
+    };
+    if (r.row.allegro) {
+      r.row.allegro.erliCategory = category
+        ? { source: category.source, path: category.path, attributes: attributes.length }
+        : { source: r.productType.trim() ? 'shop' : 'none', path: r.productType.trim() || null, attributes: 0 };
+    }
+  }
+}
+
+/** The enabled Allegro account, whose catalogue, categories and parameters Erli products reuse. */
+async function allegroForErli(): Promise<{ pub: OfferPublisher; settings: MarketplaceSettings } | null> {
+  const [account] = await getDb()
+    .select()
+    .from(marketplaceAccounts)
+    .where(and(eq(marketplaceAccounts.type, 'allegro'), eq(marketplaceAccounts.enabled, true)))
+    .limit(1);
+  if (!account) return null;
+  try {
+    return { pub: publisher(account), settings: account.settings };
+  } catch (err) {
+    console.warn('[offers] Allegro not available for Erli categories:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
 
 /** At most this many category suggestions are asked for per page (Allegro allows 5 per second). */
 const MAX_SUGGESTIONS = 60;
@@ -184,19 +300,7 @@ async function prepareNewProducts(pub: OfferPublisher, settings: MarketplaceSett
     sources: Object.entries(settings.allegroParameterSources ?? {}).map(([name, s]) => ({ name, metafield: s.metafield ?? '', fallback: s.fallback ?? '' })),
   };
   if (!pub.suggestCategories || !pub.categoryParameters) return summary;
-  const suggestions = new Map<string, { id: string; path: string }[] | Error>();
-  const parameters = new Map<string, AllegroCategoryParameter[] | Error>();
-  const suggest = async (phrase: string) => {
-    if (!suggestions.has(phrase)) {
-      if (suggestions.size >= MAX_SUGGESTIONS) return new Error('too many products at once; save a category for the type');
-      suggestions.set(phrase, await pub.suggestCategories!(phrase).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))));
-    }
-    return suggestions.get(phrase)!;
-  };
-  const paramsOf = async (categoryId: string) => {
-    if (!parameters.has(categoryId)) parameters.set(categoryId, await pub.categoryParameters!(categoryId).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e)))));
-    return parameters.get(categoryId)!;
-  };
+  const { suggest, paramsOf } = allegroLookups(pub);
   const missingCount = new Map<string, number>();
   const types = new Map<string, AllegroNewProducts['types'][number]>();
 
@@ -248,7 +352,17 @@ async function loadRows(
   let account = await loadMarketplaceAccount(accountId);
   const pub = publisher(account);
   const setupProblems = pub.publishSetupProblems();
-  // Per-product responsible persons are matched to Allegro's current list, so a person just added there counts.
+  // Erli products reuse the Allegro account's catalogue, categories and parameters.
+  const allegroForThis = account.type === 'erli' ? await allegroForErli() : null;
+  // Per-product responsible persons are matched to the marketplace's current list, so a person just added there counts.
+  if (account.type === 'erli' && (account.settings.erliResponsiblePersonMetafield?.trim() || account.settings.erliResponsibleProducerMetafield?.trim())) {
+    try {
+      const erliOptions = await loadErliOptions(accountId, false, GPSR_OPTIONS_TTL_MS);
+      account = { ...account, settings: { ...account.settings, erliOptions } };
+    } catch (err) {
+      console.warn('[offers] Erli responsible persons not refreshed:', err instanceof Error ? err.message : err);
+    }
+  }
   if (account.type === 'allegro' && (account.settings.allegroResponsiblePersonMetafield?.trim() || account.settings.allegroResponsibleProducerMetafield?.trim())) {
     try {
       const allegroOptions = await loadAllegroOptions(accountId, false, GPSR_OPTIONS_TTL_MS);
@@ -270,7 +384,7 @@ async function loadRows(
   const missing = items.filter((p) => !linked.has(p.id) && !(p.ean && eans.has(p.ean)) && !skus.has(p.sku.toLowerCase()) && !(p.ean && skus.has(p.ean)) && (!onlyIds || onlyIds.has(p.id)));
   if (missing.length === 0) return { rows: [], setupProblems, settings: account.settings };
 
-  const details = await shopifyDetails(missing.map((p) => p.variantId!), missing, productMetafieldKeys(account.settings, account.type));
+  const details = await shopifyDetails(missing.map((p) => p.variantId!), missing, productMetafieldKeys(account.settings, account.type, allegroForThis?.settings));
   const wanted = [...new Set(missing.map((p) => p.ean).filter((e): e is string => Boolean(e)))];
   const catalogue = wanted.length ? await pub.checkCatalogue(wanted) : new Map<string, CatalogueMatch>();
 
@@ -283,8 +397,9 @@ async function loadRows(
     // Allegro needs the catalogue product to attach to. On Mirakl (Empik, HEBE) the lookup is only advice: its own import accepts or refuses the offer, with the reason.
     else if (match && !match.found && account.type === 'allegro') problems.push('not in the catalogue');
     if (d && Number(d.price) <= 0) problems.push('no price');
+    if (d && account.type === 'erli' && d.imageUrls.length === 0) problems.push('no photo');
     if (d) problems.push(...resolveOfferFields(account.settings, d.metafields).problems);
-    const allegro = d && account.type === 'allegro' ? allegroContent(account.settings, d) : null;
+    const allegro = d && (account.type === 'allegro' || account.type === 'erli') ? allegroContent(account.settings, d, account.type) : null;
     if (allegro) problems.push(...allegro.problems);
     return {
       details: d,
@@ -299,13 +414,18 @@ async function loadRows(
         shopifyPrice: d?.price ?? null,
         price: d ? publishPrice(d.price, account.settings) : null,
         stock: p.stock,
-        catalogue: !p.ean || !match ? null : !match.found ? 'missing' : match.unverified ? 'unverified' : 'found',
+        // Erli has no catalogue: every product is created there.
+        catalogue: !p.ean || !match || account.type === 'erli' ? null : !match.found ? 'missing' : match.unverified ? 'unverified' : 'found',
         problems,
         ...(allegro ? { allegro: allegro.preview } : {}),
       },
       gpsr: allegro ? { responsiblePersonId: allegro.responsiblePersonId, responsibleProducerId: allegro.responsibleProducerId } : {},
     };
   });
+  if (account.type === 'erli') {
+    await prepareErliProducts(rows.filter((r) => r.details).map((r) => Object.assign(r, { productType: r.details!.productType ?? '' })), allegroForThis);
+    return { rows, setupProblems, settings: account.settings };
+  }
   if (account.type !== 'allegro') return { rows, setupProblems, settings: account.settings };
   // Products the catalogue doesn't know are proposed as new products, with a category and its parameters.
   const unknown = rows.filter((r) => r.details && r.match && !r.match.found).map((r) => Object.assign(r, { productType: r.details!.productType ?? '' }));
@@ -335,7 +455,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
   if (setupProblems.length) throw new Error(`Finish the account settings first: ${setupProblems.join(', ')}`);
 
   const result: PublishResult = { created: [], failed: [], notes: [] };
-  for (const { row, match, details, gpsr, newProduct } of rows) {
+  for (const { row, match, details, gpsr, newProduct, erli } of rows) {
     if (row.problems.length || !details || !match) {
       result.failed.push({ name: row.name, error: `not ready: ${row.problems.join(', ') || 'missing data'}` });
       continue;
@@ -355,6 +475,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
       extraFields: resolveOfferFields(settings, details.metafields).values,
       ...gpsr,
       ...(newProduct ? { allegroNewProduct: newProduct } : {}),
+      ...(erli ? { erli } : {}),
     };
     try {
       const done = await pub.createOffer(draft, match);
@@ -409,4 +530,19 @@ export async function saveAllegroParameterSource(accountId: string, name: string
   if (metafield || fallback) sources[key] = { ...(metafield ? { metafield } : {}), ...(fallback ? { fallback } : {}) };
   else delete sources[key];
   await getDb().update(marketplaceAccounts).set({ settings: { ...account.settings, allegroParameterSources: sources } }).where(eq(marketplaceAccounts.id, accountId));
+}
+
+/** Erli's delivery price lists and GPSR entities, read from Erli and cached for a few hours. */
+export async function loadErliOptions(accountId: string, force = false, maxAgeMs = OPTIONS_TTL_MS) {
+  const account = await loadMarketplaceAccount(accountId);
+  const cached = account.settings.erliOptions;
+  if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < maxAgeMs) return cached;
+  const adapter = getMarketplaceAdapter(account);
+  if (!(adapter instanceof ErliAdapter)) throw new Error(msg('This is not an Erli account'));
+  const options = { fetchedAt: new Date().toISOString(), ...(await adapter.publishOptions()) };
+  await getDb()
+    .update(marketplaceAccounts)
+    .set({ settings: { ...account.settings, erliOptions: options } })
+    .where(eq(marketplaceAccounts.id, accountId));
+  return options;
 }

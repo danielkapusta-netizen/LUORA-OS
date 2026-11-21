@@ -1,4 +1,5 @@
 import type { AllegroCategoryParameter } from './allegro/product-parameters';
+import type { ErliProductData } from './erli/adapter';
 import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockFailure, StockUpdate, TrackingInfo } from '../types';
 
 /** File name marketplaces accept for an invoice: ASCII only, e.g. "faktura-12-10-2026.pdf". */
@@ -111,6 +112,8 @@ export interface OfferDraft {
   /** Allegro: the responsible person and producer (GPSR) chosen for this product; the account defaults when unset. */
   responsiblePersonId?: string;
   responsibleProducerId?: string;
+  /** Erli: the Allegro category and parameters reused for the new Erli product. */
+  erli?: ErliProductData;
   /** Allegro: a product the catalogue doesn't know, proposed with the offer (category and filled parameters). */
   allegroNewProduct?: {
     categoryId: string;
@@ -125,6 +128,8 @@ export interface CatalogueMatch {
   /** The catalogue product id the offer attaches to (Allegro). */
   ref?: string;
   name?: string;
+  /** Allegro: the category of the catalogue product. */
+  categoryId?: string;
   /** The marketplace could not be asked, so the answer is a guess; its import decides. */
   unverified?: boolean;
 }

@@ -28,7 +28,7 @@ import {
   stopHistoryAction,
   syncFeesAction,
 } from '../../../actions';
-import { loadAllegroOptionsAction } from '../../../../inventory/publish/actions';
+import { loadAllegroOptionsAction, loadErliOptionsAction } from '../../../../inventory/publish/actions';
 import { msg } from '@/lib/i18n/msg';
 import { getT } from '@/lib/i18n/server';
 
@@ -84,6 +84,25 @@ async function OfferPricing({ s }: { s: MarketplaceSettings }) {
         <Input name="offerHandlingDays" inputMode="numeric" defaultValue={String(s.offerHandlingDays ?? 1)} />
       </Field>
     </div>
+  );
+}
+
+/** A list read from Erli to pick from; before it is loaded the saved id can still be seen and kept. */
+async function ErliChoice({ name, label, selected, items, optional, hint }: { name: string; label: string; selected?: string; items?: { id: string; name: string }[]; optional?: boolean; hint?: string }) {
+  const t = await getT();
+  const known = items?.some((i) => i.id === selected);
+  return (
+    <Field label={label} hint={items ? hint : t('Press “Load choices from Erli” below first')}>
+      <Select name={name} defaultValue={selected ?? ''}>
+        <option value="">{optional ? t('None') : t('Choose…')}</option>
+        {selected && !known && <option value={selected}>{selected} {t('(saved)')}</option>}
+        {(items ?? []).map((i) => (
+          <option key={i.id} value={i.id}>
+            {i.name}
+          </option>
+        ))}
+      </Select>
+    </Field>
   );
 }
 
@@ -312,6 +331,49 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
               </fieldset>
             )}
 
+            {type === 'erli' && (
+              <fieldset className="space-y-3">
+                <legend className="mb-1 text-sm font-semibold">{t('Erli connection')}</legend>
+                <p className="text-xs text-slate-500">
+                  {t('In the Erli seller panel open Metoda integracji → Własna integracja po API and generate a key with the order, product and finance permissions. Erli shows it only once.')}
+                </p>
+                <Secret name="apiKey" label={t('API key')} stored={stored.includes('apiKey')} />
+                <Field label={t('API address (optional)')} hint={t('Leave blank for Erli. Only for Erli’s sandbox.')}>
+                  <Input name="baseUrl" defaultValue={str('baseUrl')} placeholder="https://erli.pl/svc/shop-api" />
+                </Field>
+                <p className="text-xs text-slate-500">
+                  {t('Orders are shipped with your InPost labels; the tracking number is sent to Erli and the order marked as sent.')}
+                </p>
+                <p className="pt-2 text-sm font-semibold">{t('Offers created from Shopify')}</p>
+                <p className="text-xs text-slate-500">
+                  {t('Each product gets its Allegro category and details (from the Allegro catalogue or the categories saved on Publish → Allegro), so Erli places it in the same category. Press “Load choices from Erli” below the form, then pick them here.')}
+                </p>
+                <OfferPricing s={s} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <ErliChoice name="erliPriceList" label={t('Delivery price list')} selected={s.erliPriceList} items={s.erliOptions?.priceLists} optional hint={t('Empty: Erli’s default price list.')} />
+                  <Field label={t('VAT rate')} hint={t('Empty: the rate of the product’s Erli category.')}>
+                    <Select name="erliTaxRate" defaultValue={s.erliTaxRate ?? ''}>
+                      <option value="">{t('Category default')}</option>
+                      {['TAX_23', 'TAX_8', 'TAX_5', 'TAX_0'].map((r) => (
+                        <option key={r} value={r}>
+                          {r.replace('TAX_', '')}%
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <ErliChoice name="erliResponsibleProducerId" label={t('Responsible producer (GPSR)')} selected={s.erliResponsibleProducerId} items={s.erliOptions?.responsibleProducers} optional hint={t('Add producers in Erli (Ustawienia sklepu → GPSR) and load the choices again.')} />
+                  <ErliChoice name="erliResponsiblePersonId" label={t('Responsible person (GPSR)')} selected={s.erliResponsiblePersonId} items={s.erliOptions?.responsiblePersons} optional hint={t('Add persons in Erli (Ustawienia sklepu → GPSR) and load the choices again.')} />
+                  <Field label={t('Responsible producer per product: Shopify metafield')} hint={t('Optional. A text metafield with the producer’s name exactly as in Erli; empty products get the producer above.')}>
+                    <Input name="erliResponsibleProducerMetafield" defaultValue={s.erliResponsibleProducerMetafield ?? ''} placeholder="custom.responsible_producer" />
+                  </Field>
+                  <Field label={t('Responsible person per product: Shopify metafield')} hint={t('Optional. A text metafield with the person’s name exactly as in Erli; empty products get the person above.')}>
+                    <Input name="erliResponsiblePersonMetafield" defaultValue={s.erliResponsiblePersonMetafield ?? ''} placeholder="custom.responsible_person" />
+                  </Field>
+                </div>
+                <Checkbox name="erliCreateInactive" label={t('Create products as inactive, to check them in Erli first')} defaultChecked={s.erliCreateInactive ?? false} />
+              </fieldset>
+            )}
+
             {mirakl && (
               <fieldset className="space-y-3">
                 <legend className="mb-1 text-sm font-semibold">{t('{platform} Marketplace connection', { platform: label })}</legend>
@@ -449,7 +511,12 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
               <SubmitButton variant="secondary">{t('Load choices from Allegro')}</SubmitButton>
             </ActionForm>
           )}
-          {(type === 'allegro' || mirakl) && (
+          {type === 'erli' && (
+            <ActionForm action={loadErliOptionsAction.bind(null, account.id)}>
+              <SubmitButton variant="secondary">{t('Load choices from Erli')}</SubmitButton>
+            </ActionForm>
+          )}
+          {(type === 'allegro' || type === 'erli' || mirakl) && (
             <Link href={`/inventory/publish/${account.id}`} className={buttonClass('secondary')}>
               {t('Publish products to {platform}', { platform: label })}
             </Link>
@@ -519,11 +586,13 @@ async function HistoryAndFees({ account }: { account: MarketplaceAccount }) {
           )}
         </div>
 
-        {account.type === 'allegro' && (
+        {(account.type === 'allegro' || account.type === 'erli') && (
           <div className="space-y-2 border-t border-slate-100 pt-4">
-            <p className="text-sm font-semibold">{t('Allegro fees and refunds')}</p>
+            <p className="text-sm font-semibold">{account.type === 'erli' ? t('Erli fees') : t('Allegro fees and refunds')}</p>
             <p className="text-xs text-slate-500">
-              {t('Commission, Smart delivery and promotion charges are read from Allegro billing every two hours, and payment refunds with them. The Allegro app needs the “Billing (read)” and “Payments (read)” permissions; after enabling them press “Connect Allegro” again.')}
+              {account.type === 'erli'
+                ? t('Commission and delivery charges are read from Erli billing every two hours. The API key needs the finance permission.')
+                : t('Commission, Smart delivery and promotion charges are read from Allegro billing every two hours, and payment refunds with them. The Allegro app needs the “Billing (read)” and “Payments (read)” permissions; after enabling them press “Connect Allegro” again.')}
             </p>
             <p className="text-sm">
               {account.feesSyncedAt ? (

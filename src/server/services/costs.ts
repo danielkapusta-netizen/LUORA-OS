@@ -17,8 +17,8 @@ import { msg } from '@/lib/i18n/msg';
 // ---------------------------------------------------------------- settings
 
 export const DEFAULT_ANALYTICS_SETTINGS: Required<AnalyticsSettings> = {
-  fallbackCommission: { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1, hebe: 0.12 },
-  sellerShipping: { allegro: 11, empik: 12.5, shopify: 12.5, vonhalsky: 12.5, hebe: 9 },
+  fallbackCommission: { allegro: 0.12, empik: 0.15, shopify: 0.02, vonhalsky: 0.1, hebe: 0.12, erli: 0.1 },
+  sellerShipping: { allegro: 11, empik: 12.5, shopify: 12.5, vonhalsky: 12.5, hebe: 9, erli: 11 },
   labelCosts: { inpost_locker_standard: 12.5, inpost_courier_standard: 15.5, allegro_shipping: 11 },
   defaultLabelCost: 12.5,
   packagingCost: 1.5,

@@ -2,7 +2,7 @@
 
 Marketplace research recommendations: see [API contract and deployment steps](docs/pricing-research.md). ChatGPT Work can also read the catalogue and import recommendations over MCP with OAuth: see [docs/pricing-mcp.md](docs/pricing-mcp.md).
 
-One place for every order from **Shopify, Allegro, Empik and HEBE**, with shipping labels bought
+One place for every order from **Shopify, Allegro, Empik, HEBE and Erli**, with shipping labels bought
 through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
 
 - **Orders:** every marketplace in one list, synced every few minutes. You can filter, search, assign orders, tag them and add notes.
@@ -11,7 +11,7 @@ through **InPost** and **Allegro Delivery (Wysyłam z Allegro)**.
   - Staff can override the carrier, service and parcel on any order.
   - Labels come as PDF or ZPL, in A6 or A4.
 - **Bulk labels:** select many orders, create all their labels at once, then print them as one PDF.
-- **Tracking writeback:** the tracking number goes back to the marketplace and the order is marked shipped. Shopify creates a fulfilment, Allegro gets the waybill and `SENT`, and Empik and HEBE get tracking plus a shipment confirmation.
+- **Tracking writeback:** the tracking number goes back to the marketplace and the order is marked shipped. Shopify creates a fulfilment, Allegro gets the waybill and `SENT`, Empik and HEBE get tracking plus a shipment confirmation, and Erli gets an external parcel with the tracking number and the order status `sent`.
 - **Workflow:** `new → processing → shipped → delivered`, plus on hold and cancelled, with a full activity log on every order.
   - Creating a label does **not** move the order: it stays on the tab it is on (usually New) with a "Label ready" chip, until someone presses **Packed**. Then it moves to Shipped (once the tracking has reached the marketplace).
   - The **Label created** tab lists the orders that have a label but are not packed yet. Unticking Packed puts a shipped order back on New.
@@ -102,6 +102,7 @@ curl -X POST https://<your-app>/api/admin/seed   # first run only: creates the a
 | **Allegro** | Client ID, Client secret | [apps.developer.allegro.pl](https://apps.developer.allegro.pl) (or the sandbox). Set the redirect URI to `APP_URL/api/oauth/allegro/callback`, save the account, then press **Connect Allegro**. For fees and refunds in analytics the app also needs the **Billing (read)** and **Payments (read)** permissions; after enabling them press **Connect Allegro** again. |
 | **Empik** | Marketplace URL, API key | Empik seller panel → My account → API key (Empik runs on Mirakl). |
 | **HEBE** | Marketplace URL, API key | HEBE seller panel (Mirakl) → your user menu → API key. The Marketplace URL is the seller panel's address, without `/api`; HEBE gives it with the seller account. |
+| **Erli** | API key | Erli seller panel → Metoda integracji → Własna integracja po API. Give the key the `order`, `product` and `finance:read` permissions; Erli shows it only once. |
 | **InPost** | API token, Organization ID | InPost Manager Paczek → My account → API (ShipX). A sandbox is available. |
 | **Allegro Delivery** | A connected Allegro account, an IBAN for cash on delivery | No extra keys: it uses the Allegro account's connection. |
 
@@ -155,12 +156,19 @@ What the team has to do, who is on it and when (`/tasks`, in the sidebar with a 
 
 Dates are plain Warsaw days (`YYYY-MM-DD`) and times (`HH:MM`), so the calendar needs no time-zone arithmetic. The code is in `services/tasks.ts` (database), `src/lib/tasks/` (dates, colours, grouping and figures, with no database) and `src/components/tasks/`.
 
-## Publishing products to Allegro, Empik and HEBE
+## Publishing products to Allegro, Empik, HEBE and Erli
 
 Inventory → **Publish to Allegro / Empik / HEBE** (admins) lists the Shopify products that have no offer in that account yet, and creates offers for the ones you tick (25 at a time). Only products the marketplace's catalogue already knows by EAN can be listed; others show "Not in the catalogue". Price = Shopify price + the account's markup % (Settings → Integrations → the account → "Offers created from Shopify"), stock = the master stock; once the offer exists the normal stock sync takes over.
 
 - **Allegro:** the Allegro app needs the permissions "Offers: read and write" and "Seller settings: read" (reconnect Allegro after enabling them). In the account settings press "Load choices from Allegro", then pick the shipping rates, return policy and implied warranty, and fill in where the goods are sent from. Offers are published at once unless "create as drafts" is ticked.
 - **Empik and HEBE:** offers are sent with an OF01 import for the EAN; the offer state code defaults to 11 (new).
+- **Erli:** Erli has no catalogue, so every product is created there (`POST /products/{sku}`, or the EAN when there is no SKU). Each product gets:
+  - the Shopify title, description, photos and EAN;
+  - the price in grosze;
+  - the Allegro category, from the Allegro catalogue product with the same EAN, else the category saved for the product type on Publish → Allegro, else Allegro's suggestion;
+  - Allegro's parameters as `externalAttributes`.
+
+  Without an Allegro account, the Shopify product type is sent for Erli's category recognition. The delivery price list, VAT rate, GPSR responsible person and producer, and "create as inactive" are set on the account. Erli processes new products asynchronously, taking up to 20 minutes.
 - **Extra fields on HEBE / Empik offers (e.g. HEBE's "responsible person"):** Mirakl marketplaces can require extra fields on every offer. In the account settings press **Load … offer fields**: the app reads them from Mirakl (AF01, cached for a day) and lists them under "Extra offer fields". For each one, give the Shopify **product metafield** it is read from (`namespace.key`, e.g. `custom.responsible_person`; create it in Shopify under Settings → Custom data → Products, as single-line text) and, optionally, a fixed text for products that have none. A product with no value for a required field shows "no …" on the Publish page and is not sent. The values go into the OF01 file as columns named by the field's code.
 
 ## Purchase invoices
@@ -217,6 +225,7 @@ Why each API endpoint was chosen:
 |---|---|
 | **Allegro** | `/order/events` journal plus `/order/checkout-forms`; `/shipment-management/*` for labels |
 | **Empik and HEBE (Mirakl)** | One adapter for both (`marketplaces/mirakl/`), with each marketplace's names in `empik/` and `hebe/`. OR11 (orders), OR21 (accept), OR23 + OR24 (tracking and shipment), OR74 (invoices), SH21 (carriers). Stock uses the **STO01** CSV import, not OF24, because OF24 resets every offer field you don't send. Empik publishes its carrier codes; HEBE doesn't, so its carriers are always looked up in its SH21 list. |
+| **Erli** | `marketplaces/erli/`, Shop API (`https://erli.pl/svc/shop-api`, Bearer key, amounts in grosze). Orders come from `POST /orders/_search` on the first sync, then the change feed `POST /orders/changes/_search`; messages are marked read at the start of the next sync, after the orders are stored. Tracking is sent with `POST /shipping/external`, then `PATCH /orders/{id}/status` `sent`. Stock and prices go through `PATCH /products/batch-update`, and fees come from `POST /billing/company/entries`. Erli lowers stock itself on a sale but does not restore it on cancellation; the stock sync covers both. |
 | **InPost ShipX** | `POST /v1/organizations/{id}/shipments`, polled until `confirmed`. InPost is moving merchants to its new Global API; that would be one more adapter behind the same interface. |
 
 ## Testing

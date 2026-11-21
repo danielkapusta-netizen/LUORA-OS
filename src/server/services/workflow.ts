@@ -105,7 +105,7 @@ export async function changeStatus(
   if (order.status === 'cancelled' && !order.stockApplied && !order.historical) {
     if (await applyOrderStock(db, orderId)) await scheduleStockPush();
   }
-  if (to === 'processing' && order.marketplace === 'allegro' && !order.historical) {
+  if (to === 'processing' && (order.marketplace === 'allegro' || order.marketplace === 'erli') && !order.historical) {
     await enqueue(JOBS.marketplaceProcessing, { orderId });
   }
   // Past orders (history import) were invoiced, or not, before Luora.

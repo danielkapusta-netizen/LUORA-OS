@@ -98,6 +98,25 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     log.mockRestore();
   });
 
+  it('creates Erli products with the Allegro category of the same product', async () => {
+    const db = m.db.getDb();
+    const [erli] = await db.insert(m.schema.marketplaceAccounts).values({ type: 'erli', name: 'Erli (demo)', settings: { demo: true, offerMarkupPercent: 5 } }).returning();
+    await db.insert(m.schema.products).values({ sku: 'NEW-E', name: 'Luora new cream E', ean: '5900000000040', stock: 6, imageUrl: 'https://img/e.jpg', shopifyVariantId: 'gid://shopify/ProductVariant/9005' });
+    const preview = await m.offers.publishPreview(erli.id);
+    const row = preview.rows.find((r) => r.sku === 'NEW-E')!;
+    // Erli has no catalogue; the category comes from the Allegro catalogue product with the same EAN.
+    expect(row).toMatchObject({ catalogue: null, problems: [], allegro: { title: 'Luora new cream E', erliCategory: { source: 'catalogue' } } });
+    expect(row.allegro!.erliCategory!.attributes).toBeGreaterThan(0);
+    // A product without a photo can't be created on Erli.
+    expect(preview.rows.find((r) => r.sku === 'NEW-A')!.problems).toContain('no photo');
+    const product = (await db.select().from(m.schema.products).where(m.orm.eq(m.schema.products.sku, 'NEW-E')))[0];
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const result = await m.offers.publishOffers(erli.id, [product.id]);
+    expect(result.created).toEqual(['Luora new cream E']);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('[mock erli] create offer NEW-E'));
+    log.mockRestore();
+  });
+
   it('uses the barcode as the offer SKU when Shopify has none, and does not offer the product twice', async () => {
     const db = m.db.getDb();
     await db.insert(m.schema.products).values({ sku: 'shopify:777', name: 'No SKU cream', ean: '5900000000020', stock: 2, shopifyVariantId: 'gid://shopify/ProductVariant/777' });
@@ -119,9 +138,9 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     await expect(m.offers.publishOffers(empikId, Array.from({ length: 26 }, (_, i) => String(i)))).rejects.toThrow('at most 25');
   });
 
-  it('only works for Allegro, Empik and HEBE accounts', async () => {
+  it('only works for Allegro, Empik, HEBE and Erli accounts', async () => {
     const shopify = (await m.db.getDb().select().from(m.schema.marketplaceAccounts)).find((a) => a.type === 'shopify')!;
-    await expect(m.offers.publishPreview(shopify.id)).rejects.toThrow('Allegro, Empik and HEBE accounts');
+    await expect(m.offers.publishPreview(shopify.id)).rejects.toThrow('Allegro, Empik, HEBE and Erli accounts');
     expect(allegroId).toBeTruthy();
   });
 });

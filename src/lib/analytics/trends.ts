@@ -91,6 +91,7 @@ export interface ChannelDailyPoint {
   empik: number
   vonhalsky: number
   hebe: number
+  erli: number
 }
 
 /** Daily revenue split by channel, for the marketplace comparison chart. */
@@ -102,7 +103,7 @@ export function buildChannelDaily(
   for (const order of orders) {
     if (!order.date) continue
     const key = order.date.toISOString().slice(0, 10)
-    const bucket = buckets.get(key) ?? { shopify: 0, allegro: 0, empik: 0, vonhalsky: 0, hebe: 0 }
+    const bucket = buckets.get(key) ?? { shopify: 0, allegro: 0, empik: 0, vonhalsky: 0, hebe: 0, erli: 0 }
     bucket[order.source] = (bucket[order.source] ?? 0) + order.revenuePLN
     buckets.set(key, bucket)
   }
@@ -115,6 +116,7 @@ export function buildChannelDaily(
     empik: buckets.get(point.date)?.empik ?? 0,
     vonhalsky: buckets.get(point.date)?.vonhalsky ?? 0,
     hebe: buckets.get(point.date)?.hebe ?? 0,
+    erli: buckets.get(point.date)?.erli ?? 0,
   }))
 }
 

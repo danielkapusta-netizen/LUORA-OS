@@ -17,7 +17,7 @@ const updatedAt = () =>
     .$onUpdate(() => new Date());
 
 export const userRoleValues = ['admin', 'logistics', 'marketing'] as const;
-export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe'] as const;
+export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe', 'erli'] as const;
 export const carrierTypeValues = ['inpost', 'allegro_shipping'] as const;
 export const orderStatusValues = [
   'new',
@@ -37,7 +37,7 @@ export const invoiceStateValues = ['pending', 'issued', 'failed', 'manual', 'ext
 export const invoiceKindValues = ['domestic', 'oss'] as const;
 export const historyStateValues = ['idle', 'running', 'done', 'error'] as const;
 export const feeKindValues = ['commission', 'promotion', 'delivery', 'payment', 'other'] as const;
-export const feeSourceValues = ['allegro_billing', 'mirakl', 'shopify_payments', 'mock'] as const;
+export const feeSourceValues = ['allegro_billing', 'erli_billing', 'mirakl', 'shopify_payments', 'mock'] as const;
 
 // ---------------------------------------------------------------- users
 
@@ -144,6 +144,25 @@ export interface MarketplaceSettings {
     warranties: { id: string; name: string }[];
     responsibleProducers?: { id: string; name: string }[];
     responsiblePersons?: { id: string; name: string }[];
+  };
+  /** Erli: the delivery price list new products use (by name; "*" is Erli's default). */
+  erliPriceList?: string;
+  /** Erli: VAT rate code of new products, e.g. "TAX_23" (Erli's category default when unset). */
+  erliTaxRate?: string;
+  /** Erli: create new products inactive, to check them in Erli's panel first. */
+  erliCreateInactive?: boolean;
+  /** Erli: default GPSR responsible person and producer (ids from Erli's dictionaries). */
+  erliResponsiblePersonId?: string;
+  erliResponsibleProducerId?: string;
+  /** Erli: Shopify metafields naming each product's responsible person and producer, matched by name. */
+  erliResponsiblePersonMetafield?: string;
+  erliResponsibleProducerMetafield?: string;
+  /** Erli: price lists and GPSR entities read from Erli, cached. */
+  erliOptions?: {
+    fetchedAt: string;
+    priceLists: { id: string; name: string }[];
+    responsiblePersons: { id: string; name: string }[];
+    responsibleProducers: { id: string; name: string }[];
   };
   /** Empik and HEBE (Mirakl): offer state code of new offers (Mirakl "new"). The name predates HEBE. */
   empikOfferState?: string;
@@ -382,7 +401,7 @@ export const packagePresets = sqliteTable('package_presets', {
 });
 
 export interface RuleConditions {
-  marketplaces?: ('shopify' | 'allegro' | 'empik' | 'vonhalsky' | 'hebe')[];
+  marketplaces?: ('shopify' | 'allegro' | 'empik' | 'vonhalsky' | 'hebe' | 'erli')[];
   /** Case-insensitive substring of the buyer's delivery method name. */
   deliveryMethodContains?: string;
   hasPickupPoint?: boolean;
@@ -943,7 +962,7 @@ export const customers = sqliteTable(
   (t) => [index('customers_last_order_idx').on(t.lastOrderAt), index('customers_email_idx').on(t.email)],
 );
 
-export const customerIdentityKinds = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe', 'email'] as const;
+export const customerIdentityKinds = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe', 'erli', 'email'] as const;
 
 /** Keys a customer is recognised by: a marketplace buyer id, or a real e-mail. */
 export const customerIdentities = sqliteTable(
