@@ -107,6 +107,9 @@ export interface OfferDraft {
   currency: string;
   /** Extra fields the marketplace requires on its offers (Mirakl additional fields), by field code. */
   extraFields?: Record<string, string>;
+  /** Allegro: the responsible person and producer (GPSR) chosen for this product; the account defaults when unset. */
+  responsiblePersonId?: string;
+  responsibleProducerId?: string;
 }
 
 /** The marketplace's own catalogue product for an EAN: offers are attached to it. */

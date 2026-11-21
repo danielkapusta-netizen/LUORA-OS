@@ -19,8 +19,8 @@ export const ALLEGRO_REDIRECT_PATH = '/api/oauth/allegro/callback';
 
 export function allegroHosts(sandbox?: boolean) {
   return sandbox
-    ? { api: 'https://api.allegro.pl.allegrosandbox.pl', auth: 'https://allegro.pl.allegrosandbox.pl' }
-    : { api: 'https://api.allegro.pl', auth: 'https://allegro.pl' };
+    ? { api: 'https://api.allegro.pl.allegrosandbox.pl', auth: 'https://allegro.pl.allegrosandbox.pl', upload: 'https://upload.allegro.pl.allegrosandbox.pl' }
+    : { api: 'https://api.allegro.pl', auth: 'https://allegro.pl', upload: 'https://upload.allegro.pl' };
 }
 
 export function allegroAuthorizeUrl(creds: Pick<AllegroCredentials, 'clientId' | 'sandbox'>, redirectUri: string, state: string) {
@@ -113,6 +113,11 @@ export class AllegroClient {
     return allegroHosts(this.creds.get().sandbox).api;
   }
 
+  /** Photos are uploaded to a host of their own. */
+  get uploadBase(): string {
+    return allegroHosts(this.creds.get().sandbox).upload;
+  }
+
   /** Access tokens live 12 hours; refresh tokens rotate on every refresh. */
   async accessToken(forceRefresh = false): Promise<string> {
     const c = this.creds.get();
@@ -129,7 +134,8 @@ export class AllegroClient {
     for (;;) {
       const token = await this.accessToken();
       try {
-        const { data } = await request<T>(`${this.apiBase}${path}`, {
+        // A full URL is called as given (the upload host); a path goes to the API host.
+        const { data } = await request<T>(path.startsWith('https://') ? path : `${this.apiBase}${path}`, {
           ...options,
           method,
           headers: {

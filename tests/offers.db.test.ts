@@ -45,8 +45,8 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     const db = m.db.getDb();
     // Two products that only exist in Shopify: one the demo catalogue knows (even last digit), one it doesn't.
     await db.insert(m.schema.products).values([
-      { sku: 'NEW-A', name: 'New cream A', ean: '5900000000010', stock: 5, shopifyVariantId: 'gid://shopify/ProductVariant/9001' },
-      { sku: 'NEW-B', name: 'New cream B', ean: '5900000000011', stock: 3, shopifyVariantId: 'gid://shopify/ProductVariant/9002' },
+      { sku: 'NEW-A', name: 'Luora new cream A', ean: '5900000000010', stock: 5, shopifyVariantId: 'gid://shopify/ProductVariant/9001' },
+      { sku: 'NEW-B', name: 'Luora new cream B', ean: '5900000000011', stock: 3, shopifyVariantId: 'gid://shopify/ProductVariant/9002' },
       { sku: 'NEW-C', name: 'No barcode', ean: null, stock: 1, shopifyVariantId: 'gid://shopify/ProductVariant/9003' },
     ]);
     await db
@@ -70,11 +70,11 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     const ids = (await m.db.getDb().select().from(m.schema.products).where(m.orm.inArray(m.schema.products.sku, ['NEW-A', 'NEW-B']))).map((p) => p.id);
     // Allegro skips the product its catalogue doesn't know.
     const allegro = await m.offers.publishOffers(allegroId, ids);
-    expect(allegro.created).toEqual(['New cream A']);
-    expect(allegro.failed).toEqual([{ name: 'New cream B', error: 'not ready: not in the catalogue' }]);
+    expect(allegro.created).toEqual(['Luora new cream A']);
+    expect(allegro.failed).toEqual([{ name: 'Luora new cream B', error: 'not ready: not in the catalogue' }]);
     // Empik is asked to take both; it is Empik's import that would refuse a product it doesn't know.
     const empik = await m.offers.publishOffers(empikId, ids);
-    expect(empik.created.sort()).toEqual(['New cream A', 'New cream B']);
+    expect(empik.created.sort()).toEqual(['Luora new cream A', 'Luora new cream B']);
     expect(empik.failed).toEqual([]);
   });
 
