@@ -117,6 +117,12 @@ export interface MarketplaceSettings {
   allegroWarrantyId?: string;
   allegroResponsibleProducerId?: string;
   allegroResponsiblePersonId?: string;
+  /**
+   * Allegro: Shopify product metafields ("namespace.key") naming each product's responsible person and producer
+   * (GPSR), matched by name to those set up on Allegro; products where it is empty get the defaults above.
+   */
+  allegroResponsiblePersonMetafield?: string;
+  allegroResponsibleProducerMetafield?: string;
   /** Allegro: the safety information (GPSR) shown on every new offer. */
   allegroSafetyText?: string;
   allegroLocation?: { province: string; city: string; postCode: string };

@@ -243,6 +243,9 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   items={s.allegroOptions?.responsibleProducers}
                   hint={t('Required by Allegro on every offer. If the list is empty, add the producer first in Allegro (My Allegro → Product safety) and load the choices again.')}
                 />
+                <Field label={t('Responsible producer per product: Shopify metafield')} hint={t('Optional. namespace.key of a text metafield holding the producer’s name exactly as in Allegro. Products where it is empty get the producer chosen above.')}>
+                  <Input name="allegroResponsibleProducerMetafield" defaultValue={s.allegroResponsibleProducerMetafield ?? ''} placeholder="custom.responsible_producer" />
+                </Field>
                 <AllegroChoice
                   name="allegroResponsiblePersonId"
                   label={t('Responsible person (GPSR)')}
@@ -250,6 +253,9 @@ export default async function MarketplaceAccountPage({ params, searchParams }: {
                   items={s.allegroOptions?.responsiblePersons}
                   hint={t('Required by Allegro on every offer. If the list is empty, add the person first in Allegro (My Allegro → Product safety) and load the choices again.')}
                 />
+                <Field label={t('Responsible person per product: Shopify metafield')} hint={t('Optional. namespace.key of a text metafield holding the person’s name exactly as in Allegro. Products where it is empty get the person chosen above.')}>
+                  <Input name="allegroResponsiblePersonMetafield" defaultValue={s.allegroResponsiblePersonMetafield ?? ''} placeholder="custom.responsible_person" />
+                </Field>
                 <Field label={t('Safety information shown on every offer')} hint={t('Allegro refuses offers without it. Leave blank for a standard cosmetics text.')}>
                   <Textarea name="allegroSafetyText" rows={3} defaultValue={s.allegroSafetyText ?? ''} placeholder={DEFAULT_SAFETY_TEXT} />
                 </Field>

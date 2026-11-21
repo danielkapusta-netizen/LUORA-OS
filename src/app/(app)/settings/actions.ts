@@ -78,6 +78,8 @@ export async function saveMarketplaceAction(id: string | null, _prev: ActionResu
     settings.allegroWarrantyId = text(fd, 'allegroWarrantyId') || undefined;
     settings.allegroResponsibleProducerId = text(fd, 'allegroResponsibleProducerId') || undefined;
     settings.allegroResponsiblePersonId = text(fd, 'allegroResponsiblePersonId') || undefined;
+    settings.allegroResponsibleProducerMetafield = text(fd, 'allegroResponsibleProducerMetafield') || undefined;
+    settings.allegroResponsiblePersonMetafield = text(fd, 'allegroResponsiblePersonMetafield') || undefined;
     settings.allegroSafetyText = text(fd, 'allegroSafetyText') || undefined;
     settings.allegroCreateAsDraft = bool(fd, 'allegroCreateAsDraft');
     settings.allegroLocation = { province: text(fd, 'allegroProvince'), city: text(fd, 'allegroCity'), postCode: text(fd, 'allegroPostCode') };

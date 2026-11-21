@@ -178,4 +178,8 @@ export const settings_b: Record<string, string> = {
   "Set": "Ustaw",
   "Team": "Zespół",
   "What each role can see is shown below. Admins also manage integrations, rules and users.": "Poniżej widać, co może zobaczyć każda rola. Administratorzy zarządzają też integracjami, regułami i użytkownikami.",
+  "Responsible producer per product: Shopify metafield": "Producent odpowiedzialny dla produktu: metapole Shopify",
+  "Optional. namespace.key of a text metafield holding the producer’s name exactly as in Allegro. Products where it is empty get the producer chosen above.": "Opcjonalne. namespace.key tekstowego metapola z nazwą producenta dokładnie taką jak w Allegro. Produkty, w których jest puste, dostają producenta wybranego powyżej.",
+  "Responsible person per product: Shopify metafield": "Osoba odpowiedzialna dla produktu: metapole Shopify",
+  "Optional. namespace.key of a text metafield holding the person’s name exactly as in Allegro. Products where it is empty get the person chosen above.": "Opcjonalne. namespace.key tekstowego metapola z nazwą osoby dokładnie taką jak w Allegro. Produkty, w których jest puste, dostają osobę wybraną powyżej.",
 };

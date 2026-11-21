@@ -4,6 +4,7 @@ import type { CredentialsStore, FeeKind, Listing, NormalizedOrder, OrderRef, Pri
 import { invoiceFileName, type CatalogueMatch, type ExternalFee, type ExternalRefund, type FeeFeed, type MarketplaceAdapter, type OfferDraft, type OfferPublisher, type SyncResult } from '../types';
 import { AllegroApiError, AllegroClient, describeAllegroErrors, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
+import { allegroDescription, allegroTitle } from './offer-content';
 import { msg } from '@/lib/i18n/msg';
 
 interface OrderEvent {
@@ -475,19 +476,57 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
     return out;
   }
 
+  /**
+   * Copies Shopify's photos to Allegro (Allegro downloads each from its URL). A photo Allegro refuses is left out and
+   * named; a rejected login or a rate limit stops the whole offer.
+   */
+  async uploadImages(urls: string[]): Promise<{ locations: string[]; refused: string[] }> {
+    const locations: (string | null)[] = new Array(urls.length).fill(null);
+    const refused: string[] = [];
+    for (let i = 0; i < urls.length; i += 4) {
+      await Promise.all(
+        urls.slice(i, i + 4).map(async (url, j) => {
+          try {
+            const uploaded = await this.client.call<{ location?: string }>('POST', `${this.client.uploadBase}/sale/images`, { body: { url } });
+            if (uploaded.location) locations[i + j] = uploaded.location;
+            else refused.push(url);
+          } catch (err) {
+            if (!(err instanceof AllegroApiError) || err.status === 401 || err.status === 403 || err.status === 429) throw err;
+            refused.push(url);
+          }
+        }),
+      );
+    }
+    return { locations: locations.filter((l): l is string => Boolean(l)), refused };
+  }
+
+  /**
+   * Creates the offer on the catalogue product, with the Shopify title (fitted to Allegro's limits), description and
+   * photos in place of the catalogue's, and the product's own responsible person and producer.
+   */
   async createOffer(draft: OfferDraft, match: CatalogueMatch): Promise<{ externalId?: string; note?: string }> {
     const s = this.settings;
     if (!match.ref) throw new Error(msg('not in the Allegro catalogue'));
+    const title = allegroTitle(draft.name);
+    if (!title.ok) throw new Error(title.problem);
+    const description = allegroDescription(draft.descriptionHtml);
+    const photos = draft.imageUrls.length ? await this.uploadImages(draft.imageUrls.slice(0, 16)) : { locations: [], refused: [] };
+    const notes: string[] = [];
+    if (photos.refused.length) notes.push(`Allegro refused ${photos.refused.length} photo(s), sent without them`);
+    if (draft.imageUrls.length && !photos.locations.length) notes.push('no photo was accepted, the catalogue photos are shown');
     const created = await this.client.call<{ id: string }>('POST', '/sale/product-offers', {
       body: {
+        name: title.title,
         productSet: [
           {
             product: { id: match.ref },
-            responsibleProducer: { type: 'ID', id: s.allegroResponsibleProducerId },
-            responsiblePerson: { id: s.allegroResponsiblePersonId },
+            responsibleProducer: { type: 'ID', id: draft.responsibleProducerId || s.allegroResponsibleProducerId },
+            responsiblePerson: { id: draft.responsiblePersonId || s.allegroResponsiblePersonId },
             safetyInformation: { type: 'TEXT', description: s.allegroSafetyText?.trim() || DEFAULT_SAFETY_TEXT },
           },
         ],
+        ...(description ? { description } : {}),
+        ...(photos.locations.length ? { images: photos.locations } : {}),
         sellingMode: { format: 'BUY_NOW', price: { amount: draft.price, currency: draft.currency } },
         stock: { available: Math.max(0, draft.quantity), unit: 'UNIT' },
         external: { id: draft.sku },
@@ -515,9 +554,9 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
         const text = describeAllegroErrors(errors);
         throw new Error(`Allegro created the offer but reports: ${text}`);
       }
-      if (offer.publication?.status) return { externalId: created.id };
+      if (offer.publication?.status) return { externalId: created.id, ...(notes.length ? { note: notes.join('; ') } : {}) };
     }
-    return { externalId: created.id, note: 'Allegro is still checking the offer' };
+    return { externalId: created.id, note: ['Allegro is still checking the offer', ...notes].join('; ') };
   }
 
   /** The choices every new offer needs, for the settings page (needs the settings read scope). */

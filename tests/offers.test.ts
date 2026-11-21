@@ -23,8 +23,8 @@ afterAll(() => server.close());
 const draft: OfferDraft = {
   sku: 'LUO-1',
   ean: '5901234567890',
-  name: 'Cream',
-  descriptionHtml: '<p>x</p>',
+  name: 'Luora Night Cream 50 ml',
+  descriptionHtml: '<p>Rich <strong>night</strong> cream</p>',
   brand: 'Luora',
   imageUrls: ['https://img/1.jpg'],
   weightGrams: 120,
@@ -66,6 +66,19 @@ describe('Allegro offers', () => {
     allegroLocation: { province: 'MAZOWIECKIE', city: 'Warszawa', postCode: '00-001' },
     offerHandlingDays: 2,
   };
+  const UPLOAD = 'https://upload.allegro.pl.allegrosandbox.pl';
+  let uploaded: string[] = [];
+  beforeEach(() => {
+    uploaded = [];
+    server.use(
+      http.post(`${UPLOAD}/sale/images`, async ({ request }) => {
+        const { url } = (await request.json()) as { url: string };
+        uploaded.push(url);
+        if (url.includes('broken')) return HttpResponse.json({ errors: [{ userMessage: 'Nie udało się pobrać zdjęcia' }] }, { status: 422 });
+        return HttpResponse.json({ location: `https://a.allegroimg.com/original/${url.split('/').pop()}`, expiresAt: '2026-12-01T00:00:00Z' }, { status: 201 });
+      }),
+    );
+  });
 
   it('maps handling days onto the durations Allegro accepts', () => {
     expect([0, 1, 2, 3, 6, 100].map(allegroHandlingTime)).toEqual(['PT0S', 'PT24H', 'PT48H', 'P3D', 'P7D', 'P60D']);
@@ -100,7 +113,11 @@ describe('Allegro offers', () => {
     );
     const result = await new AllegroAdapter(creds(), settings).createOffer(draft, { found: true, ref: 'prod-9' });
     expect(result).toEqual({ externalId: 'offer-1' });
+    expect(uploaded).toEqual(['https://img/1.jpg']);
     expect(body).toMatchObject({
+      name: 'Luora Night Cream 50 ml',
+      description: { sections: [{ items: [{ type: 'TEXT', content: '<p>Rich <b>night</b> cream</p>' }] }] },
+      images: ['https://a.allegroimg.com/original/1.jpg'],
       productSet: [{ product: { id: 'prod-9' }, responsibleProducer: { type: 'ID', id: 'prod-resp-1' }, responsiblePerson: { id: 'pers-1' }, safetyInformation: { type: 'TEXT', description: expect.stringContaining('Produkt kosmetyczny') } }],
       sellingMode: { format: 'BUY_NOW', price: { amount: '49.99', currency: 'PLN' } },
       stock: { available: 7, unit: 'UNIT' },
@@ -123,6 +140,28 @@ describe('Allegro offers', () => {
     );
     await expect(new AllegroAdapter(creds(), { ...settings, allegroCreateAsDraft: true }).createOffer(draft, { found: true, ref: 'p' })).rejects.toThrow('parameters: Brakuje parametru');
     expect(status).toBe('INACTIVE');
+  });
+
+  it('uses the product’s own responsible person and producer, skips refused photos and shortens long titles', async () => {
+    let body: { name?: string; images?: string[]; productSet?: { responsiblePerson: { id: string }; responsibleProducer: { id: string } }[] } = {};
+    server.use(
+      http.post(`${API}/sale/product-offers`, async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({ id: 'offer-3' }, { status: 201 });
+      }),
+      http.get(`${API}/sale/product-offers/offer-3`, () => HttpResponse.json({ validation: { errors: [] }, publication: { status: 'ACTIVE' } })),
+    );
+    const long = { ...draft, name: 'Luora Regenerating Night Cream with Hyaluronic Acid and Ceramides for Dry Skin 50 ml', imageUrls: ['https://img/a.jpg', 'https://img/broken.jpg', 'https://img/b.jpg'], responsiblePersonId: 'pers-9', responsibleProducerId: 'prod-9' };
+    const result = await new AllegroAdapter(creds(), settings).createOffer(long, { found: true, ref: 'prod-9' });
+    expect(result.note).toContain('refused 1 photo');
+    expect(body.images).toEqual(['https://a.allegroimg.com/original/a.jpg', 'https://a.allegroimg.com/original/b.jpg']);
+    expect(body.name).toBe('Luora Regenerating Night Cream with Hyaluronic Acid and Ceramides for Dry');
+    expect(body.productSet?.[0]).toMatchObject({ responsiblePerson: { id: 'pers-9' }, responsibleProducer: { id: 'prod-9' } });
+  });
+
+  it('refuses a title Allegro would not accept, before sending anything', async () => {
+    await expect(new AllegroAdapter(creds(), settings).createOffer({ ...draft, name: 'Cream' }, { found: true, ref: 'p' })).rejects.toThrow('title too short');
+    expect(uploaded).toEqual([]);
   });
 
   it('refuses without a catalogue product', async () => {

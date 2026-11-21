@@ -12,6 +12,7 @@ import { isOfferPublisher, type CatalogueMatch, type OfferDraft, type OfferPubli
 import { MOCK_CATALOG } from '../integrations/marketplaces/mock/adapter';
 import { AllegroAdapter } from '../integrations/marketplaces/allegro/adapter';
 import { offerFieldMetafieldKeys, resolveOfferFields } from '../integrations/marketplaces/mirakl/offer-fields';
+import { allegroDescription, allegroTitle, gpsrChoice } from '../integrations/marketplaces/allegro/offer-content';
 import { getMarketplaceAdapter, loadMarketplaceAccount } from './accounts';
 import { importListings } from './inventory';
 import { miraklOfferFields } from './settings';
@@ -87,6 +88,56 @@ export interface PublishRow {
   stock: number;
   catalogue: CatalogueState | null;
   problems: string[];
+  /** Allegro: what the offer will show, so the preview matches what is sent. */
+  allegro?: AllegroPreview;
+}
+
+export interface AllegroPreview {
+  /** The title sent, fitted to Allegro's 75 characters. */
+  title: string;
+  shortened: boolean;
+  /** Shopify photos sent (at most 16); none means Allegro's catalogue photos. */
+  photos: number;
+  /** Whether Shopify's description is sent; otherwise Allegro's catalogue description is shown. */
+  description: boolean;
+  /** Names of the responsible person and producer, and whether they come from the product (else the account default). */
+  responsiblePerson: string | null;
+  responsibleProducer: string | null;
+  gpsrFromProduct: boolean;
+}
+
+/** The Allegro offer's content for one product, and what stops it from being sent. */
+function allegroContent(settings: MarketplaceSettings, d: ShopifyVariantDetails) {
+  const options = settings.allegroOptions;
+  const title = allegroTitle(d.title);
+  const person = gpsrChoice('responsible person', settings.allegroResponsiblePersonMetafield, d.metafields, options?.responsiblePersons, settings.allegroResponsiblePersonId);
+  const producer = gpsrChoice('responsible producer', settings.allegroResponsibleProducerMetafield, d.metafields, options?.responsibleProducers, settings.allegroResponsibleProducerId);
+  const problems = [title, person, producer].flatMap((c) => (c.ok ? [] : [c.problem]));
+  const nameOf = (list: { id: string; name: string }[] | undefined, id: string | undefined) => (id ? list?.find((o) => o.id === id)?.name ?? id : null);
+  const preview: AllegroPreview = {
+    title: title.title,
+    shortened: title.ok && title.shortened,
+    photos: Math.min(16, d.imageUrls.length),
+    description: allegroDescription(d.descriptionHtml) !== null,
+    responsiblePerson: person.ok ? nameOf(options?.responsiblePersons, person.id) : null,
+    responsibleProducer: producer.ok ? nameOf(options?.responsibleProducers, producer.id) : null,
+    gpsrFromProduct: (person.ok && person.fromProduct) || (producer.ok && producer.fromProduct),
+  };
+  return {
+    preview,
+    problems,
+    responsiblePersonId: person.ok ? person.id : undefined,
+    responsibleProducerId: producer.ok ? producer.id : undefined,
+  };
+}
+
+/** Shopify metafields the account reads per product: Mirakl's extra offer fields, Allegro's responsible person and producer. */
+function productMetafieldKeys(settings: MarketplaceSettings, marketplace: string): string[] {
+  const keys = offerFieldMetafieldKeys(settings);
+  if (marketplace === 'allegro') {
+    for (const k of [settings.allegroResponsiblePersonMetafield, settings.allegroResponsibleProducerMetafield]) if (k?.trim()) keys.push(k.trim());
+  }
+  return [...new Set(keys)];
 }
 
 export interface PublishPreview {
@@ -95,7 +146,12 @@ export interface PublishPreview {
   setupProblems: string[];
 }
 
-type Loaded = { row: PublishRow; match: CatalogueMatch | null; details: ShopifyVariantDetails | null };
+type Loaded = {
+  row: PublishRow;
+  match: CatalogueMatch | null;
+  details: ShopifyVariantDetails | null;
+  gpsr: Pick<OfferDraft, 'responsiblePersonId' | 'responsibleProducerId'>;
+};
 
 async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ rows: Loaded[]; setupProblems: string[]; settings: MarketplaceSettings }> {
   const db = getDb();
@@ -105,9 +161,18 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
   } catch (err) {
     console.warn('[offers] extra offer fields not loaded:', err instanceof Error ? err.message : err);
   }
-  const account = await loadMarketplaceAccount(accountId);
+  let account = await loadMarketplaceAccount(accountId);
   const pub = publisher(account);
   const setupProblems = pub.publishSetupProblems();
+  // Per-product responsible persons are matched to Allegro's current list, so a person just added there counts.
+  if (account.type === 'allegro' && (account.settings.allegroResponsiblePersonMetafield?.trim() || account.settings.allegroResponsibleProducerMetafield?.trim())) {
+    try {
+      const allegroOptions = await loadAllegroOptions(accountId, false, GPSR_OPTIONS_TTL_MS);
+      account = { ...account, settings: { ...account.settings, allegroOptions } };
+    } catch (err) {
+      console.warn('[offers] Allegro responsible persons not refreshed:', err instanceof Error ? err.message : err);
+    }
+  }
 
   const items = await db
     .select({ id: products.id, name: products.name, ean: products.ean, sku: products.sku, stock: products.stock, imageUrl: products.imageUrl, brand: products.brand, variantId: products.shopifyVariantId })
@@ -121,7 +186,7 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
   const missing = items.filter((p) => !linked.has(p.id) && !(p.ean && eans.has(p.ean)) && !skus.has(p.sku.toLowerCase()) && !(p.ean && skus.has(p.ean)) && (!onlyIds || onlyIds.has(p.id)));
   if (missing.length === 0) return { rows: [], setupProblems, settings: account.settings };
 
-  const details = await shopifyDetails(missing.map((p) => p.variantId!), missing, offerFieldMetafieldKeys(account.settings));
+  const details = await shopifyDetails(missing.map((p) => p.variantId!), missing, productMetafieldKeys(account.settings, account.type));
   const wanted = [...new Set(missing.map((p) => p.ean).filter((e): e is string => Boolean(e)))];
   const catalogue = wanted.length ? await pub.checkCatalogue(wanted) : new Map<string, CatalogueMatch>();
 
@@ -135,6 +200,8 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
     else if (match && !match.found && account.type === 'allegro') problems.push('not in the catalogue');
     if (d && Number(d.price) <= 0) problems.push('no price');
     if (d) problems.push(...resolveOfferFields(account.settings, d.metafields).problems);
+    const allegro = d && account.type === 'allegro' ? allegroContent(account.settings, d) : null;
+    if (allegro) problems.push(...allegro.problems);
     return {
       details: d,
       match,
@@ -150,7 +217,9 @@ async function loadRows(accountId: string, onlyIds?: Set<string>): Promise<{ row
         stock: p.stock,
         catalogue: !p.ean || !match ? null : !match.found ? 'missing' : match.unverified ? 'unverified' : 'found',
         problems,
+        ...(allegro ? { allegro: allegro.preview } : {}),
       },
+      gpsr: allegro ? { responsiblePersonId: allegro.responsiblePersonId, responsibleProducerId: allegro.responsibleProducerId } : {},
     };
   });
   return { rows, setupProblems, settings: account.settings };
@@ -178,7 +247,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
   if (setupProblems.length) throw new Error(`Finish the account settings first: ${setupProblems.join(', ')}`);
 
   const result: PublishResult = { created: [], failed: [], notes: [] };
-  for (const { row, match, details } of rows) {
+  for (const { row, match, details, gpsr } of rows) {
     if (row.problems.length || !details || !match) {
       result.failed.push({ name: row.name, error: `not ready: ${row.problems.join(', ') || 'missing data'}` });
       continue;
@@ -196,6 +265,7 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
       price: row.price!,
       currency: 'PLN',
       extraFields: resolveOfferFields(settings, details.metafields).values,
+      ...gpsr,
     };
     try {
       const done = await pub.createOffer(draft, match);
@@ -210,12 +280,14 @@ export async function publishOffers(accountId: string, productIds: string[]): Pr
 }
 
 const OPTIONS_TTL_MS = 6 * 3_600_000;
+/** How old Allegro's list of responsible persons may be when products are matched to it. */
+const GPSR_OPTIONS_TTL_MS = 10 * 60_000;
 
 /** Allegro's shipping rates, return policies and warranties to choose from, read from Allegro and cached for a few hours. */
-export async function loadAllegroOptions(accountId: string, force = false) {
+export async function loadAllegroOptions(accountId: string, force = false, maxAgeMs = OPTIONS_TTL_MS) {
   const account = await loadMarketplaceAccount(accountId);
   const cached = account.settings.allegroOptions;
-  if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < OPTIONS_TTL_MS) return cached;
+  if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < maxAgeMs) return cached;
   const adapter = getMarketplaceAdapter(account);
   if (!(adapter instanceof AllegroAdapter)) throw new Error(msg('This is not an Allegro account'));
   const options = { fetchedAt: new Date().toISOString(), ...(await adapter.publishOptions()) };

@@ -48,7 +48,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
     <>
       <PageHeader
         title={t('Publish to {platform}', { platform: label })}
-        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup })} ${mirakl ? t('{platform} accepts a product it knows by EAN; if it refuses one, the reason is shown.', { platform: label }) : t('Only products the Allegro catalogue knows by EAN can be listed.')} ${t('Nothing is created until you tick products and press Create.')}`}
+        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup })} ${mirakl ? t('{platform} accepts a product it knows by EAN; if it refuses one, the reason is shown.', { platform: label }) : t('Only products the Allegro catalogue knows by EAN can be listed. Offers show the Shopify title, description and photos.')} ${t('Nothing is created until you tick products and press Create.')}`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
@@ -99,6 +99,21 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                     <p className="truncate text-xs text-slate-500">
                       {hasRealSku(r.sku) ? `SKU ${r.sku}` : t('no SKU in Shopify (the EAN is used)')} · EAN {r.ean ?? '—'}
                     </p>
+                    {r.allegro && (
+                      <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                        <p className="truncate" title={r.allegro.title}>
+                          {t('Allegro title:')} <span className="text-slate-700">{r.allegro.title}</span>
+                          {r.allegro.shortened && <span className="text-amber-700"> · {t('shortened to 75 characters')}</span>}
+                        </p>
+                        <p className="truncate">
+                          {r.allegro.photos > 0 ? t('{n} Shopify photos', { n: r.allegro.photos }) : t('catalogue photos')} ·{' '}
+                          {r.allegro.description ? t('Shopify description') : t('catalogue description')}
+                          {r.allegro.responsiblePerson && <> · {t('Responsible person: {name}', { name: r.allegro.responsiblePerson })}</>}
+                          {r.allegro.responsibleProducer && <> · {t('Producer: {name}', { name: r.allegro.responsibleProducer })}</>}
+                          {r.allegro.gpsrFromProduct && <> ({t('from the product')})</>}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div className="text-right text-sm">
                     <p>{r.price ? `${r.price} zł` : '—'}</p>
