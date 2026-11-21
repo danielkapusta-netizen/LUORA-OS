@@ -5,6 +5,7 @@ import { invoiceFileName, type CatalogueMatch, type ExternalFee, type ExternalRe
 import { AllegroApiError, AllegroClient, describeAllegroErrors, type AllegroCredentials } from './client';
 import { mapAllegroCheckoutForm } from './mapper';
 import { allegroDescription, allegroTitle } from './offer-content';
+import { categoryPath, type AllegroCategoryParameter } from './product-parameters';
 import { msg } from '@/lib/i18n/msg';
 
 interface OrderEvent {
@@ -506,20 +507,26 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
    */
   async createOffer(draft: OfferDraft, match: CatalogueMatch): Promise<{ externalId?: string; note?: string }> {
     const s = this.settings;
-    if (!match.ref) throw new Error(msg('not in the Allegro catalogue'));
+    const proposal = !match.ref ? draft.allegroNewProduct : undefined;
+    if (!match.ref && !proposal) throw new Error(msg('not in the Allegro catalogue'));
+    if (proposal && !draft.imageUrls.length) throw new Error(msg('a new Allegro product needs at least one photo'));
     const title = allegroTitle(draft.name);
     if (!title.ok) throw new Error(title.problem);
     const description = allegroDescription(draft.descriptionHtml);
     const photos = draft.imageUrls.length ? await this.uploadImages(draft.imageUrls.slice(0, 16)) : { locations: [], refused: [] };
     const notes: string[] = [];
     if (photos.refused.length) notes.push(`Allegro refused ${photos.refused.length} photo(s), sent without them`);
+    if (proposal && !photos.locations.length) throw new Error(`Allegro accepted none of the photos, and a new product needs one`);
     if (draft.imageUrls.length && !photos.locations.length) notes.push('no photo was accepted, the catalogue photos are shown');
+    if (proposal) notes.push('new product proposed; Allegro reviews it before it shows in the catalogue');
     const created = await this.client.call<{ id: string }>('POST', '/sale/product-offers', {
       body: {
         name: title.title,
         productSet: [
           {
-            product: { id: match.ref },
+            product: proposal
+              ? { name: title.title, category: { id: proposal.categoryId }, parameters: proposal.parameters, images: photos.locations }
+              : { id: match.ref },
             responsibleProducer: { type: 'ID', id: draft.responsibleProducerId || s.allegroResponsibleProducerId },
             responsiblePerson: { id: draft.responsiblePersonId || s.allegroResponsiblePersonId },
             safetyInformation: { type: 'TEXT', description: s.allegroSafetyText?.trim() || DEFAULT_SAFETY_TEXT },
@@ -527,6 +534,7 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
         ],
         ...(description ? { description } : {}),
         ...(photos.locations.length ? { images: photos.locations } : {}),
+        ...(proposal?.offerParameters.length ? { parameters: proposal.offerParameters } : {}),
         sellingMode: { format: 'BUY_NOW', price: { amount: draft.price, currency: draft.currency } },
         stock: { available: Math.max(0, draft.quantity), unit: 'UNIT' },
         external: { id: draft.sku },
@@ -557,6 +565,39 @@ export class AllegroAdapter implements MarketplaceAdapter, OfferPublisher {
       if (offer.publication?.status) return { externalId: created.id, ...(notes.length ? { note: notes.join('; ') } : {}) };
     }
     return { externalId: created.id, note: ['Allegro is still checking the offer', ...notes].join('; ') };
+  }
+
+  /** Allegro's category suggestions for a product name, best first, with their full path. */
+  async suggestCategories(name: string): Promise<{ id: string; path: string }[]> {
+    type Node = { id: string; name: string; parent?: Node | null };
+    const data = await this.client.call<{ matchingCategories?: Node[] }>('GET', '/sale/matching-categories', { query: { name: name.slice(0, 200) } });
+    return (data.matchingCategories ?? []).map((c) => ({ id: c.id, path: categoryPath(c) }));
+  }
+
+  /** A category's parameters, trimmed to what filling them needs. */
+  async categoryParameters(categoryId: string): Promise<AllegroCategoryParameter[]> {
+    type Raw = {
+      id: string; name: string; type: string; unit?: string | null; required?: boolean; requiredForProduct?: boolean;
+      options?: { describesProduct?: boolean; ambiguousValueId?: string | null; customValuesEnabled?: boolean } | null;
+      dictionary?: { id: string; value: string }[]; restrictions?: { min?: number; max?: number; range?: boolean; multipleChoices?: boolean } | null;
+    };
+    const data = await this.client.call<{ parameters?: Raw[] }>('GET', `/sale/categories/${encodeURIComponent(categoryId)}/parameters`);
+    return (data.parameters ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type === 'dictionary' || p.type === 'integer' || p.type === 'float' ? p.type : 'string',
+      unit: p.unit ?? null,
+      required: Boolean(p.required),
+      requiredForProduct: Boolean(p.requiredForProduct),
+      describesProduct: Boolean(p.options?.describesProduct),
+      ...(p.dictionary ? { dictionary: p.dictionary.map((d) => ({ id: d.id, value: d.value })) } : {}),
+      ambiguousValueId: p.options?.ambiguousValueId ?? null,
+      customValuesEnabled: Boolean(p.options?.customValuesEnabled),
+      multipleChoices: Boolean(p.restrictions?.multipleChoices),
+      ...(typeof p.restrictions?.min === 'number' ? { min: p.restrictions.min } : {}),
+      ...(typeof p.restrictions?.max === 'number' ? { max: p.restrictions.max } : {}),
+      range: Boolean(p.restrictions?.range),
+    }));
   }
 
   /** The choices every new offer needs, for the settings page (needs the settings read scope). */

@@ -2,6 +2,7 @@
 // deterministically from their index, so re-syncing never produces duplicates.
 import type { Listing, Marketplace, NormalizedFee, NormalizedOrder, NormalizedRefund, OrderRef, PriceFailure, PriceUpdate, StockFailure, StockUpdate, TrackingInfo } from '../../types';
 import type { CatalogueMatch, MarketplaceAdapter, OfferDraft, OfferPublisher, SyncResult } from '../types';
+import type { AllegroCategoryParameter } from '../allegro/product-parameters';
 import { msg } from '@/lib/i18n/msg';
 
 export const MOCK_CATALOG = [
@@ -169,8 +170,25 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
 
   async createOffer(draft: OfferDraft): Promise<{ externalId?: string; note?: string }> {
     if (draft.price === '0.00') throw new Error(msg('Demo marketplace refused the offer: price must be above zero'));
-    console.log(`[mock ${this.marketplace}] create offer ${draft.sku} at ${draft.price} ${draft.currency}`);
-    return { externalId: draft.sku };
+    console.log(`[mock ${this.marketplace}] create offer ${draft.sku} at ${draft.price} ${draft.currency}${draft.allegroNewProduct ? ` as a new product in ${draft.allegroNewProduct.categoryId}` : ''}`);
+    return { externalId: draft.sku, ...(draft.allegroNewProduct ? { note: 'new product proposed' } : {}) };
+  }
+
+  // Demo categories for products the catalogue doesn't know (Allegro).
+  async suggestCategories(name: string): Promise<{ id: string; path: string }[]> {
+    return [
+      { id: 'demo-cat-1', path: `Uroda > Pielęgnacja > ${/krem|cream/i.test(name) ? 'Kremy' : 'Inne'}` },
+      { id: 'demo-cat-2', path: 'Uroda > Pielęgnacja > Zestawy' },
+    ];
+  }
+
+  async categoryParameters(): Promise<AllegroCategoryParameter[]> {
+    return [
+      { id: '225693', name: 'EAN (GTIN)', type: 'string', unit: null, required: false, requiredForProduct: true, describesProduct: true },
+      { id: '248811', name: 'Marka', type: 'dictionary', unit: null, required: true, requiredForProduct: true, describesProduct: true, dictionary: [{ id: '248811_1', value: 'Luora' }, { id: '248811_9', value: 'inna' }], ambiguousValueId: '248811_9', customValuesEnabled: true },
+      { id: '17448', name: 'Pojemność', type: 'float', unit: 'ml', required: true, requiredForProduct: true, describesProduct: true, min: 0.1, max: 5000 },
+      { id: '11323', name: 'Stan', type: 'dictionary', unit: null, required: true, requiredForProduct: false, describesProduct: false, dictionary: [{ id: '11323_1', value: 'Nowy' }] },
+    ];
   }
 
   externalIdFor(index: number): string {

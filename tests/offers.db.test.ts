@@ -62,8 +62,12 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     // Empik's lookup is only advice (its own import decides); Allegro cannot list a product its catalogue lacks.
     expect(byName.get('NEW-B')).toMatchObject({ catalogue: 'missing', problems: [] });
     expect(byName.get('NEW-C')!.problems).toEqual(['no EAN']);
-    const allegro = new Map((await m.offers.publishPreview(allegroId)).rows.map((r) => [r.sku, r]));
-    expect(allegro.get('NEW-B')).toMatchObject({ catalogue: 'missing', problems: ['not in the catalogue'] });
+    // Allegro proposes the product its catalogue doesn't know, once it has a photo and the details its category needs.
+    const preview = await m.offers.publishPreview(allegroId);
+    const allegro = new Map(preview.rows.map((r) => [r.sku, r]));
+    expect(allegro.get('NEW-B')).toMatchObject({ catalogue: 'missing', problems: ['no photo (a new product needs one)', 'needs: Pojemność'] });
+    expect(allegro.get('NEW-B')!.allegro!.newProduct).toEqual({ categoryId: 'demo-cat-1', categoryPath: 'Uroda > Pielęgnacja > Kremy', categorySaved: false });
+    expect(preview.allegroNew?.missingParameters).toEqual([{ name: 'Pojemność', products: 1 }]);
   });
 
   it('creates only the ready products and reports the others', async () => {
@@ -71,11 +75,27 @@ describe('publishing offers (D1, demo marketplaces)', { timeout: 60_000 }, () =>
     // Allegro skips the product its catalogue doesn't know.
     const allegro = await m.offers.publishOffers(allegroId, ids);
     expect(allegro.created).toEqual(['Luora new cream A']);
-    expect(allegro.failed).toEqual([{ name: 'Luora new cream B', error: 'not ready: not in the catalogue' }]);
+    expect(allegro.failed).toEqual([{ name: 'Luora new cream B', error: 'not ready: no photo (a new product needs one), needs: Pojemność' }]);
     // Empik is asked to take both; it is Empik's import that would refuse a product it doesn't know.
     const empik = await m.offers.publishOffers(empikId, ids);
     expect(empik.created.sort()).toEqual(['Luora new cream A', 'Luora new cream B']);
     expect(empik.failed).toEqual([]);
+  });
+
+  it('proposes a product Allegro doesn’t know once its category and details are set up', async () => {
+    const db = m.db.getDb();
+    await db.insert(m.schema.products).values({ sku: 'NEW-D', name: 'Luora new cream D', ean: '5900000000031', stock: 4, imageUrl: 'https://img/d.jpg', shopifyVariantId: 'gid://shopify/ProductVariant/9004' });
+    const product = (await db.select().from(m.schema.products).where(m.orm.eq(m.schema.products.sku, 'NEW-D')))[0];
+    expect((await m.offers.publishOffers(allegroId, [product.id])).failed).toEqual([{ name: 'Luora new cream D', error: 'not ready: needs: Pojemność' }]);
+    await m.offers.saveAllegroParameterSource(allegroId, 'Pojemność', { metafield: 'custom.capacity', fallback: '50 ml' });
+    await m.offers.saveAllegroCategory(allegroId, '', { id: 'demo-cat-2', path: 'Uroda > Pielęgnacja > Zestawy' });
+    const row = (await m.offers.publishPreview(allegroId)).rows.find((r) => r.sku === 'NEW-D')!;
+    expect(row).toMatchObject({ problems: [], allegro: { newProduct: { categoryId: 'demo-cat-2', categorySaved: true } } });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const result = await m.offers.publishOffers(allegroId, [product.id]);
+    expect(result).toMatchObject({ created: ['Luora new cream D'], notes: ['Luora new cream D: new product proposed'] });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('as a new product in demo-cat-2'));
+    log.mockRestore();
   });
 
   it('uses the barcode as the offer SKU when Shopify has none, and does not offer the product twice', async () => {
