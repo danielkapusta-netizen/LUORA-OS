@@ -112,7 +112,7 @@ export interface AllegroPreview {
   /** Set when the catalogue doesn't know the product, so it is proposed as a new product in this category. */
   newProduct?: { categoryId: string | null; categoryPath: string | null; categorySaved: boolean };
   /** Erli: where the product's category comes from (Allegro's catalogue product, a saved or suggested Allegro category, or the Shopify type). */
-  erliCategory?: { source: 'catalogue' | 'saved' | 'suggested' | 'shop' | 'none'; path: string | null; attributes: number };
+  erliCategory?: { source: 'catalogue' | 'saved' | 'suggested' | 'shop' | 'none' | 'later'; path: string | null; attributes: number };
 }
 
 /** Products the catalogue doesn't know: their categories per product type and the parameters still to set up. */
@@ -266,6 +266,19 @@ async function prepareErliProducts(rows: (Loaded & { productType: string })[], a
         ? { source: category.source, path: category.path, attributes: attributes.length }
         : { source: r.productType.trim() ? 'shop' : 'none', path: r.productType.trim() || null, attributes: 0 };
     }
+  }
+}
+
+/**
+ * The Erli preview without asking Allegro. With an Allegro account the category is looked up when the product is
+ * created (the catalogue product's category comes before a saved one, so the preview can't know it yet).
+ */
+function previewErliCategories(rows: (Loaded & { productType: string })[], allegroSettings: MarketplaceSettings | null): void {
+  for (const r of rows) {
+    if (!r.row.allegro) continue;
+    r.row.allegro.erliCategory = allegroSettings
+      ? { source: 'later', path: null, attributes: 0 }
+      : { source: r.productType.trim() ? 'shop' : 'none', path: r.productType.trim() || null, attributes: 0 };
   }
 }
 
@@ -423,7 +436,11 @@ async function loadRows(
     };
   });
   if (account.type === 'erli') {
-    await prepareErliProducts(rows.filter((r) => r.details).map((r) => Object.assign(r, { productType: r.details!.productType ?? '' })), allegroForThis);
+    const ready = rows.filter((r) => r.details).map((r) => Object.assign(r, { productType: r.details!.productType ?? '' }));
+    // Asking Allegro about every product would keep the page loading for minutes: the preview shows only what is
+    // already known, and the Allegro category and details are looked up for the products being created (25 at most).
+    if (onlyIds) await prepareErliProducts(ready, allegroForThis);
+    else previewErliCategories(ready, allegroForThis?.settings ?? null);
     return { rows, setupProblems, settings: account.settings };
   }
   if (account.type !== 'allegro') return { rows, setupProblems, settings: account.settings };

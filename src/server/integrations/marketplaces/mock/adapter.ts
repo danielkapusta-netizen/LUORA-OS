@@ -175,7 +175,7 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
 
   async createOffer(draft: OfferDraft): Promise<{ externalId?: string; note?: string }> {
     if (draft.price === '0.00') throw new Error(msg('Demo marketplace refused the offer: price must be above zero'));
-    console.log(`[mock ${this.marketplace}] create offer ${draft.sku} at ${draft.price} ${draft.currency}${draft.allegroNewProduct ? ` as a new product in ${draft.allegroNewProduct.categoryId}` : ''}`);
+    console.log(`[mock ${this.marketplace}] create offer ${draft.sku} at ${draft.price} ${draft.currency}${draft.allegroNewProduct ? ` as a new product in ${draft.allegroNewProduct.categoryId}` : ''}${draft.erli?.category?.source === 'allegro' ? ` in Allegro category ${draft.erli.category.id} with ${draft.erli.attributes.length} details` : ''}`);
     return { externalId: draft.sku, ...(draft.allegroNewProduct ? { note: 'new product proposed' } : {}) };
   }
 
