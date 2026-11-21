@@ -144,14 +144,16 @@ describe('Erli products', () => {
     const afters: (string | undefined)[] = [];
     server.use(
       http.post(`${API}/products/_search`, async ({ request }) => {
-        const body = (await request.json()) as { pagination: { after?: string } };
+        const body = (await request.json()) as { pagination: { after?: string }; fields: string[] };
         afters.push(body.pagination.after);
+        // Like Erli: only the fields asked for come back.
+        const only = (p: Record<string, unknown>) => Object.fromEntries(Object.entries(p).filter(([k]) => body.fields.includes(k)));
         if (!body.pagination.after) {
           return HttpResponse.json(
-            Array.from({ length: 200 }, (_, i) => ({ externalId: `P${String(i).padStart(3, '0')}`, name: `Product ${i}`, stock: i, price: 1999, status: i % 2 ? 'active' : 'inactive', archived: i === 5 })),
+            Array.from({ length: 200 }, (_, i) => only({ externalId: `P${String(i).padStart(3, '0')}`, name: `Product ${i}`, stock: i, price: 1999, status: i % 2 ? 'active' : 'inactive', archived: i === 5 })),
           );
         }
-        return HttpResponse.json([{ externalId: 'Z1', name: 'Last', ean: '5900000000001', stock: 3, price: 4999, status: 'active' }]);
+        return HttpResponse.json([only({ externalId: 'Z1', name: 'Last', ean: '5900000000001', stock: 3, price: 4999, status: 'active' })]);
       }),
     );
     const listings = [];

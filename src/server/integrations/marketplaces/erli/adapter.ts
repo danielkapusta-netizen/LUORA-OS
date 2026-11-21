@@ -196,11 +196,12 @@ export class ErliAdapter implements MarketplaceAdapter, OfferPublisher {
       const page = await this.client.call<ErliProduct[]>('POST', '/products/_search', {
         body: {
           pagination: { sortField: 'externalId', order: 'ASC', limit: 200, ...(after ? { after } : {}) },
-          fields: ['name', 'ean', 'sku', 'stock', 'price', 'status', 'archived', 'images'],
+          // Erli returns only the fields asked for, the product's own id included.
+          fields: ['externalId', 'name', 'ean', 'sku', 'stock', 'price', 'currency', 'status', 'archived', 'images'],
         },
       });
       for (const p of page) {
-        if (p.archived) continue;
+        if (!p.externalId || p.archived) continue;
         const active = p.status !== 'inactive';
         yield {
           externalId: p.externalId,
@@ -216,8 +217,10 @@ export class ErliAdapter implements MarketplaceAdapter, OfferPublisher {
           currency: p.currency ?? 'PLN',
         };
       }
-      if (page.length < 200) return;
-      after = page.at(-1)!.externalId;
+      const last = page.at(-1)?.externalId;
+      // Without the last id the next page can't be asked for; stop rather than read the first page again.
+      if (page.length < 200 || !last || last === after) return;
+      after = last;
     }
   }
 
