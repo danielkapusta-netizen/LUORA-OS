@@ -62,7 +62,7 @@ export async function syncAccountFees(accountId: string, now = new Date()): Prom
     for (let i = 0; i < WINDOWS_PER_RUN && from < now; i++) {
       const to = new Date(Math.min(from.getTime() + WINDOW_DAYS * DAY, now.getTime()));
       const feed = await adapter.syncFees(from, to);
-      const stored = await storeFeed(account.id, feed);
+      const stored = await storeFeed(account.id, feed, account.type === 'erli' ? 'erli_billing' : 'allegro_billing');
       result.fees += stored.fees;
       result.refunds += stored.refunds;
       result.unmatched += stored.unmatched;
@@ -78,13 +78,13 @@ export async function syncAccountFees(accountId: string, now = new Date()): Prom
       .where(eq(marketplaceAccounts.id, account.id));
     return result;
   } catch (err) {
-    await db.update(marketplaceAccounts).set({ feesError: feeSyncError(err) }).where(eq(marketplaceAccounts.id, account.id));
+    await db.update(marketplaceAccounts).set({ feesError: account.type === 'allegro' ? feeSyncError(err) : err instanceof Error ? err.message : String(err) }).where(eq(marketplaceAccounts.id, account.id));
     throw err;
   }
 }
 
 /** Saves one window of the feed against the orders it belongs to; unknown orders are skipped. */
-async function storeFeed(accountId: string, feed: FeeFeed): Promise<{ fees: number; refunds: number; unmatched: number }> {
+async function storeFeed(accountId: string, feed: FeeFeed, source: 'allegro_billing' | 'erli_billing'): Promise<{ fees: number; refunds: number; unmatched: number }> {
   const db = getDb();
   const externalIds = [...new Set([...feed.fees, ...feed.refunds].map((x) => x.orderExternalId))];
   const byExternal = new Map<string, string>();
@@ -134,7 +134,7 @@ async function storeFeed(accountId: string, feed: FeeFeed): Promise<{ fees: numb
     };
     await db
       .insert(orderFees)
-      .values({ source: 'allegro_billing', externalId: f.externalId, ...values })
+      .values({ source, externalId: f.externalId, ...values })
       .onConflictDoUpdate({ target: [orderFees.source, orderFees.externalId], set: values });
     fees++;
     touched.add(orderId);

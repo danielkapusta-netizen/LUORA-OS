@@ -22,7 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('Customer') };
 }
 
-const IDENTITY_LABELS: Record<string, string> = { shopify: 'Shopify', allegro: msg('Allegro buyer'), empik: msg('Empik customer'), vonhalsky: 'Von Halsky', hebe: msg('HEBE customer'), email: msg('E-mail') };
+const IDENTITY_LABELS: Record<string, string> = { shopify: 'Shopify', allegro: msg('Allegro buyer'), empik: msg('Empik customer'), vonhalsky: 'Von Halsky', erli: msg('Erli buyer'), hebe: msg('HEBE customer'), email: msg('E-mail') };
 const DAY = 86_400_000;
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {

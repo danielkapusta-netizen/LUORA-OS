@@ -13,6 +13,7 @@ const MARKETPLACES = [
   { value: 'empik', label: 'Empik' },
   { value: 'vonhalsky', label: 'Von Halsky' },
   { value: 'hebe', label: 'HEBE' },
+  { value: 'erli', label: 'Erli' },
 ];
 
 /** Period and marketplace pills shared by the analytics tabs, plus the dates they cover. */

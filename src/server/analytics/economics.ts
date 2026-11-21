@@ -56,7 +56,7 @@ export interface EconomicsShipment {
 }
 
 export interface EconomicsInput {
-  marketplace: 'shopify' | 'allegro' | 'empik' | 'vonhalsky' | 'hebe';
+  marketplace: 'shopify' | 'allegro' | 'empik' | 'vonhalsky' | 'hebe' | 'erli';
   /** PLN per unit of the order currency. */
   fxRate: number;
   vatRate: number;
@@ -104,7 +104,7 @@ function netFee(fee: EconomicsFee, deductible: boolean, feeVatRate: number): num
 }
 
 /** Marketplaces whose fallback commission is invoiced with Polish VAT (Shopify payment fees carry none). */
-const VAT_INVOICED_FEES: ReadonlySet<string> = new Set(['allegro', 'empik', 'vonhalsky', 'hebe']);
+const VAT_INVOICED_FEES: ReadonlySet<string> = new Set(['allegro', 'empik', 'vonhalsky', 'hebe', 'erli']);
 
 export function orderEconomics(input: EconomicsInput): LineEconomics[] {
   const { items, settings: s, fxRate, vatRate } = input;

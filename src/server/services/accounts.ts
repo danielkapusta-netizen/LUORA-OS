@@ -14,6 +14,8 @@ import { EMPIK } from '../integrations/marketplaces/empik/adapter';
 import { HEBE } from '../integrations/marketplaces/hebe/adapter';
 import { MiraklAdapter } from '../integrations/marketplaces/mirakl/adapter';
 import type { MiraklCredentials } from '../integrations/marketplaces/mirakl/client';
+import { ErliAdapter } from '../integrations/marketplaces/erli/adapter';
+import type { ErliCredentials } from '../integrations/marketplaces/erli/client';
 import { MockMarketplaceAdapter } from '../integrations/marketplaces/mock/adapter';
 import { VonHalskyAdapter } from '../integrations/marketplaces/vonhalsky/adapter';
 import type { VonHalskyCredentials } from '../integrations/marketplaces/vonhalsky/client';
@@ -51,6 +53,11 @@ export function getMarketplaceAdapter(account: MarketplaceAccount): MarketplaceA
       return new AllegroAdapter(marketplaceCredentialStore<AllegroCredentials>(account), account.settings);
     case 'vonhalsky':
       return new VonHalskyAdapter(marketplaceCredentialStore<VonHalskyCredentials>(account), account.settings);
+    case 'erli': {
+      const creds = readCredentials<ErliCredentials>(account.credentials);
+      if (!creds?.apiKey) throw new Error(`${account.name} has no API key yet. Add it in Settings → Integrations.`);
+      return new ErliAdapter(creds, account.settings);
+    }
     case 'empik':
     case 'hebe': {
       const creds = readCredentials<MiraklCredentials>(account.credentials);

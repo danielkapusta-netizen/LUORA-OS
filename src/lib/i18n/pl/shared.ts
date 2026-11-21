@@ -269,7 +269,6 @@ export const shared: Record<string, string> = {
   "The ifirma key should be the hex code shown in ifirma (letters A–F and digits)": "Klucz ifirma to kod szesnastkowy pokazany w ifirma (litery A–F i cyfry)",
   "This order is marked as invoiced outside Luora": "To zamówienie jest oznaczone jako zafakturowane poza Luorą",
   "Choose at least one product": "Wybierz co najmniej jeden produkt",
-  "Offers can be created here for Allegro, Empik and HEBE accounts": "Oferty można tu tworzyć dla kont Allegro, Empik i HEBE",
   "Shopify adapter is not available": "Adapter Shopify jest niedostępny",
   "This account cannot create offers": "To konto nie może tworzyć ofert",
   "This is not an Allegro account": "To nie jest konto Allegro",

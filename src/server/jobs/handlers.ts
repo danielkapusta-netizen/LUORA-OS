@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { marketplaceAccounts } from '../db/schema';
 import { syncAccountFees } from '../services/fees';
@@ -64,7 +64,7 @@ export const handlers: Handlers = {
     const accounts = await getDb()
       .select({ id: marketplaceAccounts.id })
       .from(marketplaceAccounts)
-      .where(and(eq(marketplaceAccounts.enabled, true), eq(marketplaceAccounts.type, 'allegro')));
+      .where(and(eq(marketplaceAccounts.enabled, true), inArray(marketplaceAccounts.type, ['allegro', 'erli'])));
     for (const account of accounts) await enqueue(JOBS.feesSync, { accountId: account.id }, { singletonKey: account.id });
     return { queued: accounts.length };
   },

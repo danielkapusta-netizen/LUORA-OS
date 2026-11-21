@@ -27,11 +27,12 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
   const t = await getT();
   await requireAdmin();
   const { accountId } = await params;
-  const account = (await listMarketplaceAccounts()).find((a) => a.id === accountId && (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe'));
+  const account = (await listMarketplaceAccounts()).find((a) => a.id === accountId && (a.type === 'allegro' || a.type === 'empik' || a.type === 'hebe' || a.type === 'erli'));
   if (!account) notFound();
   const label = MARKETPLACE_LABELS[account.type];
   // Mirakl (Empik, HEBE) takes any product it knows by EAN; its catalogue lookup is only advice.
-  const mirakl = account.type !== 'allegro';
+  const mirakl = account.type === 'empik' || account.type === 'hebe';
+  const erli = account.type === 'erli';
 
   let preview: PublishPreview = { rows: [], setupProblems: [] };
   let error: string | null = null;
@@ -48,7 +49,7 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
     <>
       <PageHeader
         title={t('Publish to {platform}', { platform: label })}
-        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup })} ${mirakl ? t('{platform} accepts a product it knows by EAN; if it refuses one, the reason is shown.', { platform: label }) : t('Offers show the Shopify title, description and photos. Products the Allegro catalogue doesn’t know by EAN are proposed as new products, in the category and with the details set up below.')} ${t('Nothing is created until you tick products and press Create.')}`}
+        description={`${t('Shopify products without an offer in {account}. Price = Shopify + {markup}%.', { account: account.name, markup })} ${erli ? t('Every product is created on Erli with the Shopify title, description, photos and EAN, in the Allegro category of the same product (from the Allegro catalogue or Publish → Allegro), so Erli places it in the same category.') : mirakl ? t('{platform} accepts a product it knows by EAN; if it refuses one, the reason is shown.', { platform: label }) : t('Offers show the Shopify title, description and photos. Products the Allegro catalogue doesn’t know by EAN are proposed as new products, in the category and with the details set up below.')} ${t('Nothing is created until you tick products and press Create.')}`}
         actions={
           <>
             <Link className={buttonClass('secondary')} href="/inventory">
@@ -165,16 +166,29 @@ export default async function PublishPage({ params }: { params: Promise<{ accoun
                     {r.allegro && (
                       <div className="mt-1 space-y-0.5 text-xs text-slate-500">
                         <p className="truncate" title={r.allegro.title}>
-                          {t('Allegro title:')} <span className="text-slate-700">{r.allegro.title}</span>
+                          {erli ? t('Erli title:') : t('Allegro title:')} <span className="text-slate-700">{r.allegro.title}</span>
                           {r.allegro.shortened && <span className="text-amber-700"> · {t('shortened to 75 characters')}</span>}
                         </p>
                         <p className="truncate">
-                          {r.allegro.photos > 0 ? t('{n} Shopify photos', { n: r.allegro.photos }) : t('catalogue photos')} ·{' '}
-                          {r.allegro.description ? t('Shopify description') : t('catalogue description')}
+                          {r.allegro.photos > 0 ? t('{n} Shopify photos', { n: r.allegro.photos }) : erli ? t('no photo') : t('catalogue photos')} ·{' '}
+                          {r.allegro.description ? t('Shopify description') : erli ? t('no description') : t('catalogue description')}
                           {r.allegro.responsiblePerson && <> · {t('Responsible person: {name}', { name: r.allegro.responsiblePerson })}</>}
                           {r.allegro.responsibleProducer && <> · {t('Producer: {name}', { name: r.allegro.responsibleProducer })}</>}
                           {r.allegro.gpsrFromProduct && <> ({t('from the product')})</>}
                         </p>
+                        {r.allegro.erliCategory && (
+                          <p className="truncate">
+                            {r.allegro.erliCategory.source === 'catalogue'
+                              ? t('Category: as the Allegro catalogue product')
+                              : r.allegro.erliCategory.source === 'shop'
+                                ? t('Category: Shopify type “{type}”, matched by Erli', { type: r.allegro.erliCategory.path ?? '' })
+                                : r.allegro.erliCategory.source === 'none'
+                                  ? t('Category: none, Erli will ask in its panel')
+                                  : t('Category: {path}', { path: r.allegro.erliCategory.path ?? '' })}
+                            {r.allegro.erliCategory.source === 'suggested' && <span className="text-amber-700"> · {t('suggested')}</span>}
+                            {r.allegro.erliCategory.attributes > 0 && <> · {t.plural(r.allegro.erliCategory.attributes, '{n} detail from Allegro', '{n} details from Allegro')}</>}
+                          </p>
+                        )}
                         {r.allegro.newProduct && (
                           <p className="truncate">
                             {t('New product in:')} <span className="text-slate-700">{r.allegro.newProduct.categoryPath ?? t('no category yet')}</span>

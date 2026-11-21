@@ -69,6 +69,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=hebe">
                   {t('+ HEBE')}
                 </Link>
+                <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=erli">
+                  {t('+ Erli')}
+                </Link>
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/marketplace/new?type=vonhalsky">
                   {t('+ Von Halsky')}
                 </Link>

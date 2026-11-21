@@ -100,4 +100,5 @@ export const customers: Record<string, string> = {
   "Usually every": "Zwykle co",
   "Write segments to Shopify": "Zapisz segmenty w Shopify",
   "Possible duplicates": "Możliwe duplikaty",
+  "Erli buyer": "Kupujący z Erli",
 };

@@ -51,6 +51,7 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
   empik: 'Empik',
   vonhalsky: 'Von Halsky',
   hebe: 'HEBE',
+  erli: 'Erli',
 };
 
 export const CARRIER_LABELS: Record<string, string> = {

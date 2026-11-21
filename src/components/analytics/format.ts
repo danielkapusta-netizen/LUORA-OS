@@ -2,7 +2,7 @@
 import { intlTag, type Locale } from '@/lib/i18n/locales';
 
 export const SERIES = { revenue: '#2a78d6', profit: '#1baf7a', third: '#eb6834' } as const;
-export const MARKETPLACE_COLORS: Record<string, string> = { shopify: '#2a78d6', allegro: '#eb6834', empik: '#1baf7a', vonhalsky: '#d4a017', hebe: '#d6338a' };
+export const MARKETPLACE_COLORS: Record<string, string> = { shopify: '#2a78d6', allegro: '#eb6834', empik: '#1baf7a', vonhalsky: '#d4a017', hebe: '#d6338a', erli: '#7b3fe4' };
 export const INK = { primary: '#1c1b19', secondary: '#52514e', muted: '#898781', grid: '#ece9e2', axis: '#ddd9d0', comparison: '#a8a79f' };
 export const STATUS = { good: '#0ca30c', critical: '#d03b3b' };
 

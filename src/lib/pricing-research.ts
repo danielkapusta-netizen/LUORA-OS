@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { msg } from './i18n/msg';
 import { parsePrice, samePrice } from './price';
 
-export const RESEARCH_MARKETPLACES = ['allegro', 'empik', 'hebe'] as const;
+export const RESEARCH_MARKETPLACES = ['allegro', 'empik', 'hebe', 'erli'] as const;
 export type ResearchMarketplace = (typeof RESEARCH_MARKETPLACES)[number];
 export const RECOMMENDATION_STATUSES = ['change_price', 'keep_price', 'fix_placement', 'add_listing', 'needs_review'] as const;
 export const RECOMMENDATION_LABELS = {

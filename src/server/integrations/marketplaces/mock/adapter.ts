@@ -84,11 +84,16 @@ const DELIVERY: Record<Marketplace, { id: string; name: string; locker: boolean;
     { id: 'PACZKOMAT', name: 'Paczkomaty InPost', locker: true },
     { id: 'KURIER', name: 'Kurier InPost', locker: false },
   ],
+  erli: [
+    { id: 'inpostParcelLocker', name: 'InPost Paczkomaty 24/7', locker: true },
+    { id: 'inpostCourier', name: 'Kurier InPost', locker: false },
+    { id: 'inpostCourierCod', name: 'Kurier InPost - pobranie', locker: false, cod: true },
+  ],
 };
 
 /** Demo marketplaces charge a little more than the catalogue price, each its own amount. */
 function mockPrice(marketplace: Marketplace, base: number): string {
-  const extra: Record<Marketplace, number> = { shopify: 1, allegro: 1.05, empik: 1.08, vonhalsky: 1.1, hebe: 1.07 };
+  const extra: Record<Marketplace, number> = { shopify: 1, allegro: 1.05, empik: 1.08, vonhalsky: 1.1, hebe: 1.07, erli: 1.04 };
   return (Math.round(base * extra[marketplace] * 100) / 100).toFixed(2);
 }
 
@@ -165,7 +170,7 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
   }
 
   async checkCatalogue(eans: string[]): Promise<Map<string, CatalogueMatch>> {
-    return new Map(eans.map((e) => [e, Number(e.slice(-1)) % 2 === 0 ? { found: true, ref: `demo-${e}`, name: `Catalogue product ${e}` } : { found: false }]));
+    return new Map(eans.map((e) => [e, Number(e.slice(-1)) % 2 === 0 ? { found: true, ref: `demo-${e}`, name: `Catalogue product ${e}`, ...(this.marketplace === 'allegro' ? { categoryId: 'demo-cat-1' } : {}) } : { found: false }]));
   }
 
   async createOffer(draft: OfferDraft): Promise<{ externalId?: string; note?: string }> {
@@ -203,6 +208,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
         return `${210_000 + index}-A`;
       case 'hebe':
         return `${310_000 + index}-A`;
+      case 'erli':
+        return `${String(100_000 + (hash(`${this.accountKey}-erli`) % 800_000))}x${String(index).padStart(4, '0')}`;
       case 'vonhalsky':
         return `${hash(`${this.accountKey}-vh-${index}`).toString(16).padStart(8, '0')}-5e0b-4c1d-8f3a-${String(index).padStart(12, '0')}`;
     }
@@ -235,6 +242,8 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
         return items.map((i) => fee(`commission-${i.externalLineId}`, 'commission', 'Prowizja Empik', Number(i.unitPrice) * i.quantity * 0.15, i.externalLineId));
       case 'hebe':
         return items.map((i) => fee(`commission-${i.externalLineId}`, 'commission', 'Prowizja HEBE', Number(i.unitPrice) * i.quantity * 0.15, i.externalLineId));
+      case 'erli':
+        return [fee('commission', 'commission', 'Prowizja Erli', goods * 0.1)];
       case 'vonhalsky':
         return [];
     }
@@ -280,7 +289,7 @@ export class MockMarketplaceAdapter implements MarketplaceAdapter, OfferPublishe
           ]
         : [];
     const status =
-      this.marketplace === 'shopify' ? 'PAID / UNFULFILLED' : this.marketplace === 'allegro' ? 'READY_FOR_PROCESSING / NEW' : waitingAcceptance ? 'WAITING_ACCEPTANCE' : 'SHIPPING';
+      this.marketplace === 'shopify' ? 'PAID / UNFULFILLED' : this.marketplace === 'allegro' ? 'READY_FOR_PROCESSING / NEW' : this.marketplace === 'erli' ? 'purchased / created' : waitingAcceptance ? 'WAITING_ACCEPTANCE' : 'SHIPPING';
     const number =
       this.marketplace === 'shopify' ? `#${1001 + index}` : this.marketplace === 'allegro' ? externalId.split('-')[0].toUpperCase() : `${210_000 + index}`;
     const email = `${first}.${last}`.toLowerCase().normalize('NFD').replace(/[^\w.]/g, '') + '@example.com';
