@@ -8,6 +8,7 @@ export const PL_PLURALS_ALL: Record<string, PluralForms> = {
   "{n} offer refused": { one: "{n} oferta odrzucona", few: "{n} oferty odrzucone", many: "{n} ofert odrzuconych", other: "{n} oferty odrzuconej" },
   "missing on {n} product": { one: "brak w {n} produkcie", few: "brak w {n} produktach", many: "brak w {n} produktach", other: "brak w {n} produktu" },
   "{n} detail from Allegro": { one: "{n} parametr z Allegro", few: "{n} parametry z Allegro", many: "{n} parametrów z Allegro", other: "{n} parametru z Allegro" },
+  "in {n} order": { one: "w {n} zamówieniu", few: "w {n} zamówieniach", many: "w {n} zamówieniach", other: "w {n} zamówienia" },
   "{n} order": { one: "{n} zamówienie", few: "{n} zamówienia", many: "{n} zamówień", other: "{n} zamówienia" },
   "{n} sale": { one: "{n} sprzedaż", few: "{n} sprzedaże", many: "{n} sprzedaży", other: "{n} sprzedaży" },
   "{n} different price": { one: "{n} inna cena", few: "{n} inne ceny", many: "{n} innych cen", other: "{n} innej ceny" },

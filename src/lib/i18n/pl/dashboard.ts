@@ -48,4 +48,12 @@ export const dashboard: Record<string, string> = {
   "Need a look": "Wymagają uwagi",
   "Insights": "Wnioski",
   "All findings →": "Wszystkie ustalenia →",
+  "To pick": "Do skompletowania",
+  "{units} from {products}": "{units} z {products}",
+  "Nothing to pick: no new orders.": "Nic do kompletowania: brak nowych zamówień.",
+  "Show {n} more": "Pokaż jeszcze {n}",
+  "Sales so far today, from every marketplace.": "Dzisiejsza sprzedaż do tej pory, ze wszystkich marketplace’ów.",
+  "No sales yet today.": "Dziś jeszcze nic nie sprzedano.",
+  "Sold today": "Sprzedane dziś",
+  "Performance": "Wyniki",
 };

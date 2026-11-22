@@ -660,6 +660,61 @@ export async function statusCounts(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map((r) => [r.status, r.count]));
 }
 
+export interface PickLine {
+  /** The product, else the SKU, else the name: how lines are summed. */
+  key: string;
+  productId: string | null;
+  name: string;
+  sku: string | null;
+  imageUrl: string | null;
+  quantity: number;
+  /** How many orders want it. */
+  orders: number;
+}
+
+/**
+ * What to take off the shelves: the products in new orders (the ones "waiting to be picked up"), summed per product,
+ * the largest quantity first. Lines are counted as sold: a bundle stays one bundle.
+ */
+export async function pickList(): Promise<PickLine[]> {
+  const rows = await getDb()
+    .select({
+      orderId: orderItems.orderId,
+      productId: orderItems.productId,
+      sku: orderItems.sku,
+      name: orderItems.name,
+      imageUrl: orderItems.imageUrl,
+      quantity: orderItems.quantity,
+      productName: products.name,
+      productImage: products.imageUrl,
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orders.id, orderItems.orderId))
+    .leftJoin(products, eq(products.id, orderItems.productId))
+    .where(and(eq(orders.status, 'new'), eq(orders.historical, false)));
+  const lines = new Map<string, PickLine & { orderIds: Set<string> }>();
+  for (const r of rows) {
+    const key = r.productId ? `p:${r.productId}` : r.sku ? `s:${r.sku.toLowerCase()}` : `n:${r.name.toLowerCase()}`;
+    const line = lines.get(key) ?? {
+      key,
+      productId: r.productId,
+      name: r.productName ?? r.name,
+      sku: r.sku,
+      imageUrl: r.productImage ?? r.imageUrl,
+      quantity: 0,
+      orders: 0,
+      orderIds: new Set<string>(),
+    };
+    line.quantity += r.quantity;
+    line.orderIds.add(r.orderId);
+    line.imageUrl ??= r.imageUrl;
+    lines.set(key, line);
+  }
+  return [...lines.values()]
+    .map(({ orderIds, ...line }) => ({ ...line, orders: orderIds.size }))
+    .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name));
+}
+
 /** Orders still to be packed and sent (not on hold), grouped by the courier the buyer chose. Busiest first. `labelled`: those that already have a label. */
 export async function ordersToShipByCourier(): Promise<{ courier: Courier; count: number; labelled: number }[]> {
   const rows = await getDb()
