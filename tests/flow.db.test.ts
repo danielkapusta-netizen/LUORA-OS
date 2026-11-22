@@ -1096,6 +1096,39 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(margins.size).toBeGreaterThan(0);
   });
 
+  it('gives the Dashboard today across every marketplace, without profit for roles that may not see it', async () => {
+    const { buildAnalyticsView, todaySnapshot } = await import('@/server/analytics/view');
+    const now = new Date();
+    const admin = await todaySnapshot(await buildAnalyticsView({ marketplace: 'empik', period: 'year' }, true), now);
+    expect(admin.period.days).toBe(1);
+    // Every order in it was placed today (Warsaw), whatever marketplace the period below is narrowed to.
+    expect(admin.orders.every((o) => o.date !== null && o.date >= admin.period.from && o.date <= admin.period.to)).toBe(true);
+    const all = await todaySnapshot(await buildAnalyticsView({ period: 'year' }, true), now);
+    expect(admin.totals.revenuePLN).toBeCloseTo(all.totals.revenuePLN, 2);
+    const marketing = await todaySnapshot(await buildAnalyticsView({ period: 'year' }, false), now);
+    expect(marketing.kpis.some((k) => k.key === 'profit')).toBe(false);
+    expect(marketing.totals.marginPLN).toBe(0);
+    expect(marketing.totals.revenuePLN).toBeCloseTo(all.totals.revenuePLN, 2);
+  });
+
+  it('lists what to pick for new orders, summed per product, the most wanted first', async () => {
+    const db = m.db.getDb();
+    const lines = await m.orders.pickList();
+    const fresh = await db.select({ id: m.schema.orders.id }).from(m.schema.orders).where(m.orm.and(m.orm.eq(m.schema.orders.status, 'new'), m.orm.eq(m.schema.orders.historical, false)));
+    const items = fresh.length ? await db.select().from(m.schema.orderItems).where(m.orm.inArray(m.schema.orderItems.orderId, fresh.map((o) => o.id))) : [];
+    expect(lines.reduce((s, l) => s + l.quantity, 0)).toBe(items.reduce((s, i) => s + i.quantity, 0));
+    expect(lines.map((l) => l.quantity)).toEqual([...lines.map((l) => l.quantity)].sort((a, b) => b - a));
+    expect(new Set(lines.map((l) => l.key)).size).toBe(lines.length);
+    // An order that leaves "new" leaves the list.
+    if (fresh.length) {
+      const [first] = fresh;
+      const own = items.filter((i) => i.orderId === first.id).reduce((s, i) => s + i.quantity, 0);
+      await db.update(m.schema.orders).set({ status: 'processing' }).where(m.orm.eq(m.schema.orders.id, first.id));
+      expect((await m.orders.pickList()).reduce((s, l) => s + l.quantity, 0)).toBe(lines.reduce((s, l) => s + l.quantity, 0) - own);
+      await db.update(m.schema.orders).set({ status: 'new' }).where(m.orm.eq(m.schema.orders.id, first.id));
+    }
+  });
+
   it('shows last week and custom dates, and ignores dates it cannot use', async () => {
     const { buildAnalyticsView } = await import('@/server/analytics/view');
     const day = (d: Date) => d.toISOString().slice(0, 10);

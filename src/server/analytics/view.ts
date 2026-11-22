@@ -46,18 +46,7 @@ export async function buildAnalyticsView(p: ViewParams, showProfit: boolean, fal
   const periodKey = custom ? 'custom' : requested === 'custom' ? fallback : requested;
   const period = periodFor(data, periodKey, custom);
   const full = snapshotFor(data, period);
-  const snapshot = showProfit
-    ? full
-    : {
-        ...zeroProfit(full),
-        // The generated sentences name profit amounts; keep the findings but not those figures.
-        insights: full.insights.map((i) => {
-          const s = scrubDeep(i);
-          return { ...s, why: s.why || s.title };
-        }),
-        health: scrubDeep(full.health),
-        kpis: full.kpis.filter((k) => k.key !== 'profit'),
-      };
+  const snapshot = forViewer(full, showProfit);
   return {
     data,
     period,
@@ -73,4 +62,28 @@ export async function buildAnalyticsView(p: ViewParams, showProfit: boolean, fal
       to: custom ? custom.to.toISOString().slice(0, 10) : undefined,
     },
   };
+}
+
+/** A snapshot as the viewer may see it: without the profit permission its profit figures are zero and its sentences carry none. */
+export function forViewer(full: Snapshot, showProfit: boolean): Snapshot {
+  if (showProfit) return full;
+  return {
+    ...zeroProfit(full),
+    // The generated sentences name profit amounts; keep the findings but not those figures.
+    insights: full.insights.map((i) => {
+      const s = scrubDeep(i);
+      return { ...s, why: s.why || s.title };
+    }),
+    health: scrubDeep(full.health),
+    kpis: full.kpis.filter((k) => k.key !== 'profit'),
+  };
+}
+
+/**
+ * Today (Warsaw day) across every marketplace, for the Dashboard's daily summary. Reuses the view's data when it isn't
+ * narrowed to one marketplace, so the page reads the business data once.
+ */
+export async function todaySnapshot(view: AnalyticsView, now = new Date()): Promise<Snapshot> {
+  const data = view.marketplace ? await loadBusinessData({}) : view.data;
+  return forViewer(snapshotFor(data, periodFor(data, 'today', undefined, now)), view.showProfit);
 }
