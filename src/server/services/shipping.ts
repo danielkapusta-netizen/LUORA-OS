@@ -1,3 +1,4 @@
+import { sendingMethodFor } from '../integrations/carriers/inpost/adapter';
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import { PDFDocument } from 'pdf-lib';
 import { getCfEnv } from '../cf';
@@ -167,6 +168,7 @@ export async function requestShipment(input: ShipmentInput, userId: string | nul
           reference: carrier.settings.productsInReference === false ? order.externalNumber : labelReference(order.externalNumber, items),
           ...input.options,
           ...(insure ? { insuranceAmount: declaredValue(order) } : {}),
+          ...(carrier.type === 'inpost' ? { sendingMethod: sendingMethodFor(input.service, carrier.settings) } : {}),
         },
         labelFormat: input.labelFormat ?? carrier.settings.labelFormat ?? 'pdf',
         labelSize: input.labelSize ?? carrier.settings.labelSize ?? 'A6',

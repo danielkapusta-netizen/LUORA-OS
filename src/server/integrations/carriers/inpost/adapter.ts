@@ -2,7 +2,19 @@ import { request, type RequestOptions } from '../../../http';
 import type { CarrierSettings } from '../../../db/schema';
 import { formatPostalCode, normalizePhone, splitStreet } from '../../address';
 import type { Address, LabelFormat, LabelSize, SenderSettings } from '../../types';
-import { inpostTrackingUrl, type CarrierAdapter, type CarrierService, type DeliveryStatus, type ShipmentRequest, type ShipmentStatus } from '../types';
+import { HttpError } from '../../../http';
+import { nextWorkingDays } from '@/lib/pickup-slots';
+import {
+  inpostTrackingUrl,
+  type CarrierAdapter,
+  type CarrierService,
+  type DeliveryStatus,
+  type PickupAddressInput,
+  type PickupSlot,
+  type PickupStatus,
+  type ShipmentRequest,
+  type ShipmentStatus,
+} from '../types';
 import { msg } from '@/lib/i18n/msg';
 
 export interface InpostCredentials {
@@ -185,5 +197,76 @@ export class InpostAdapter implements CarrierAdapter {
   async deliveryStatus(ref: { trackingNumber: string }): Promise<DeliveryStatus> {
     const data = await this.call<{ status: string }>('GET', `/v1/tracking/${encodeURIComponent(ref.trackingNumber)}`);
     return mapTrackingStatus(data.status);
+  }
+
+  /** InPost offers no windows: its courier comes on his next round, so only the day is chosen. */
+  async pickupProposals(externalIds: string[]): Promise<Map<string, PickupSlot[]>> {
+    const slots = nextWorkingDays(new Date(), 3, true).map((date) => ({ date }));
+    return new Map(externalIds.map((id) => [id, slots]));
+  }
+
+  /** Orders InPost's courier for these parcels (a ShipX dispatch order); InPost confirms it in the background. */
+  async createPickup(_commandId: string, externalIds: string[], slot: PickupSlot, at: PickupAddressInput): Promise<PickupStatus> {
+    try {
+      const order = await this.call<ShipxDispatchOrder>('POST', `/v1/organizations/${this.creds.organizationId}/dispatch_orders`, {
+        body: buildDispatchOrder(externalIds, slot, at),
+        // A retried POST could order a second courier.
+        retries: 0,
+      });
+      return dispatchStatus(order);
+    } catch (err) {
+      if (err instanceof HttpError) return { state: 'failed', error: `InPost refused the pickup: ${shipxError(err.body)}` };
+      throw err;
+    }
+  }
+
+  async pickupStatus(dispatchOrderId: string): Promise<PickupStatus> {
+    return dispatchStatus(await this.call<ShipxDispatchOrder>('GET', `/v1/dispatch_orders/${encodeURIComponent(dispatchOrderId)}`));
+  }
+}
+
+interface ShipxDispatchOrder {
+  id: number | string;
+  status: string;
+  external_id?: string | null;
+  errors?: unknown;
+}
+
+/** The dispatch order ShipX wants: the parcels, where the courier comes and whom to call. */
+export function buildDispatchOrder(externalIds: string[], slot: PickupSlot, at: PickupAddressInput) {
+  return {
+    shipments: externalIds,
+    comment: `Odbiór ${slot.date}${slot.minTime ? ` ${slot.minTime}–${slot.maxTime}` : ''} · Luora`.slice(0, 100),
+    name: (at.company || at.name || '').slice(0, 100),
+    phone: normalizePhone(at.phone),
+    email: at.email,
+    address: shipxAddress(at),
+  };
+}
+
+/** new = not passed on yet; sent and later = with the courier; rejected = refused, with the reasons. */
+export function dispatchStatus(order: ShipxDispatchOrder): PickupStatus {
+  const id = String(order.id);
+  if (order.status === 'rejected' || order.status === 'canceled' || order.status === 'cancelled') {
+    return { state: 'failed', pickupId: id, error: `InPost rejected the pickup${order.errors ? `: ${shipxError(JSON.stringify(order.errors))}` : ''}` };
+  }
+  if (order.status === 'new' || order.status === 'created') return { state: 'pending', pickupId: id, retryAfterSeconds: 30 };
+  return { state: 'booked', pickupId: id, carrierPickupId: order.external_id || id };
+}
+
+/** ShipX errors as one line: "shipments: Parcel (123) status should be Prepared, but is Sent". */
+export function shipxError(body: string): string {
+  try {
+    const data = JSON.parse(body) as { message?: string; details?: unknown; error?: string } | unknown[];
+    const flat: string[] = [];
+    const walk = (v: unknown, key = '') => {
+      if (typeof v === 'string') flat.push(key ? `${key}: ${v}` : v);
+      else if (Array.isArray(v)) v.forEach((x) => walk(x, key));
+      else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, /^\d+$/.test(k) ? key : k);
+    };
+    walk(Array.isArray(data) ? data : (data.details ?? data.message ?? data.error ?? data));
+    return [...new Set(flat)].join('; ') || body.slice(0, 200);
+  } catch {
+    return body.slice(0, 200);
   }
 }

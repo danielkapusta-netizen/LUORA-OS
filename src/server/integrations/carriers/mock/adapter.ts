@@ -216,7 +216,8 @@ export class MockCarrierAdapter implements CarrierAdapter {
       const service = decode(id).service;
       groups.set(service, [...(groups.get(service) ?? []), id]);
     }
-    if (groups.size > 1) {
+    // Only Allegro splits pickups by integration; InPost and DPD collect any of their parcels together.
+    if (groups.size > 1 && this.carrier === 'allegro_shipping') {
       const lists = [...groups.values()].map((ids) => ids.join(', ')).join(' || ');
       return { state: 'failed', error: `Shipment created via different integrations. Separate ids in different requests by ||: ${lists}` };
     }

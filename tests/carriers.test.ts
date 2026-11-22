@@ -387,3 +387,57 @@ describe('Allegro Delivery insurance', () => {
   });
 });
 
+
+describe('InPost courier pickups (ShipX dispatch orders)', () => {
+  const SHIPX = 'https://sandbox-api-shipx-pl.easypack24.net';
+  const adapter = new InpostAdapter({ apiToken: 'tok', organizationId: '42', sandbox: true });
+  const at = { name: 'Jan Kowalski', company: 'Luora', street: 'ul. Magazynowa 5', postalCode: '02222', city: 'Warszawa', countryCode: 'pl', phone: '+48 500 600 700', email: 'magazyn@example.com' };
+
+  it('orders the courier for the parcels, at our address, with the chosen day as a note', async () => {
+    let body: Record<string, unknown> = {};
+    let posts = 0;
+    server.use(
+      http.post(`${SHIPX}/v1/organizations/42/dispatch_orders`, async ({ request }) => {
+        posts++;
+        body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 901, status: 'new', shipments: [] }, { status: 201 });
+      }),
+    );
+    const status = await adapter.createPickup('cmd', ['111', '222'], { date: '2026-11-24' }, at);
+    expect(status).toEqual({ state: 'pending', pickupId: '901', retryAfterSeconds: 30 });
+    expect(posts).toBe(1);
+    expect(body).toEqual({
+      shipments: ['111', '222'],
+      comment: 'Odbiór 2026-11-24 · Luora',
+      name: 'Luora',
+      phone: expect.stringMatching(/500600700$/),
+      email: 'magazyn@example.com',
+      address: { street: 'ul. Magazynowa', building_number: '5', city: 'Warszawa', post_code: '02-222', country_code: 'PL' },
+    });
+  });
+
+  it('reads the confirmation: new waits, sent is booked with InPost’s number, rejected says why', async () => {
+    let answer: Record<string, unknown> = { id: 901, status: 'new' };
+    server.use(http.get(`${SHIPX}/v1/dispatch_orders/901`, () => HttpResponse.json(answer)));
+    expect(await adapter.pickupStatus('901')).toMatchObject({ state: 'pending' });
+    answer = { id: 901, status: 'sent', external_id: 'ZO/123/2026' };
+    expect(await adapter.pickupStatus('901')).toEqual({ state: 'booked', pickupId: '901', carrierPickupId: 'ZO/123/2026' });
+    answer = { id: 901, status: 'rejected', errors: { shipments: ['Parcel (111) status should be Prepared, but is Sent.'] } };
+    expect(await adapter.pickupStatus('901')).toMatchObject({ state: 'failed', error: 'InPost rejected the pickup: shipments: Parcel (111) status should be Prepared, but is Sent.' });
+  });
+
+  it('explains a refused order', async () => {
+    server.use(
+      http.post(`${SHIPX}/v1/organizations/42/dispatch_orders`, () =>
+        HttpResponse.json({ status: 400, error: 'validation_failed', message: 'There are some validation errors.', details: { shipments: ['already_assigned'] } }, { status: 400 }),
+      ),
+    );
+    expect(await adapter.createPickup('cmd', ['111'], { date: '2026-11-24' }, at)).toEqual({ state: 'failed', error: 'InPost refused the pickup: shipments: already_assigned' });
+  });
+
+  it('offers days, not hours', async () => {
+    const slots = await adapter.pickupProposals(['111']);
+    expect(slots.get('111')!.length).toBe(3);
+    expect(slots.get('111')![0]).not.toHaveProperty('minTime');
+  });
+});

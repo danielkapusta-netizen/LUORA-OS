@@ -72,4 +72,5 @@ export const pickup: Record<string, string> = {
   "Pickup not found": "Nie znaleziono odbioru",
   "This carrier has no handover protocol": "Ten przewoźnik nie ma protokołu przekazania",
   "This pickup has no parcels": "Ten odbiór nie ma paczek",
+  "The carrier did not confirm the pickup in time. Check it in the carrier’s panel before booking again.": "Przewoźnik nie potwierdził odbioru na czas. Sprawdź go w panelu przewoźnika, zanim zamówisz ponownie.",
 };
