@@ -51,11 +51,24 @@ export interface PickupColumn {
   pickups: PickupSummary[];
 }
 
-/** Labelled Allegro Delivery and DPD parcels that no booked (or booking) pickup covers yet. */
+/**
+ * Labelled parcels a courier collects that no booked (or booking) pickup covers yet: Allegro Delivery, DPD, and our own
+ * InPost parcels sent for courier collection (a Paczkomat label made for dropping off can't go on an InPost pickup).
+ */
 function waitingFilter() {
   return and(
     eq(shipments.state, 'created'),
-    inArray(shipments.carrier, ['allegro_shipping', 'dpd']),
+    or(
+      inArray(shipments.carrier, ['allegro_shipping', 'dpd']),
+      and(
+        eq(shipments.carrier, 'inpost'),
+        or(
+          sql`json_extract(${shipments.options}, '$.sendingMethod') = 'dispatch_order'`,
+          // Labels made before the method was stored: courier parcels were always collected, lockers dropped off.
+          and(sql`json_extract(${shipments.options}, '$.sendingMethod') is null`, eq(shipments.service, 'inpost_courier_standard')),
+        ),
+      ),
+    ),
     or(isNull(shipments.pickupId), eq(courierPickups.state, 'failed')),
     isNull(shipments.deliveredAt),
     isNull(shipments.pickupClearedAt),
@@ -298,6 +311,8 @@ async function sendPickup(pickupId: string, carrierAccountId: string, externalId
       await getDb().update(courierPickups).set({ state: 'failed', error }).where(eq(courierPickups.id, pickupId));
       return error;
     }
+    // InPost names its dispatch order at once; the confirmation is read with that id.
+    if (status.pickupId) await getDb().update(courierPickups).set({ externalId: status.pickupId }).where(eq(courierPickups.id, pickupId));
     await enqueue(JOBS.pickupPoll, { pickupId }, { startAfterSeconds: Math.max(1, Math.round(status.retryAfterSeconds ?? 2)) });
     return null;
   } catch (err) {
@@ -352,7 +367,7 @@ export async function runPollPickup(pickupId: string): Promise<void> {
   const attempts = pickup.pollAttempts + 1;
   try {
     const adapter = await getCarrierAdapter(await loadCarrier(pickup.carrierAccountId));
-    const status = await adapter.pickupStatus!(pickup.commandId);
+    const status = await adapter.pickupStatus!(pickup.externalId ?? pickup.commandId);
     if (status.state === 'booked') {
       await db
         .update(courierPickups)
@@ -368,7 +383,7 @@ export async function runPollPickup(pickupId: string): Promise<void> {
     if (attempts > MAX_POLLS) {
       await db
         .update(courierPickups)
-        .set({ state: 'failed', error: msg('Allegro did not confirm the pickup in time. Check it in Allegro before booking again.'), pollAttempts: attempts })
+        .set({ state: 'failed', error: msg('The carrier did not confirm the pickup in time. Check it in the carrier’s panel before booking again.'), pollAttempts: attempts })
         .where(eq(courierPickups.id, pickupId));
       return;
     }

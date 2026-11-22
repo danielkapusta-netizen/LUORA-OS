@@ -17,6 +17,8 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
   };
   let userId: string;
   const labelled: string[] = [];
+  /** The Shopify order's label, on our own InPost account (the demo InPost collects by courier). */
+  let ownInpost = '';
   const jobs: { name: string; data: unknown }[] = [];
 
   const address = {
@@ -65,6 +67,7 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
       await m.shipping.runCreateShipment(id);
       await m.shipping.runPollShipment(id);
       if (order.marketplace === 'allegro') labelled.push(id);
+      else ownInpost = id;
     }
     // Every Allegro parcel but the last is packed.
     for (const id of labelled.slice(0, -1)) await m.shipping.setPacked(id, true, userId);
@@ -79,15 +82,17 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
   const board = () => m.pickups.pickupBoard();
   const parcels = async () => (await board()).columns.flatMap((c) => c.parcels.map((p) => ({ ...p, courier: c.courier })));
 
-  it('lists labelled Allegro parcels by courier, packed ones bookable, others waiting', async () => {
+  it('lists labelled parcels by courier, packed ones bookable, others waiting', async () => {
     const list = await parcels();
     const { otherCouriers } = await board();
-    // Every Allegro label is either in a courier column or counted as another courier (Allegro One).
-    expect(list.length + otherCouriers).toBe(labelled.length);
-    expect(list.every((p) => labelled.includes(p.shipmentId))).toBe(true);
+    // Every Allegro label is either in a courier column or counted as another courier (Allegro One); our own
+    // InPost parcel, sent for courier collection, is in the InPost column too.
+    expect(list.length + otherCouriers).toBe(labelled.length + 1);
+    expect(list.find((p) => p.shipmentId === ownInpost)?.courier).toBe('InPost');
+    expect(list.every((p) => labelled.includes(p.shipmentId) || p.shipmentId === ownInpost)).toBe(true);
     const unpacked = list.filter((p) => !p.packed).map((p) => p.shipmentId);
-    expect(unpacked.every((id) => id === labelled.at(-1))).toBe(true);
-    // The Shopify parcel (InPost directly) is not here, and the badge counts packed parcels only.
+    expect(unpacked.every((id) => id === labelled.at(-1) || id === ownInpost)).toBe(true);
+    // The badge counts packed parcels only.
     expect(await m.pickups.pickupWaitingCount()).toBe(list.filter((p) => p.packed).length);
   });
 
@@ -286,5 +291,27 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
     expect(pickup.protocol).toBe(true);
     const pdf = await m.pickups.pickupProtocol(linked.pickupId!);
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  });
+  it('books InPost’s own courier for our InPost parcels, but not for Paczkomat labels made for dropping off', async () => {
+    const db = m.db.getDb();
+    await m.shipping.setPacked(ownInpost, true, userId);
+    const [own] = await db.select().from(m.schema.shipments).where(m.orm.eq(m.schema.shipments.id, ownInpost));
+    expect(own.options.sendingMethod).toBe('dispatch_order');
+    // A Paczkomat label from before, made for dropping off at a Paczkomat: not on the page.
+    await db.update(m.schema.shipments).set({ options: { ...own.options, sendingMethod: 'parcel_locker' } }).where(m.orm.eq(m.schema.shipments.id, ownInpost));
+    expect((await parcels()).some((p) => p.shipmentId === ownInpost)).toBe(false);
+    await db.update(m.schema.shipments).set({ options: own.options }).where(m.orm.eq(m.schema.shipments.id, ownInpost));
+
+    const [home] = await m.pickups.listPickupAddresses();
+    const proposal = await m.pickups.pickupProposals([ownInpost], home.id);
+    expect(proposal.dateOnly).toBe(true);
+    jobs.length = 0;
+    await m.pickups.bookPickup({ courier: 'InPost', shipmentIds: [ownInpost], addressId: home.id, slot: proposal.slots[0] }, userId);
+    const [linked] = await db.select().from(m.schema.shipments).where(m.orm.eq(m.schema.shipments.id, ownInpost));
+    expect(linked.pickupId).toBeTruthy();
+    await m.pickups.runPollPickup(linked.pickupId!);
+    const [pickup] = await db.select().from(m.schema.courierPickups).where(m.orm.eq(m.schema.courierPickups.id, linked.pickupId!));
+    expect(pickup.state).toBe('booked');
+    expect((await parcels()).some((p) => p.shipmentId === ownInpost)).toBe(false);
   });
 });

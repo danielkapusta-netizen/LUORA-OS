@@ -497,6 +497,8 @@ export interface ShipmentOptions {
   insuranceAmount?: string | null;
   pickupPointId?: string | null;
   reference?: string | null;
+  /** InPost: how the parcel reaches InPost ("dispatch_order" = a courier collects it), fixed when the label is made. */
+  sendingMethod?: string | null;
 }
 
 export const shipments = sqliteTable(
