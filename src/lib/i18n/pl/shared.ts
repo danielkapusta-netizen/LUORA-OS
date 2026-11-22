@@ -312,4 +312,6 @@ export const shared: Record<string, string> = {
   "Something went wrong on our side. Try again; it usually works the second time.": "Coś poszło nie tak po naszej stronie. Spróbuj ponownie – zwykle za drugim razem działa.",
   "Reload page": "Odśwież stronę",
   "Error code": "Kod błędu",
+  "DPD courier": "Kurier DPD",
+  "e.g. PL19262": "np. PL19262",
 };

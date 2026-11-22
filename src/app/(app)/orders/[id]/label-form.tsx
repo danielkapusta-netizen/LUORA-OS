@@ -112,18 +112,20 @@ export function LabelForm({ action, carriers, services, presets, defaults, order
         <Field label={t('Weight kg')}>
           <Input name="weightKg" inputMode="decimal" value={dims.weightKg} onChange={(e) => setDims({ ...dims, weightKg: e.target.value })} required />
         </Field>
-        <Field label={t('Locker size')}>
-          <Select name="inpostTemplate" value={dims.inpostTemplate} onChange={(e) => setDims({ ...dims, inpostTemplate: e.target.value })}>
-            <option value="small">{t('A (small)')}</option>
-            <option value="medium">{t('B (medium)')}</option>
-            <option value="large">{t('C (large)')}</option>
-          </Select>
-        </Field>
+        {carrier?.type !== 'dpd' && (
+          <Field label={t('Locker size')}>
+            <Select name="inpostTemplate" value={dims.inpostTemplate} onChange={(e) => setDims({ ...dims, inpostTemplate: e.target.value })}>
+              <option value="small">{t('A (small)')}</option>
+              <option value="medium">{t('B (medium)')}</option>
+              <option value="large">{t('C (large)')}</option>
+            </Select>
+          </Field>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label={needsPoint ? t('Pickup point (required)') : t('Pickup point')}>
-          <Input name="pickupPointId" defaultValue={order.pickupPointId ?? ''} placeholder={t('e.g. KRA010')} required={needsPoint} />
+          <Input name="pickupPointId" defaultValue={order.pickupPointId ?? ''} placeholder={carrier?.type === 'dpd' ? t('e.g. PL19262') : t('e.g. KRA010')} required={needsPoint} />
         </Field>
         <Field label={t('COD ({currency})', { currency: order.currency })}>
           <Input name="codAmount" inputMode="decimal" defaultValue={order.codAmount ?? ''} placeholder={t('none')} />

@@ -32,6 +32,8 @@ export interface BoardPickup {
   addressLabel: string;
   error: string | null;
   parcels: number;
+  /** A handover protocol can be printed for it (DPD). */
+  protocol: boolean;
 }
 
 export interface BoardColumn {
@@ -290,6 +292,13 @@ function PickupRow({ pickup: p, today }: { pickup: BoardPickup; today: string })
           </>
         )}
       </p>
+      {p.state === 'booked' && p.protocol && (
+        <p className="mt-1 pl-6">
+          <a href={`/api/pickups/${p.id}/protocol`} target="_blank" rel="noreferrer" className="font-medium text-brand-700 underline underline-offset-2">
+            {t('Handover protocol (PDF)')}
+          </a>
+        </p>
+      )}
       {p.state === 'failed' && p.error && <PickupError text={t(p.error)} />}
       {p.state === 'failed' && <p className="mt-0.5 pl-6 text-slate-500">{t('Its parcels are back in the list to book again.')}</p>}
     </li>

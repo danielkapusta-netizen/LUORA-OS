@@ -19,5 +19,6 @@ export function courierOf(deliveryMethodName: string | null | undefined, shipmen
   const name = deliveryMethodName ?? '';
   for (const [pattern, courier] of RULES) if (pattern.test(name)) return courier;
   if (shipmentCarrier === 'inpost') return 'InPost';
+  if (shipmentCarrier === 'dpd') return 'DPD';
   return 'Other';
 }

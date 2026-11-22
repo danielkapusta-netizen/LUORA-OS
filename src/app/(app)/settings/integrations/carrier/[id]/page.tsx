@@ -9,7 +9,7 @@ import { requireAdmin } from '@/server/auth';
 import type { CarrierAccount } from '@/server/db/schema';
 import { loadCarrierAccount } from '@/server/services/accounts';
 import { listMarketplaceAccounts, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
-import { deleteCarrierAction, saveCarrierAction } from '../../../actions';
+import { addDpdEmpikRuleAction, deleteCarrierAction, saveCarrierAction } from '../../../actions';
 import { getT } from '@/lib/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -30,7 +30,7 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
       notFound();
     }
   }
-  const type = (account?.type ?? typeParam) as 'inpost' | 'allegro_shipping';
+  const type = (account?.type ?? typeParam) as 'inpost' | 'allegro_shipping' | 'dpd';
   if (!CARRIER_LABELS[type]) notFound();
   const stored = storedCredentialKeys(account?.credentials ?? null);
   const pub = publicCredentialFields(account?.credentials ?? null);
@@ -75,6 +75,30 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
                   </Field>
                 </div>
                 <Checkbox name="sandbox" label={t('Use the ShipX sandbox')} defaultChecked={pub.sandbox === true} />
+              </fieldset>
+            )}
+
+            {type === 'dpd' && (
+              <fieldset className="space-y-3">
+                <legend className="mb-1 text-sm font-semibold">{t('DPD web services (DPDServices)')}</legend>
+                <p className="text-xs text-slate-500">
+                  {t('Enter the web-service access DPD sent you. Create one account for your own DPD contract and a second one for parcels under the Empik agreement (Empik salons): each has its own login and FID.')}
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={t('Login')}>
+                    <Input name="login" defaultValue={typeof pub.login === 'string' ? pub.login : ''} autoComplete="off" required />
+                  </Field>
+                  <Field label={t('Password')}>
+                    <Input name="password" type="password" autoComplete="new-password" placeholder={stored.includes('password') ? t('•••••••• saved – leave blank to keep') : ''} />
+                  </Field>
+                  <Field label={t('Master FID')}>
+                    <Input name="masterFid" inputMode="numeric" defaultValue={typeof pub.masterFid === 'string' ? pub.masterFid : ''} required />
+                  </Field>
+                  <Field label={t('FID parcels are sent from')} hint={t('The “fidy DPDServices” number; usually the same as the master FID.')}>
+                    <Input name="fid" inputMode="numeric" defaultValue={typeof pub.fid === 'string' ? pub.fid : ''} required />
+                  </Field>
+                </div>
+                <p className="text-xs text-slate-500">{t('The courier is ordered from Orders → Courier pickup, where the handover protocol is printed too.')}</p>
               </fieldset>
             )}
 
@@ -159,6 +183,22 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
           </ActionForm>
         </CardBody>
       </Card>
+      {account?.type === 'dpd' && (
+        <Card className="mt-5">
+          <CardHeader
+            title={t('Send Empik orders with this account')}
+            description={t('Adds a shipping rule ahead of the InPost Paczkomat rule. Empik courier orders stay on InPost courier.')}
+          />
+          <CardBody className="flex flex-wrap gap-2">
+            <ActionForm action={addDpdEmpikRuleAction.bind(null, account.id, 'pickup')}>
+              <SubmitButton variant="secondary">{t('Route Empik “DPD PICKUP” orders here')}</SubmitButton>
+            </ActionForm>
+            <ActionForm action={addDpdEmpikRuleAction.bind(null, account.id, 'salon')}>
+              <SubmitButton variant="secondary">{t('Route Empik salon orders here (Empik agreement)')}</SubmitButton>
+            </ActionForm>
+          </CardBody>
+        </Card>
+      )}
       {account && (
         <form action={deleteCarrierAction.bind(null, account.id)} className="mt-5">
           <SubmitButton variant="danger" confirm={t('Delete this carrier account? Its shipping rules are deleted too.')}>

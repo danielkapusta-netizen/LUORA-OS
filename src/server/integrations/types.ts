@@ -5,7 +5,7 @@
 export const MARKETPLACES = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe', 'erli'] as const;
 export type Marketplace = (typeof MARKETPLACES)[number];
 
-export const CARRIERS = ['inpost', 'allegro_shipping'] as const;
+export const CARRIERS = ['inpost', 'allegro_shipping', 'dpd'] as const;
 export type Carrier = (typeof CARRIERS)[number];
 
 export interface Address {

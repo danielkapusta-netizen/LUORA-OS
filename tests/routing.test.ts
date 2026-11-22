@@ -86,3 +86,28 @@ describe('matchesRule', () => {
     expect(describeConditions({ marketplaces: ['allegro'], hasPickupPoint: true })).toBe('marketplace is allegro, has a pickup point');
   });
 });
+
+describe('Empik DPD orders', () => {
+  const withDpd: CarrierLike[] = [
+    ...carriers,
+    { id: 'dpd', type: 'dpd', enabled: true, configured: true, marketplaceAccountId: null },
+    { id: 'dpd-empik', type: 'dpd', enabled: true, configured: true, marketplaceAccountId: null },
+  ];
+  // The rules "Route Empik … orders here" adds on the DPD account pages.
+  const rules = [
+    ...defaults,
+    rule({ id: 'empik-salon', priority: 14, conditions: { marketplaces: ['empik'], deliveryMethodContains: 'Salonu Empik' }, carrierAccountId: 'dpd-empik', service: 'dpd_pickup' }),
+    rule({ id: 'empik-dpd', priority: 15, conditions: { marketplaces: ['empik'], deliveryMethodContains: 'DPD' }, carrierAccountId: 'dpd', service: 'dpd_pickup' }),
+  ];
+
+  it('sends DPD PICKUP to the DPD account and salons to the Empik-agreement account', () => {
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'DPD PICKUP', pickupPointId: 'PL19262' }), rules, withDpd)).toMatchObject({ ruleId: 'empik-dpd', carrierAccountId: 'dpd', service: 'dpd_pickup' });
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'Dostawa do Salonu Empik', pickupPointId: 'PL49033' }), rules, withDpd)).toMatchObject({ ruleId: 'empik-salon', carrierAccountId: 'dpd-empik' });
+  });
+
+  it('keeps Empik couriers and Paczkomaty, and other marketplaces, on InPost', () => {
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'KURIER' }), rules, withDpd)?.service).toBe('inpost_courier_standard');
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'Paczkomaty InPost', pickupPointId: 'WAW01A' }), rules, withDpd)?.service).toBe('inpost_locker_standard');
+    expect(chooseRoute(order({ marketplace: 'hebe', deliveryMethodName: 'DPD Pickup', pickupPointId: 'PL1' }), rules, withDpd)?.ruleId).toBe('lockers');
+  });
+});

@@ -5,6 +5,7 @@ import { MARKETPLACE_LABELS, SERVICE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import type { CarrierAccount, PackagePreset, PickupAddress, ShippingRule } from '@/server/db/schema';
 import { BUYER_CHOICE } from '@/server/integrations/carriers/allegro-shipping/adapter';
+import { DPD_SERVICES } from '@/server/integrations/carriers/dpd/adapter';
 import { INPOST_SERVICES } from '@/server/integrations/carriers/inpost/adapter';
 import { describeConditions } from '@/server/services/routing';
 import { listPickupAddresses } from '@/server/services/pickups';
@@ -27,7 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 function routeOptions(carriers: CarrierAccount[]) {
   return carriers.flatMap((c) =>
-    (c.type === 'inpost' ? INPOST_SERVICES : [{ id: BUYER_CHOICE, name: "Buyer's delivery method" }]).map((s) => ({
+    (c.type === 'inpost' ? INPOST_SERVICES : c.type === 'dpd' ? DPD_SERVICES : [{ id: BUYER_CHOICE, name: "Buyer's delivery method" }]).map((s) => ({
       value: `${c.id}|${s.id}`,
       label: `${c.name} – ${s.name}`,
     })),

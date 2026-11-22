@@ -231,4 +231,60 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
     // Clearing again changes nothing.
     expect(await m.pickups.clearFromPickup(ids)).toBe(0);
   });
+  it('sends Empik DPD Pickup orders with DPD, books the DPD courier and prints the handover protocol', async () => {
+    const db = m.db.getDb();
+    const settings = await import('@/server/services/settings');
+    const dpdId = await settings.saveCarrierAccount({
+      type: 'dpd',
+      name: 'DPD',
+      credentials: { login: 'test', password: 'test', masterFid: '1000', fid: '1001' },
+      marketplaceAccountId: null,
+      sender: { name: 'Luora', street: 'Prosta 1', city: 'Warszawa', postalCode: '00-850', countryCode: 'PL', phone: '600100200', email: 'shop@example.com' },
+      settings: {},
+      enabled: true,
+    });
+    expect(await settings.addDpdEmpikRule(dpdId, 'pickup')).toBe(true);
+    expect(await settings.addDpdEmpikRule(dpdId, 'pickup')).toBe(false);
+
+    // An Empik order whose buyer chose DPD Pickup, and one whose point code is missing.
+    const empik = (await db.select().from(m.schema.orders)).filter((o) => o.marketplace === 'empik' && o.readyToShip && o.status === 'new');
+    expect(empik.length).toBeGreaterThanOrEqual(2);
+    const [withPoint, noPoint] = empik;
+    await db.update(m.schema.orders).set({ deliveryMethodId: 'DPD_PICKUP', deliveryMethodName: 'DPD PICKUP', pickupPointId: 'PL19262' }).where(m.orm.eq(m.schema.orders.id, withPoint.id));
+    await db.update(m.schema.orders).set({ deliveryMethodId: 'DPD_PICKUP', deliveryMethodName: 'DPD PICKUP', pickupPointId: null }).where(m.orm.eq(m.schema.orders.id, noPoint.id));
+
+    const data = await m.shipping.loadRoutingData();
+    const [order] = await db.select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.id, withPoint.id));
+    const route = m.shipping.routeOrder(order, data)!;
+    expect(route).toMatchObject({ carrierAccountId: dpdId, service: 'dpd_pickup' });
+    const shipmentId = await m.shipping.requestShipment({ orderId: order.id, carrierAccountId: route.carrierAccountId, service: route.service, parcel: m.shipping.presetToParcel(data.presets[0]), options: {} }, userId);
+    await m.shipping.runCreateShipment(shipmentId);
+    await m.shipping.runPollShipment(shipmentId);
+    const [shipment] = await db.select().from(m.schema.shipments).where(m.orm.eq(m.schema.shipments.id, shipmentId));
+    expect(shipment).toMatchObject({ state: 'created', carrier: 'dpd', carrierCode: 'DPD' });
+    expect(shipment.trackingUrl).toContain('tracktrace.dpd.com.pl');
+
+    // No point code: the parcel isn't made.
+    const [missing] = await db.select().from(m.schema.orders).where(m.orm.eq(m.schema.orders.id, noPoint.id));
+    const failedId = await m.shipping.requestShipment({ orderId: missing.id, carrierAccountId: dpdId, service: 'dpd_pickup', parcel: m.shipping.presetToParcel(data.presets[0]), options: {} }, userId);
+    await m.shipping.runCreateShipment(failedId);
+    const [failed] = await db.select().from(m.schema.shipments).where(m.orm.eq(m.schema.shipments.id, failedId));
+    expect(failed.state).toBe('failed');
+    expect(failed.error).toMatch(/point code/);
+
+    // The DPD parcel waits in the DPD column; booking and the protocol work per DPD account.
+    await m.shipping.setPacked(shipmentId, true, userId);
+    const dpdColumn = (await board()).columns.find((c) => c.courier === 'DPD')!;
+    expect(dpdColumn.parcels.map((p) => p.shipmentId)).toContain(shipmentId);
+    const [home] = await m.pickups.listPickupAddresses();
+    const proposal = await m.pickups.pickupProposals([shipmentId], home.id);
+    expect(proposal.slots.length).toBeGreaterThan(0);
+    await m.pickups.bookPickup({ courier: 'DPD', shipmentIds: [shipmentId], addressId: home.id, slot: proposal.slots[0] }, userId);
+    const [linked] = await db.select().from(m.schema.shipments).where(m.orm.eq(m.schema.shipments.id, shipmentId));
+    expect(linked.pickupId).toBeTruthy();
+    const pickup = (await board()).columns.find((c) => c.courier === 'DPD')!.pickups.find((p) => p.id === linked.pickupId)!;
+    expect(pickup.protocol).toBe(true);
+    const pdf = await m.pickups.pickupProtocol(linked.pickupId!);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  });
 });

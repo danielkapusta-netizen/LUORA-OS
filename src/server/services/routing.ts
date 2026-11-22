@@ -25,7 +25,7 @@ export interface RuleLike {
 
 export interface CarrierLike {
   id: string;
-  type: 'inpost' | 'allegro_shipping';
+  type: 'inpost' | 'allegro_shipping' | 'dpd';
   enabled: boolean;
   /** Has working credentials (always true in demo mode). */
   configured: boolean;

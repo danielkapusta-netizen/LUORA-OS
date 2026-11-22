@@ -40,7 +40,6 @@ export const pickup: Record<string, string> = {
   "Tick at least one parcel": "Zaznacz co najmniej jedną paczkę",
   "Some parcels already have a pickup or no longer need one. Refresh the page.": "Niektóre paczki mają już zamówiony odbiór lub go nie potrzebują. Odśwież stronę.",
   "Only packed parcels can be booked for pickup": "Odbiór można zamówić tylko dla spakowanych paczek",
-  "A parcel has no Allegro shipment id yet": "Paczka nie ma jeszcze identyfikatora przesyłki Allegro",
   "Carrier account not found": "Nie znaleziono konta przewoźnika",
   "This carrier account cannot book courier pickups": "To konto przewoźnika nie umożliwia zamawiania kuriera",
   "Choose a pickup day": "Wybierz dzień odbioru",
@@ -67,4 +66,10 @@ export const pickup: Record<string, string> = {
   "Add address": "Dodaj adres",
   "Delete this pickup address?": "Usunąć ten adres odbioru?",
   "New pickup address": "Nowy adres odbioru",
+  "Handover protocol (PDF)": "Protokół przekazania (PDF)",
+  "A parcel has no carrier shipment id yet": "Paczka nie ma jeszcze numeru przesyłki u przewoźnika",
+  "The carrier refused the pickup": "Przewoźnik odrzucił zamówienie odbioru",
+  "Pickup not found": "Nie znaleziono odbioru",
+  "This carrier has no handover protocol": "Ten przewoźnik nie ma protokołu przekazania",
+  "This pickup has no parcels": "Ten odbiór nie ma paczek",
 };

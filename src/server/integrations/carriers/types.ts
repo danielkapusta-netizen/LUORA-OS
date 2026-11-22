@@ -70,6 +70,10 @@ export type DeliveryStatus = 'in_transit' | 'ready_for_pickup' | 'delivered' | '
 export interface CarrierAdapter {
   readonly carrier: Carrier;
   services(): Promise<CarrierService[]>;
+  /** Checks the login without creating anything; carriers without it are tested by listing their services. */
+  checkConnection?(): Promise<string>;
+  /** The handover protocol the courier signs for these parcels (DPD). */
+  protocol?(externalIds: string[]): Promise<Buffer>;
   createShipment(req: ShipmentRequest): Promise<ShipmentStatus>;
   /** Polls a shipment whose creation is still pending. */
   refreshShipment(ref: { externalId: string | null; commandId: string | null }): Promise<ShipmentStatus>;

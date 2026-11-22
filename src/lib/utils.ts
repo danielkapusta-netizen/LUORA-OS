@@ -57,10 +57,13 @@ export const MARKETPLACE_LABELS: Record<string, string> = {
 export const CARRIER_LABELS: Record<string, string> = {
   inpost: 'InPost',
   allegro_shipping: 'Allegro Delivery',
+  dpd: 'DPD',
 };
 
 export const SERVICE_LABELS: Record<string, string> = {
   inpost_locker_standard: 'Paczkomat',
   inpost_courier_standard: msg('Courier'),
   buyer_choice: msg("Buyer's method"),
+  dpd_pickup: 'DPD Pickup',
+  dpd_classic: msg('DPD courier'),
 };

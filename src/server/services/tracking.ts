@@ -7,7 +7,7 @@ import { logEvent } from './events';
 import { loadOrder, orderRef } from './orders';
 import { changeStatus, shipWhenReady } from './workflow';
 
-const CARRIER_NAMES = { inpost: 'InPost', allegro_shipping: 'Allegro Delivery' } as const;
+const CARRIER_NAMES = { inpost: 'InPost', allegro_shipping: 'Allegro Delivery', dpd: 'DPD Polska' } as const;
 
 /** Job: sends the tracking number to the marketplace and marks the order as shipped. */
 export async function runPushTracking(shipmentId: string): Promise<void> {

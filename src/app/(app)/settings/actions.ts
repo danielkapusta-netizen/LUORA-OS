@@ -10,6 +10,7 @@ import { enqueue, JOBS } from '@/server/jobs/queue';
 import { resetFeeCursor } from '@/server/services/fees';
 import { startHistoryImport, stopHistoryImport } from '@/server/services/history';
 import {
+  addDpdEmpikRule,
   createDefaultRules,
   createUser,
   setUserRole,
@@ -225,7 +226,7 @@ export async function removeDemoDataAction(): Promise<ActionResult> {
 
 export async function saveCarrierAction(id: string | null, _prev: ActionResult, fd: FormData): Promise<ActionResult> {
   await requireAdmin();
-  const type = text(fd, 'type') as 'inpost' | 'allegro_shipping';
+  const type = text(fd, 'type') as 'inpost' | 'allegro_shipping' | 'dpd';
   const settings: CarrierSettings = {
     labelFormat: text(fd, 'labelFormat') === 'zpl' ? 'zpl' : 'pdf',
     labelSize: text(fd, 'labelSize') === 'A4' ? 'A4' : 'A6',
@@ -236,6 +237,8 @@ export async function saveCarrierAction(id: string | null, _prev: ActionResult, 
     credentials = { ...secrets(fd, ['apiToken']), organizationId: text(fd, 'organizationId'), sandbox: bool(fd, 'sandbox') };
     settings.sendingMethod = text(fd, 'sendingMethod') || 'dispatch_order';
     settings.dropoffPoint = text(fd, 'dropoffPoint').replace(/\s/g, '').toUpperCase() || undefined;
+  } else if (type === 'dpd') {
+    credentials = { ...secrets(fd, ['password']), login: text(fd, 'login'), masterFid: text(fd, 'masterFid').replace(/\D/g, ''), fid: text(fd, 'fid').replace(/\D/g, '') };
   } else {
     settings.codIban = text(fd, 'codIban').replace(/\s/g, '') || undefined;
     settings.codOwnerName = text(fd, 'codOwnerName') || undefined;
@@ -258,6 +261,8 @@ export async function saveCarrierAction(id: string | null, _prev: ActionResult, 
       throw new Error(msg('Fill in the whole sender address, phone and email'));
     }
     if (type === 'allegro_shipping' && !text(fd, 'marketplaceAccountId')) throw new Error(msg('Choose the Allegro account to ship with'));
+    if (type === 'dpd' && (!credentials.login || !credentials.masterFid || !credentials.fid)) throw new Error(msg('Fill in the DPD login, master FID and FID'));
+    if (type === 'dpd' && !id && !credentials.password) throw new Error(msg('Enter the DPD password'));
     if (type === 'inpost' && settings.sendingMethod === 'parcel_locker' && !settings.dropoffPoint) {
       throw new Error(msg('Enter the drop-off point: the Paczkomat where you drop parcels (e.g. ZOF01M)'));
     }
@@ -474,5 +479,15 @@ export async function syncFeesAction(accountId: string, _prev: ActionResult, fd:
     await enqueue(JOBS.feesSync, { accountId }, { singletonKey: accountId });
     revalidatePath(`/settings/integrations/marketplace/${accountId}`);
     return msg('Fees are being read in the background.');
+  });
+}
+
+/** Adds the shipping rule that sends Empik DPD Pickup (or Empik salon) orders with this DPD account. */
+export async function addDpdEmpikRuleAction(carrierAccountId: string, kind: 'pickup' | 'salon'): Promise<ActionResult> {
+  await requireAdmin();
+  return attempt(async () => {
+    const created = await addDpdEmpikRule(carrierAccountId, kind);
+    revalidatePath('/settings/shipping');
+    return created ? msg('Rule added. See Settings → Shipping.') : msg('This rule already exists. See Settings → Shipping.');
   });
 }

@@ -51,7 +51,7 @@ export interface EconomicsRefund {
 }
 
 export interface EconomicsShipment {
-  carrier: 'inpost' | 'allegro_shipping';
+  carrier: 'inpost' | 'allegro_shipping' | 'dpd';
   service: string;
 }
 
