@@ -200,4 +200,6 @@ export const settings_b: Record<string, string> = {
   "+ DPD": "+ DPD",
   "No DPD login": "Brak loginu DPD",
   "This is not a DPD account": "To nie jest konto DPD",
+  "No orders are sent with this account yet: press a button below. Until then Empik DPD orders wait without a label.": "Tym kontem nie są jeszcze wysyłane żadne zamówienia: naciśnij przycisk poniżej. Do tego czasu zamówienia Empik z DPD czekają bez etykiety.",
+  "Rules using this account: {rules}": "Reguły używające tego konta: {rules}",
 };
