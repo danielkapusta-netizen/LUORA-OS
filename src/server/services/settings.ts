@@ -1,3 +1,4 @@
+import { DPD_PICKUP } from '../integrations/carriers/dpd/adapter';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { getCfEnv } from '../cf';
 import { encryptJson, hashPassword } from '../crypto';
@@ -189,7 +190,7 @@ export function storedCredentialKeys(encrypted: string | null): string[] {
 export function publicCredentialFields(encrypted: string | null): Record<string, string | boolean> {
   const creds = readCredentials<Record<string, unknown>>(encrypted) ?? {};
   const out: Record<string, string | boolean> = {};
-  for (const key of ['shopDomain', 'clientId', 'baseUrl', 'shopId', 'organizationId', 'sandbox']) {
+  for (const key of ['shopDomain', 'clientId', 'baseUrl', 'shopId', 'organizationId', 'sandbox', 'login', 'masterFid', 'fid']) {
     const value = creds[key];
     if (typeof value === 'string' || typeof value === 'boolean') out[key] = value;
   }
@@ -208,7 +209,7 @@ export async function listCarrierAccounts() {
 
 export async function saveCarrierAccount(input: {
   id?: string;
-  type: 'inpost' | 'allegro_shipping';
+  type: 'inpost' | 'allegro_shipping' | 'dpd';
   name: string;
   credentials: Record<string, unknown>;
   marketplaceAccountId: string | null;
@@ -253,7 +254,10 @@ export async function deleteCarrierAccount(id: string): Promise<void> {
 }
 
 export async function testCarrierConnection(id: string): Promise<string> {
-  const services = await (await getCarrierAdapter(await loadCarrierAccount(id))).services();
+  const adapter = await getCarrierAdapter(await loadCarrierAccount(id));
+  // A carrier that can check its login without creating anything says so (DPD).
+  if (adapter.checkConnection) return adapter.checkConnection();
+  const services = await adapter.services();
   return `${services.length} service(s) available`;
 }
 
@@ -273,6 +277,25 @@ export async function saveRule(input: {
   const { id, ...values } = input;
   if (id) await db.update(shippingRules).set(values).where(eq(shippingRules.id, id));
   else await db.insert(shippingRules).values(values);
+}
+
+/**
+ * The rule that sends Empik's DPD Pickup orders (or its salon orders, under the Empik agreement) with a DPD account.
+ * It goes ahead of the InPost Paczkomat rule, which would otherwise take them: they carry a pickup point too.
+ * Empik courier orders don't match, so they stay on InPost courier. Returns false when the rule is already there.
+ */
+export async function addDpdEmpikRule(carrierAccountId: string, kind: 'pickup' | 'salon'): Promise<boolean> {
+  const db = getDb();
+  const [carrier] = await db.select().from(carrierAccounts).where(eq(carrierAccounts.id, carrierAccountId));
+  if (!carrier || carrier.type !== 'dpd') throw new Error(msg('This is not a DPD account'));
+  const rule =
+    kind === 'salon'
+      ? { name: `Empik salon → ${carrier.name}`, priority: 14, conditions: { marketplaces: ['empik' as const], deliveryMethodContains: 'Salonu Empik' } }
+      : { name: `Empik DPD Pickup → ${carrier.name}`, priority: 15, conditions: { marketplaces: ['empik' as const], deliveryMethodContains: 'DPD' } };
+  const existing = await db.select().from(shippingRules).where(eq(shippingRules.carrierAccountId, carrierAccountId));
+  if (existing.some((r) => r.conditions.deliveryMethodContains === rule.conditions.deliveryMethodContains)) return false;
+  await db.insert(shippingRules).values({ ...rule, enabled: true, carrierAccountId, service: DPD_PICKUP, packagePresetId: null });
+  return true;
 }
 
 export async function deleteRule(id: string): Promise<void> {

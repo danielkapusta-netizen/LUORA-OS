@@ -18,7 +18,7 @@ const updatedAt = () =>
 
 export const userRoleValues = ['admin', 'logistics', 'marketing'] as const;
 export const marketplaceTypeValues = ['shopify', 'allegro', 'empik', 'vonhalsky', 'hebe', 'erli'] as const;
-export const carrierTypeValues = ['inpost', 'allegro_shipping'] as const;
+export const carrierTypeValues = ['inpost', 'allegro_shipping', 'dpd'] as const;
 export const orderStatusValues = [
   'new',
   'processing',

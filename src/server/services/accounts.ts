@@ -7,6 +7,7 @@ import { isMockMode } from '../env';
 import { AllegroShippingAdapter } from '../integrations/carriers/allegro-shipping/adapter';
 import { InpostAdapter, type InpostCredentials } from '../integrations/carriers/inpost/adapter';
 import { MockCarrierAdapter } from '../integrations/carriers/mock/adapter';
+import { DpdAdapter, type DpdCredentials } from '../integrations/carriers/dpd/adapter';
 import type { CarrierAdapter } from '../integrations/carriers/types';
 import { AllegroAdapter } from '../integrations/marketplaces/allegro/adapter';
 import { AllegroClient, type AllegroCredentials } from '../integrations/marketplaces/allegro/client';
@@ -88,6 +89,11 @@ export async function getCarrierAdapter(account: CarrierAccount): Promise<Carrie
       if (!creds) throw new Error(`${account.name} has no API token yet. Add it in Settings → Integrations.`);
       return new InpostAdapter(creds, account.settings);
     }
+    case 'dpd': {
+      const creds = readCredentials<DpdCredentials>(account.credentials);
+      if (!creds?.login || !creds.password) throw new Error(`${account.name} has no DPD login yet. Add it in Settings → Integrations.`);
+      return new DpdAdapter(creds, account.settings);
+    }
     case 'allegro_shipping': {
       if (!account.marketplaceAccountId) throw new Error(`${account.name} is not linked to an Allegro account`);
       const allegro = await loadMarketplaceAccount(account.marketplaceAccountId);
@@ -117,6 +123,10 @@ export async function withConfigured<T extends CarrierAccount>(carriers: T[]): P
     if (c.type === 'inpost') {
       const creds = readCredentials<InpostCredentials>(c.credentials);
       return { ...c, configured: Boolean(creds?.apiToken && creds.organizationId) };
+    }
+    if (c.type === 'dpd') {
+      const creds = readCredentials<DpdCredentials>(c.credentials);
+      return { ...c, configured: Boolean(creds?.login && creds.password && creds.masterFid && creds.fid) };
     }
     return { ...c, configured: Boolean(c.marketplaceAccountId && connected.has(c.marketplaceAccountId)) };
   });

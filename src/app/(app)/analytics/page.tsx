@@ -197,7 +197,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
                     unit="labels"
                     data={data.carriers.map((c) => ({
                       key: `${c.carrier}-${c.service}`,
-                      label: c.carrier === 'inpost' ? `InPost ${(SERVICE_LABELS[c.service] ?? c.service).toLowerCase()}` : (CARRIER_LABELS[c.carrier] ?? c.carrier),
+                      label: c.carrier === 'inpost' || c.carrier === 'dpd' ? `${CARRIER_LABELS[c.carrier]} ${(SERVICE_LABELS[c.service] ?? c.service).replace(/^DPD /, '').toLowerCase()}` : (CARRIER_LABELS[c.carrier] ?? c.carrier),
                       value: c.shipments,
                     }))}
                   />

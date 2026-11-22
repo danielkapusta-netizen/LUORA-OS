@@ -32,6 +32,7 @@ export default async function CourierPickupPage() {
       addressLabel: p.addressLabel,
       error: p.error,
       parcels: p.parcels,
+      protocol: p.protocol,
     })),
   }));
 

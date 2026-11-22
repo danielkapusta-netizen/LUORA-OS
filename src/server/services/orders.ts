@@ -381,7 +381,8 @@ export async function refreshOrder(orderId: string): Promise<void> {
   await upsertOrders(account, [fresh]);
 }
 
-const LOCKER_METHOD = /paczkomat|packstation|parcel.?locker/i;
+/** Delivery methods to a point: InPost lockers, DPD Pickup and Empik salons (also DPD Pickup points). */
+const LOCKER_METHOD = /paczkomat|packstation|parcel.?locker|dpd.?pickup|salon/i;
 
 /**
  * For automatic labels: an order whose buyer chose a Paczkomat must never fall through to a
@@ -397,7 +398,7 @@ export async function withPickupPoint(order: Order): Promise<Order> {
   await refreshOrder(order.id);
   const fresh = await loadOrder(order.id);
   if (order.marketplace === 'shopify' ? !findLockerCode(fresh.pickupPointId) : !fresh.pickupPointId) {
-    throw new Error(`The buyer chose "${order.deliveryMethodName}" but ${order.marketplace} sent no Paczkomat code. Enter it in the full order.`);
+    throw new Error(`The buyer chose "${order.deliveryMethodName}" but ${order.marketplace} sent no pickup point code. Enter it in the full order.`);
   }
   return fresh;
 }

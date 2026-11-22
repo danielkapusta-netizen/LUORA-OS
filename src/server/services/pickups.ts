@@ -41,6 +41,8 @@ export interface PickupParcel {
 
 export interface PickupSummary extends CourierPickup {
   parcels: number;
+  /** The carrier prints a handover protocol for it (DPD). */
+  protocol: boolean;
 }
 
 export interface PickupColumn {
@@ -49,11 +51,11 @@ export interface PickupColumn {
   pickups: PickupSummary[];
 }
 
-/** Labelled Allegro Delivery parcels that no booked (or booking) pickup covers yet. */
+/** Labelled Allegro Delivery and DPD parcels that no booked (or booking) pickup covers yet. */
 function waitingFilter() {
   return and(
     eq(shipments.state, 'created'),
-    eq(shipments.carrier, 'allegro_shipping'),
+    inArray(shipments.carrier, ['allegro_shipping', 'dpd']),
     or(isNull(shipments.pickupId), eq(courierPickups.state, 'failed')),
     isNull(shipments.deliveredAt),
     isNull(shipments.pickupClearedAt),
@@ -107,6 +109,7 @@ export async function pickupBoard(now = new Date()): Promise<{ columns: PickupCo
         .groupBy(shipments.pickupId)
     : [];
   const parcelsPer = new Map(counts.map((c) => [c.pickupId, c.n]));
+  const carrierTypes = new Map((await db.select({ id: carrierAccounts.id, type: carrierAccounts.type }).from(carrierAccounts)).map((c) => [c.id, c.type]));
 
   const columns = new Map<PickupCourier, PickupColumn>(PICKUP_COURIERS.map((c) => [c, { courier: c, parcels: [], pickups: [] }]));
   let otherCouriers = 0;
@@ -131,7 +134,7 @@ export async function pickupBoard(now = new Date()): Promise<{ columns: PickupCo
   }
   for (const pickup of recent) {
     const column = columns.get(pickup.courier as PickupCourier);
-    if (column) column.pickups.push({ ...pickup, parcels: parcelsPer.get(pickup.id) ?? 0 });
+    if (column) column.pickups.push({ ...pickup, parcels: parcelsPer.get(pickup.id) ?? 0, protocol: carrierTypes.get(pickup.carrierAccountId) === 'dpd' });
   }
   return { columns: [...columns.values()], otherCouriers };
 }
@@ -144,7 +147,7 @@ async function loadBookable(shipmentIds: string[]) {
     throw new PickupError(msg('Some parcels already have a pickup or no longer need one. Refresh the page.'));
   }
   if (rows.some((r) => !r.shipment.packedAt)) throw new PickupError(msg('Only packed parcels can be booked for pickup'));
-  if (rows.some((r) => !r.shipment.externalId)) throw new PickupError(msg('A parcel has no Allegro shipment id yet'));
+  if (rows.some((r) => !r.shipment.externalId)) throw new PickupError(msg('A parcel has no carrier shipment id yet'));
   return rows;
 }
 
@@ -282,6 +285,19 @@ async function sendPickup(pickupId: string, carrierAccountId: string, externalId
   if (!adapter.createPickup) throw new PickupError(msg('This carrier account cannot book courier pickups'));
   try {
     const status = await adapter.createPickup(pickupId, externalIds, slot, address);
+    // DPD answers at once; Allegro confirms in the background.
+    if (status.state === 'booked') {
+      await getDb()
+        .update(courierPickups)
+        .set({ state: 'booked', externalId: status.pickupId ?? null, carrierPickupId: status.carrierPickupId ?? null, error: null })
+        .where(eq(courierPickups.id, pickupId));
+      return null;
+    }
+    if (status.state === 'failed') {
+      const error = status.error ?? msg('The carrier refused the pickup');
+      await getDb().update(courierPickups).set({ state: 'failed', error }).where(eq(courierPickups.id, pickupId));
+      return error;
+    }
     await enqueue(JOBS.pickupPoll, { pickupId }, { startAfterSeconds: Math.max(1, Math.round(status.retryAfterSeconds ?? 2)) });
     return null;
   } catch (err) {
@@ -440,4 +456,17 @@ export async function deletePickupAddress(id: string): Promise<void> {
     const [next] = await db.select().from(pickupAddresses).orderBy(asc(pickupAddresses.label)).limit(1);
     if (next) await db.update(pickupAddresses).set({ isDefault: true }).where(eq(pickupAddresses.id, next.id));
   }
+}
+
+/** The handover protocol the DPD courier signs, for a booked pickup's parcels. */
+export async function pickupProtocol(pickupId: string): Promise<Buffer> {
+  const db = getDb();
+  const [pickup] = await db.select().from(courierPickups).where(eq(courierPickups.id, pickupId));
+  if (!pickup) throw new PickupError(msg('Pickup not found'));
+  const adapter = await getCarrierAdapter(await loadCarrier(pickup.carrierAccountId));
+  if (!adapter.protocol) throw new PickupError(msg('This carrier has no handover protocol'));
+  const parcels = await db.select({ externalId: shipments.externalId }).from(shipments).where(eq(shipments.pickupId, pickupId));
+  const ids = parcels.map((p) => p.externalId).filter((id): id is string => Boolean(id));
+  if (!ids.length) throw new PickupError(msg('This pickup has no parcels'));
+  return adapter.protocol(ids);
 }

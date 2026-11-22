@@ -153,6 +153,9 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                 <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/carrier/new?type=allegro_shipping">
                   {t('+ Allegro Delivery')}
                 </Link>
+                <Link className={buttonClass('secondary', 'sm')} href="/settings/integrations/carrier/new?type=dpd">
+                  {t('+ DPD')}
+                </Link>
               </>
             )
           }
@@ -170,7 +173,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
                     {!c.enabled && <Badge>{t('Disabled')}</Badge>}
                     {!c.sender && <Badge tone="red">{t('No sender address')}</Badge>}
                     {!c.configured && (
-                      <Badge tone="red">{c.type === 'allegro_shipping' ? t('Allegro account not connected') : t('No API credentials')}</Badge>
+                      <Badge tone="red">{c.type === 'allegro_shipping' ? t('Allegro account not connected') : c.type === 'dpd' ? t('No DPD login') : t('No API credentials')}</Badge>
                     )}
                   </div>
                   <p className="text-xs text-slate-500">

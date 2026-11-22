@@ -15,6 +15,7 @@ import {
 import { nextWorkingDays } from '@/lib/pickup-slots';
 import { INPOST_SERVICES } from '../inpost/adapter';
 import { BUYER_CHOICE } from '../allegro-shipping/adapter';
+import { DPD_PICKUP, DPD_SERVICES, dpdTrackingUrl } from '../dpd/adapter';
 import { msg } from '@/lib/i18n/msg';
 
 interface MockLabelData {
@@ -66,7 +67,7 @@ export async function drawLabel(data: MockLabelData, size: LabelSize): Promise<P
   let y = height - m - 16;
   const text = (value: string, x: number, size: number, f = font) => page.drawText(asciiFold(value), { x, y, size, font: f });
 
-  text(data.carrier === 'inpost' ? 'InPost' : 'Allegro Delivery', m, 18, bold);
+  text(data.carrier === 'inpost' ? 'InPost' : data.carrier === 'dpd' ? 'DPD' : 'Allegro Delivery', m, 18, bold);
   page.drawText('TEST LABEL - NOT VALID FOR SHIPPING', { x: m, y: y - 14, size: 7, font, color: rgb(0.8, 0, 0) });
   y -= 40;
   text(`Service: ${data.service}`, m, 9);
@@ -117,6 +118,7 @@ export class MockCarrierAdapter implements CarrierAdapter {
   constructor(readonly carrier: Carrier) {}
 
   async services(): Promise<CarrierService[]> {
+    if (this.carrier === 'dpd') return DPD_SERVICES;
     return this.carrier === 'inpost' ? INPOST_SERVICES : [{ id: BUYER_CHOICE, name: "Buyer's delivery method" }];
   }
 
@@ -124,7 +126,9 @@ export class MockCarrierAdapter implements CarrierAdapter {
     if (req.service === 'inpost_locker_standard' && !req.pickupPointId) {
       return { state: 'failed', externalId: '', error: msg('Parcel locker service needs a pickup point (Paczkomat) code') };
     }
-    const tracking = this.carrier === 'inpost' ? `6${digitsFrom(req.shipmentId, 23)}` : `A00${digitsFrom(req.shipmentId, 9)}`;
+    if (req.service === DPD_PICKUP && !req.pickupPointId) return { state: 'failed', externalId: '', error: 'DPD Pickup needs the point code (e.g. PL19262)' };
+    const tracking =
+      this.carrier === 'inpost' ? `6${digitsFrom(req.shipmentId, 23)}` : this.carrier === 'dpd' ? `0000${digitsFrom(req.shipmentId, 10)}U` : `A00${digitsFrom(req.shipmentId, 9)}`;
     const r = req.receiver;
     const s = req.sender;
     const externalId = encode({
@@ -147,8 +151,8 @@ export class MockCarrierAdapter implements CarrierAdapter {
       state: 'created',
       externalId: ref.externalId,
       trackingNumber: data.tracking,
-      trackingUrl: this.carrier === 'inpost' ? inpostTrackingUrl(data.tracking) : null,
-      carrierCode: this.carrier === 'inpost' ? 'INPOST' : 'ALLEGRO',
+      trackingUrl: this.carrier === 'inpost' ? inpostTrackingUrl(data.tracking) : this.carrier === 'dpd' ? dpdTrackingUrl(data.tracking) : null,
+      carrierCode: this.carrier === 'inpost' ? 'INPOST' : this.carrier === 'dpd' ? 'DPD' : 'ALLEGRO',
     };
   }
 
@@ -170,6 +174,16 @@ export class MockCarrierAdapter implements CarrierAdapter {
   }
 
   async cancelShipment(): Promise<void> {}
+
+  /** DPD's handover protocol: a demo PDF listing the waybills. */
+  async protocol(externalIds: string[]): Promise<Buffer> {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595.28, 841.89]);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    page.drawText('DPD - protokol przekazania (TEST)', { x: 40, y: 790, size: 16, font });
+    externalIds.map(decode).forEach((d, i) => page.drawText(d.tracking, { x: 40, y: 760 - i * 16, size: 11, font }));
+    return Buffer.from(await doc.save());
+  }
 
   async deliveryStatus() {
     return 'in_transit' as const;
