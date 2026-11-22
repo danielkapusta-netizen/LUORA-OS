@@ -118,6 +118,8 @@ export async function TodayCard({ snapshot, showProfit }: { snapshot: Snapshot; 
   const unitsBefore = snapshot.previousTotals?.units ?? null;
   const sold = [...snapshot.products].sort((a, b) => b.units - a.units || b.revenuePLN - a.revenuePLN).slice(0, 8);
   const comparison = comparisonText(snapshot.period, t);
+  // A day before without sales gives nothing to compare with (a margin "+40 pp" against no sales says nothing).
+  const compared = (snapshot.previousTotals?.orders ?? 0) > 0;
   return (
     <Card>
       <CardHeader icon={CalendarDays} title={t('Today')} description={t('Sales so far today, from every marketplace.')} />
@@ -128,7 +130,7 @@ export async function TodayCard({ snapshot, showProfit }: { snapshot: Snapshot; 
               key={k.key}
               label={t(k.label)}
               value={formatValue(k.value, k.format, false, t.locale)}
-              change={k.isRate ? (k.previous === null ? null : k.value - k.previous) : k.changePct}
+              change={!compared ? null : k.isRate ? (k.previous === null ? null : k.value - k.previous) : k.changePct}
               unit={k.isRate ? 'pp' : '%'}
               comparison={comparison}
             />
@@ -136,7 +138,7 @@ export async function TodayCard({ snapshot, showProfit }: { snapshot: Snapshot; 
           <TodayFigure
             label={t('Units sold')}
             value={formatValue(units, 'number', false, t.locale)}
-            change={unitsBefore ? ((units - unitsBefore) / unitsBefore) * 100 : null}
+            change={compared && unitsBefore ? ((units - unitsBefore) / unitsBefore) * 100 : null}
             unit="%"
             comparison={comparison}
           />
