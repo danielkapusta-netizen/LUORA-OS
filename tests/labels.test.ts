@@ -77,3 +77,16 @@ describe('stock push planning', () => {
     expect(marketplaceQuantity({ lastSeenQty: 3, lastSeenAt: t1, lastPushedQty: null, lastPushedAt: null })).toBe(3);
   });
 });
+
+describe('merged labels follow the list', () => {
+  it('keeps the order of the ids, once each, leaving out ids without a label', async () => {
+    const { inGivenOrder } = await import('@/server/services/shipping');
+    // Files saved in another order than the list on screen.
+    const found = new Map([
+      ['c', 'label c'],
+      ['a', 'label a'],
+      ['b', 'label b'],
+    ]);
+    expect(inGivenOrder(['b', 'a', 'x', 'c', 'a'], found)).toEqual(['label b', 'label a', 'label c']);
+  });
+});
