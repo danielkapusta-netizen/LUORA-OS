@@ -221,6 +221,8 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(batch.skipped[0].reason).toMatch(/not ready to ship/);
     const merged = await m.shipping.mergedLabelsFor(batch.rows.map((r) => r.shipment.id));
     expect(merged.format).toBe('pdf');
+    // Printing the batch follows the list on its page, not the order the labels arrived in.
+    expect(await m.shipping.batchShipmentIds(batchId)).toEqual(batch.rows.map((r) => r.shipment.id));
   });
 
   it('accepts an Empik order, which then becomes shippable', async () => {

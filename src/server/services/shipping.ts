@@ -507,12 +507,21 @@ export async function mergeLabels(files: { format: LabelFormat; content: Buffer 
   return { format: 'pdf', content: Buffer.from(await merged.save()) };
 }
 
+/** The found items in the order of the ids, each once; ids with nothing found are left out. */
+export function inGivenOrder<T>(ids: string[], found: Map<string, T>): T[] {
+  return [...new Set(ids)].flatMap((id) => (found.has(id) ? [found.get(id)!] : []));
+}
+
+/**
+ * One printable file for these labels, in the order the ids are given (the order of the list on screen), not the
+ * order the carriers happened to return them in. Shipments without a label file are left out.
+ */
 export async function mergedLabelsFor(shipmentIds: string[]) {
-  const rows = [];
+  const found = new Map<string, typeof labelFiles.$inferSelect>();
   for (const ids of chunk(shipmentIds)) {
-    rows.push(...(await getDb().select().from(labelFiles).where(inArray(labelFiles.shipmentId, ids))));
+    for (const row of await getDb().select().from(labelFiles).where(inArray(labelFiles.shipmentId, ids))) found.set(row.shipmentId, row);
   }
-  rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const rows = inGivenOrder(shipmentIds, found);
   const files = [];
   for (const row of rows) {
     const content = await readLabel(row.r2Key);
@@ -573,6 +582,20 @@ export async function createBatch(orderIds: string[], userId: string): Promise<s
   return batch.id;
 }
 
+/** How a batch's orders are listed on its page; its printed labels follow the same order. */
+const BATCH_ORDER = [asc(orders.externalNumber), asc(shipments.id)] as const;
+
+/** The batch's labelled shipments, in the order of the batch page. */
+export async function batchShipmentIds(batchId: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ id: shipments.id })
+    .from(shipments)
+    .innerJoin(orders, eq(orders.id, shipments.orderId))
+    .where(and(eq(shipments.batchId, batchId), eq(shipments.state, 'created')))
+    .orderBy(...BATCH_ORDER);
+  return rows.map((r) => r.id);
+}
+
 export async function getBatch(batchId: string) {
   const db = getDb();
   const [batch] = await db.select().from(shipmentBatches).where(eq(shipmentBatches.id, batchId));
@@ -583,7 +606,7 @@ export async function getBatch(batchId: string) {
     .innerJoin(orders, eq(orders.id, shipments.orderId))
     .innerJoin(carrierAccounts, eq(carrierAccounts.id, shipments.carrierAccountId))
     .where(eq(shipments.batchId, batchId))
-    .orderBy(asc(orders.externalNumber));
+    .orderBy(...BATCH_ORDER);
   const skippedOrders = batch.skipped.length
     ? (await Promise.all(chunk(batch.skipped.map((s) => s.orderId)).map((ids) => db.select().from(orders).where(inArray(orders.id, ids))))).flat()
     : [];
