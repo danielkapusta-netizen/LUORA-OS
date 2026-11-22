@@ -298,6 +298,12 @@ export async function addDpdEmpikRule(carrierAccountId: string, kind: 'pickup' |
   return true;
 }
 
+/** Names of the enabled rules that send orders with this carrier account. */
+export async function carrierRuleNames(carrierAccountId: string): Promise<string[]> {
+  const rules = await getDb().select().from(shippingRules).where(eq(shippingRules.carrierAccountId, carrierAccountId));
+  return rules.filter((r) => r.enabled).map((r) => r.name);
+}
+
 export async function deleteRule(id: string): Promise<void> {
   await getDb().delete(shippingRules).where(eq(shippingRules.id, id));
 }

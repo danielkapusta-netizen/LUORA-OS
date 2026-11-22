@@ -108,6 +108,30 @@ describe('Empik DPD orders', () => {
   it('keeps Empik couriers and Paczkomaty, and other marketplaces, on InPost', () => {
     expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'KURIER' }), rules, withDpd)?.service).toBe('inpost_courier_standard');
     expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'Paczkomaty InPost', pickupPointId: 'WAW01A' }), rules, withDpd)?.service).toBe('inpost_locker_standard');
-    expect(chooseRoute(order({ marketplace: 'hebe', deliveryMethodName: 'DPD Pickup', pickupPointId: 'PL1' }), rules, withDpd)?.ruleId).toBe('lockers');
+    // The Empik rules don't take other marketplaces; a HEBE order to a DPD point still never goes to an InPost locker.
+    expect(chooseRoute(order({ marketplace: 'hebe', deliveryMethodName: 'DPD Pickup', pickupPointId: 'PL1' }), rules, withDpd)).toBeNull();
+    expect(chooseRoute(order({ marketplace: 'hebe', deliveryMethodName: 'Punkt Odbioru', pickupPointId: 'BBI48M' }), rules, withDpd)?.ruleId).toBe('lockers');
+  });
+});
+
+describe('orders to a DPD point', () => {
+  const withDpd: CarrierLike[] = [...carriers, { id: 'dpd', type: 'dpd', enabled: true, configured: true, marketplaceAccountId: null }];
+
+  it('never go to InPost, even before the DPD rules exist', () => {
+    // Only the default rules: the salon order has a point, but the Paczkomat rule and the courier catch-all are InPost.
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'Dostawa do Salonu Empik', pickupPointId: 'PL49298' }), defaults, withDpd)).toBeNull();
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'DPD PICKUP', pickupPointId: 'PL19262' }), defaults, withDpd)).toBeNull();
+  });
+
+  it('go with DPD once a rule sends them there', () => {
+    const rules = [...defaults, rule({ id: 'salon', priority: 14, conditions: { marketplaces: ['empik'], deliveryMethodContains: 'Salonu Empik' }, carrierAccountId: 'dpd', service: 'dpd_pickup' })];
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'Dostawa do Salonu Empik', pickupPointId: 'PL49298' }), rules, withDpd)?.carrierAccountId).toBe('dpd');
+  });
+
+  it('leave InPost lockers, Żabka and couriers as they were', () => {
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'Paczkomaty InPost', pickupPointId: 'WAW01A' }), defaults, withDpd)?.service).toBe('inpost_locker_standard');
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'Żabka', pickupPointId: '400666' }), defaults, withDpd)?.service).toBe('inpost_locker_standard');
+    expect(chooseRoute(order({ marketplace: 'empik', deliveryMethodName: 'KURIER' }), defaults, withDpd)?.service).toBe('inpost_courier_standard');
+    expect(chooseRoute(order({ deliveryMethodName: 'InPost Paczkomat 24/7', pickupPointId: 'KRA010' }), defaults, withDpd)?.service).toBe('inpost_locker_standard');
   });
 });

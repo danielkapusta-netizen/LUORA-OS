@@ -8,7 +8,7 @@ import { CARRIER_LABELS } from '@/lib/utils';
 import { requireAdmin } from '@/server/auth';
 import type { CarrierAccount } from '@/server/db/schema';
 import { loadCarrierAccount } from '@/server/services/accounts';
-import { listMarketplaceAccounts, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
+import { carrierRuleNames, listMarketplaceAccounts, publicCredentialFields, storedCredentialKeys } from '@/server/services/settings';
 import { addDpdEmpikRuleAction, deleteCarrierAction, saveCarrierAction } from '../../../actions';
 import { getT } from '@/lib/i18n/server';
 
@@ -36,6 +36,7 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
   const pub = publicCredentialFields(account?.credentials ?? null);
   const allegroAccounts = (await listMarketplaceAccounts()).filter((a) => a.type === 'allegro');
   const sender = account?.sender;
+  const rules = account?.type === 'dpd' ? await carrierRuleNames(account.id) : [];
   const s = account?.settings ?? {};
 
   return (
@@ -190,6 +191,11 @@ export default async function CarrierAccountPage({ params, searchParams }: { par
             description={t('Adds a shipping rule ahead of the InPost Paczkomat rule. Empik courier orders stay on InPost courier.')}
           />
           <CardBody className="flex flex-wrap gap-2">
+            {rules.length === 0 ? (
+              <p className="w-full text-sm text-amber-800">{t('No orders are sent with this account yet: press a button below. Until then Empik DPD orders wait without a label.')}</p>
+            ) : (
+              <p className="w-full text-sm text-slate-600">{t('Rules using this account: {rules}', { rules: rules.join(', ') })}</p>
+            )}
             <ActionForm action={addDpdEmpikRuleAction.bind(null, account.id, 'pickup')}>
               <SubmitButton variant="secondary">{t('Route Empik “DPD PICKUP” orders here')}</SubmitButton>
             </ActionForm>

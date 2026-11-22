@@ -52,13 +52,20 @@ export function matchesRule(order: RoutableOrder, conditions: RuleConditions): b
   return true;
 }
 
+/** The buyer chose a DPD Pickup point (Empik's "DPD PICKUP" or an Empik salon): only DPD can deliver there. */
+export function wantsDpdPoint(order: Pick<RoutableOrder, 'marketplace' | 'deliveryMethodName'>): boolean {
+  return order.marketplace !== 'allegro' && /dpd.?pickup|salon/i.test(order.deliveryMethodName ?? '');
+}
+
 /**
  * A carrier can ship an order when it has credentials and, for Allegro Delivery,
- * when it uses the same Allegro account the order was bought on.
+ * when it uses the same Allegro account the order was bought on. An order to a DPD point goes with DPD only:
+ * InPost refuses the point, and a courier would take the parcel to the buyer's home instead of the salon.
  */
 export function carrierSupportsOrder(carrier: CarrierLike, order: RoutableOrder): boolean {
   if (!carrier.configured) return false;
   if (carrier.type === 'allegro_shipping') return order.marketplace === 'allegro' && carrier.marketplaceAccountId === order.accountId;
+  if (wantsDpdPoint(order)) return carrier.type === 'dpd';
   return true;
 }
 

@@ -25,7 +25,7 @@ import { enqueue, JOBS } from '../jobs/queue';
 import { getCarrierAdapter, loadCarrierAccount, withConfigured } from './accounts';
 import { logEvent } from './events';
 import { loadOrder, withPickupPoint } from './orders';
-import { carrierSupportsOrder, chooseRoute, type RouteDecision } from './routing';
+import { carrierSupportsOrder, chooseRoute, wantsDpdPoint, type RouteDecision } from './routing';
 import { changeStatus, shipWhenReady } from './workflow';
 import { refreshProfit } from './profit';
 import { msg } from '@/lib/i18n/msg';
@@ -132,7 +132,11 @@ export async function requestShipment(input: ShipmentInput, userId: string | nul
   if (!carrier.enabled) throw new ShippingError(`${carrier.name} is disabled`);
   if (!carrier.configured) throw new ShippingError(`${carrier.name} has no working credentials. Check it in Settings → Integrations.`);
   if (!carrierSupportsOrder(carrier, order)) {
-    throw new ShippingError(`${carrier.name} can only ship orders from its own Allegro account`);
+    throw new ShippingError(
+      wantsDpdPoint(order)
+        ? `The buyer chose "${order.deliveryMethodName}": only a DPD account can deliver to that point`
+        : `${carrier.name} can only ship orders from its own Allegro account`,
+    );
   }
   if (!carrier.sender) throw new ShippingError(`${carrier.name} has no sender address. Add it in Settings → Integrations.`);
 
