@@ -147,13 +147,30 @@ export async function TodayCard({ snapshot, showProfit }: { snapshot: Snapshot; 
           <p className="rounded-2xl bg-black/[0.02] px-4 py-6 text-center text-sm text-slate-500">{t('No sales yet today.')}</p>
         ) : (
           <div>
-            <p className="mb-1.5 text-xs font-medium text-slate-500">{t('Sold today')}</p>
+            {/* On phones the name takes its own line and the figures sit under it, right-aligned. */}
+            <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 px-3 text-xs font-medium text-slate-500">
+              <span className="w-full truncate sm:w-auto sm:min-w-0 sm:flex-1">{t('Sold today')}</span>
+              <span className="ml-auto w-12 shrink-0 text-right sm:ml-0">{t('Units')}</span>
+              <span className="w-20 shrink-0 text-right sm:w-24">{t('Revenue')}</span>
+              {showProfit && <span className="w-20 shrink-0 text-right sm:w-24">{t('Profit')}</span>}
+            </div>
             <ul className="divide-y divide-black/[0.04] rounded-2xl border border-black/[0.04]">
               {sold.map((p) => (
-                <li key={p.productKey} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <span className="min-w-0 flex-1 truncate">{p.label}</span>
-                  <span className="shrink-0 font-mono tabular-nums text-slate-600">×{p.units}</span>
-                  <span className="w-24 shrink-0 text-right font-mono tabular-nums">{formatValue(p.revenuePLN, 'pln', false, t.locale)}</span>
+                <li key={p.productKey} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-sm">
+                  <span className="w-full truncate sm:w-auto sm:min-w-0 sm:flex-1">{p.label}</span>
+                  <span className="ml-auto w-12 shrink-0 text-right font-mono tabular-nums text-slate-600 sm:ml-0">×{p.units}</span>
+                  <span className="w-20 shrink-0 text-right font-mono tabular-nums sm:w-24">{formatValue(p.revenuePLN, 'pln', false, t.locale)}</span>
+                  {showProfit && (
+                    <span
+                      title={p.costUnknown ? t('cost missing') : undefined}
+                      className={cn(
+                        'w-20 shrink-0 text-right font-mono tabular-nums sm:w-24',
+                        p.costUnknown ? 'text-slate-400' : p.marginPLN < 0 ? 'text-red-700' : 'text-emerald-700',
+                      )}
+                    >
+                      {formatValue(p.marginPLN, 'pln', false, t.locale)}
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
