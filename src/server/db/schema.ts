@@ -3,6 +3,7 @@ import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from
 import { TASK_COMMENT_KINDS, TASK_PRIORITIES, TASK_STATUSES, type ChecklistItem } from '../../lib/tasks/model';
 import type { Address, Buyer, InvoiceRequest, ParcelSpec, SenderSettings } from '../integrations/types';
 import { RECOMMENDATION_STATUSES, type ResearchSource } from '../../lib/pricing-research';
+import type { PickupCourier } from '../../lib/pickup-slots';
 
 // SQLite on D1: ids are UUID text, timestamps are integer milliseconds, JSON is text.
 const id = () => text('id').primaryKey().$defaultFn(() => crypto.randomUUID());
@@ -446,6 +447,8 @@ export const pickupAddresses = sqliteTable('pickup_addresses', {
   phone: text('phone').notNull(),
   email: text('email').notNull(),
   isDefault: bool('is_default').notNull().default(false),
+  /** Couriers that collect from here rather than from the default address (each courier at most one address). */
+  couriers: json<PickupCourier[]>('couriers'),
   createdAt: createdAt(),
 });
 

@@ -18,7 +18,7 @@ import { deliveryMethodOf } from '../integrations/carriers/allegro-shipping/insu
 import { getCarrierAdapter } from './accounts';
 import { logEvent } from './events';
 import { msg } from '@/lib/i18n/msg';
-import { commonSlots, dateOnlySlots, PICKUP_COURIERS, pickupCourierOf, pickupWindowStart, slotKey, type PickupCourier } from '@/lib/pickup-slots';
+import { commonSlots, dateOnlySlots, PICKUP_COURIERS, pickupCourierOf, pickupCouriersIn, pickupWindowStart, slotKey, type PickupCourier } from '@/lib/pickup-slots';
 import { isDay, isTime, today } from '@/lib/tasks/dates';
 
 /** Give up waiting for Allegro to confirm a pickup after this many checks. */
@@ -436,7 +436,7 @@ function toSnapshot(a: PickupAddress): PickupAddressSnapshot {
   };
 }
 
-export type PickupAddressInput = Omit<PickupAddress, 'id' | 'createdAt'>;
+export type PickupAddressInput = Omit<PickupAddress, 'id' | 'createdAt' | 'couriers'> & { couriers?: readonly string[] | null };
 
 /** The fields Allegro requires for a pickup address; the message names what is missing. */
 export function validatePickupAddress(a: PickupAddressInput): string | null {
@@ -453,15 +453,24 @@ export async function savePickupAddress(input: PickupAddressInput, id?: string):
   const error = validatePickupAddress(input);
   if (error) throw new PickupError(error);
   const db = getDb();
-  const values = { ...input, countryCode: input.countryCode.trim().toUpperCase() };
+  // Couriers are only touched when given (the settings form always sends them).
+  const couriers = pickupCouriersIn(input.couriers ?? []);
+  const { couriers: given, ...rest } = input;
+  const values = { ...rest, countryCode: input.countryCode.trim().toUpperCase(), ...(given === undefined ? {} : { couriers: couriers.length ? couriers : null }) };
   // The first address is the default, so booking always has one preselected.
   const [{ n }] = await db.select({ n: count() }).from(pickupAddresses);
   const isDefault = values.isDefault || n === 0 || (n === 1 && Boolean(id));
   const save = id
     ? db.update(pickupAddresses).set({ ...values, isDefault }).where(eq(pickupAddresses.id, id))
     : db.insert(pickupAddresses).values({ ...values, isDefault });
-  if (isDefault) await db.batch([db.update(pickupAddresses).set({ isDefault: false }), save]);
-  else await save;
+  // A courier collects from one address: taking it here takes it off the others.
+  const others = couriers.length ? (await db.select().from(pickupAddresses)).filter((a) => a.id !== id && a.couriers?.some((c) => couriers.includes(c))) : [];
+  const release = others.map((a) => {
+    const kept = (a.couriers ?? []).filter((c) => !couriers.includes(c));
+    return db.update(pickupAddresses).set({ couriers: kept.length ? kept : null }).where(eq(pickupAddresses.id, a.id));
+  });
+  const statements = [...(isDefault ? [db.update(pickupAddresses).set({ isDefault: false })] : []), ...release, save];
+  await db.batch(statements as [(typeof statements)[number], ...typeof statements]);
 }
 
 export async function deletePickupAddress(id: string): Promise<void> {

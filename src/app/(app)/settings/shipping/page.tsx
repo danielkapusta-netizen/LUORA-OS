@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { ActionForm, SubmitButton } from '@/components/forms';
 import { Badge, Card, CardBody, CardHeader, Checkbox, EmptyState, Field, Input, Select } from '@/components/ui';
+import { PICKUP_COURIERS } from '@/lib/pickup-slots';
 import { MARKETPLACE_LABELS, SERVICE_LABELS } from '@/lib/utils';
 import { requireUser } from '@/server/auth';
 import type { CarrierAccount, PackagePreset, PickupAddress, ShippingRule } from '@/server/db/schema';
@@ -172,6 +173,15 @@ async function PickupAddressForm({ address }: { address?: PickupAddress }) {
       <Field label={t('Email')} className="sm:col-span-3">
         <Input name="email" type="email" defaultValue={address?.email ?? ''} autoComplete="email" required />
       </Field>
+      <fieldset className="sm:col-span-6">
+        <legend className="mb-1.5 text-xs font-medium text-slate-600">{t('Couriers collecting from here')}</legend>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {PICKUP_COURIERS.map((c) => (
+            <Checkbox key={c} name="couriers" value={c} label={c} defaultChecked={address?.couriers?.includes(c) ?? false} />
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{t('Preselected for these couriers instead of the default address. A courier ticked here is taken off any other address.')}</p>
+      </fieldset>
       <div className="flex items-center gap-3 sm:col-span-6">
         <Checkbox name="isDefault" label={t('Preselect when booking')} defaultChecked={address?.isDefault ?? false} />
         <SubmitButton size="sm" variant={address ? 'secondary' : 'primary'}>
@@ -291,6 +301,9 @@ export default async function ShippingSettingsPage() {
                   <summary className="flex cursor-pointer flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium">{a.label}</span>
                     {a.isDefault && <Badge tone="green">{t('Preselected')}</Badge>}
+                    {a.couriers?.map((c) => (
+                      <Badge key={c}>{c}</Badge>
+                    ))}
                     <span className="text-slate-500">
                       {a.street}, {a.postalCode} {a.city}
                     </span>
@@ -307,6 +320,7 @@ export default async function ShippingSettingsPage() {
               ) : (
                 <p className="text-sm">
                   <span className="font-medium">{a.label}</span>: {a.street}, {a.postalCode} {a.city}
+                  {a.couriers?.length ? <span className="text-slate-500"> · {a.couriers.join(', ')}</span> : null}
                 </p>
               )}
             </div>

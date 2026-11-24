@@ -47,6 +47,8 @@ export interface BoardAddress {
   label: string;
   line: string;
   isDefault: boolean;
+  /** Couriers preselected to collect from here instead of the default address. */
+  couriers: string[];
 }
 
 /** Each courier keeps one pastel, so a column is recognised before its name is read. */

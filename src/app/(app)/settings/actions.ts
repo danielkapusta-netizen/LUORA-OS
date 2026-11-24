@@ -393,6 +393,7 @@ export async function savePickupAddressAction(id: string | null, _prev: ActionRe
         phone: text(fd, 'phone'),
         email: text(fd, 'email'),
         isDefault: bool(fd, 'isDefault'),
+        couriers: fd.getAll('couriers').map(String),
       },
       id ?? undefined,
     );

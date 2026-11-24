@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commonSlots, dateOnlySlots, nextWorkingDays, parseSlotKey, pickupCourierOf, pickupWindowStart, slotKey } from '@/lib/pickup-slots';
+import { commonSlots, dateOnlySlots, nextWorkingDays, parseSlotKey, pickupCourierOf, pickupWindowStart, preselectedAddress, slotKey } from '@/lib/pickup-slots';
 
 describe('pickup slots', () => {
   it('keeps only the windows every parcel is offered, earliest first', () => {
@@ -47,5 +47,16 @@ describe('pickup slots', () => {
     expect(pickupWindowStart(new Date('2026-11-02T08:00:00Z')).toISOString()).toBe('2026-10-29T23:00:00.000Z');
     // Summer time (UTC+2).
     expect(pickupWindowStart(new Date('2026-07-15T08:00:00Z')).toISOString()).toBe('2026-07-13T22:00:00.000Z');
+  });
+});
+
+describe('preselected pickup address', () => {
+  const home = { id: '167', isDefault: true, couriers: null };
+  const inpost = { id: '126', isDefault: false, couriers: ['InPost'] };
+  it('uses the courier’s own address, else the default, else the first', () => {
+    expect(preselectedAddress([home, inpost], 'InPost')?.id).toBe('126');
+    expect(preselectedAddress([home, inpost], 'DPD')?.id).toBe('167');
+    expect(preselectedAddress([{ ...inpost, couriers: ['DHL'] }, { ...home, isDefault: false }], 'ORLEN Paczka')?.id).toBe('126');
+    expect(preselectedAddress([], 'InPost')).toBeUndefined();
   });
 });
