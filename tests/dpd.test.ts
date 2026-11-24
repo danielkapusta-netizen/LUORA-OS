@@ -160,8 +160,10 @@ describe('DPD courier pickup', () => {
     expect(body).toContain('<operationType>INSERT</operationType><orderType>DOMESTIC</orderType>');
     expect(body).toContain('<parcelsCount>3</parcelsCount>');
     expect(body).toContain('<pickupPayer><payerName>Luora</payerName><payerNumber>1001</payerNumber></pickupPayer>');
-    expect(body).toContain('<pickupDate>2026-11-24</pickupDate><pickupTimeFrom>10:00</pickupTimeFrom><pickupTimeTo>13:00</pickupTimeTo>');
+    expect(body).toContain('<pickupDate>2026-11-24</pickupDate><pickupTimeFrom>10:00</pickupTimeFrom><pickupTimeTo>13:00</pickupTimeTo><waybillsReady>true</waybillsReady>');
     expect(body).toContain('<senderPostalCode>00850</senderPostalCode>');
+    // DPD's own validator refuses UpdateMode on a new order ("Incorrect DPDPickupCallParams format").
+    expect(body).not.toContain('updateMode');
   });
 
   it('reports a refused pickup', async () => {
