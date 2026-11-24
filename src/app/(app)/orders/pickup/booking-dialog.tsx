@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DynamicButton } from '@/components/dynamic-button';
 import { buttonClass, Field, Select } from '@/components/ui';
 import { useT } from '@/lib/i18n/client';
-import { parseSlotKey, slotKey, type PickupCourier, type Slot } from '@/lib/pickup-slots';
+import { parseSlotKey, preselectedAddress, slotKey, type PickupCourier, type Slot } from '@/lib/pickup-slots';
 import { dayLabel, today } from '@/lib/tasks/dates';
 import { cn } from '@/lib/utils';
 import { bookPickupAction, proposalsAction } from './actions';
@@ -37,7 +37,9 @@ export function BookingDialog({ groups, addresses, onClose }: { groups: BookingG
   const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const requested = useRef(new Set<string>());
-  const [addressId, setAddressId] = useState(() => (addresses.find((a) => a.isDefault) ?? addresses[0])?.id ?? '');
+  // Each courier collects from its own address (Settings → Shipping), else the default one; staff can change it here.
+  const [addressChoice, setAddressChoice] = useState<Partial<Record<PickupCourier, string>>>({});
+  const addressOf = (courier: PickupCourier) => addressChoice[courier] ?? preselectedAddress(addresses, courier)?.id ?? '';
   const [results, setResults] = useState<Record<string, Proposal>>({});
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [booked, setBooked] = useState<Set<PickupCourier>>(new Set());
@@ -53,14 +55,16 @@ export function BookingDialog({ groups, addresses, onClose }: { groups: BookingG
 
   // Ask for windows once per courier, parcels and address.
   useEffect(() => {
-    if (!groups || !addressId) return;
+    if (!groups) return;
     for (const g of groups) {
+      const addressId = addressChoice[g.courier] ?? preselectedAddress(addresses, g.courier)?.id;
+      if (!addressId) continue;
       const key = resultKey(addressId, g);
       if (requested.current.has(key)) continue;
       requested.current.add(key);
       proposalsAction(g.shipmentIds, addressId).then((result) => setResults((prev) => ({ ...prev, [key]: result })));
     }
-  }, [groups, addressId]);
+  }, [groups, addressChoice, addresses]);
 
   /** Fresh windows next time: what the carrier offers changes during the day. */
   function reset() {
@@ -68,6 +72,7 @@ export function BookingDialog({ groups, addresses, onClose }: { groups: BookingG
     setResults({});
     setChosen({});
     setBooked(new Set());
+    setAddressChoice({});
     setPhase('idle');
     setError(null);
     onClose();
@@ -76,12 +81,13 @@ export function BookingDialog({ groups, addresses, onClose }: { groups: BookingG
   if (!addresses.length) return null;
   const list = groups ?? [];
   const rows = list.map((g) => {
+    const addressId = addressOf(g.courier);
     const key = resultKey(addressId, g);
     const result = results[key];
     const ok: Offered | null = result && !result.error ? (result as Offered) : null;
     const pick = chosen[key] ?? (ok?.slots[0] ? slotKey(ok.slots[0]) : null);
     const ids = ok ? g.shipmentIds.filter((id) => !ok.unavailable.includes(id)) : [];
-    return { g, key, result, ok, pick, ids, bookable: Boolean(ok && pick && ids.length && !booked.has(g.courier)) };
+    return { g, addressId, key, result, ok, pick, ids, bookable: Boolean(ok && pick && ids.length && !booked.has(g.courier)) };
   });
   const loading = rows.some((r) => !r.result);
   const toBook = rows.filter((r) => r.bookable);
@@ -93,7 +99,7 @@ export function BookingDialog({ groups, addresses, onClose }: { groups: BookingG
     const failures: string[] = [];
     for (const r of toBook) {
       const slot = parseSlotKey(r.pick!)!;
-      const result = await bookPickupAction({ courier: r.g.courier, shipmentIds: r.ids, addressId, slot });
+      const result = await bookPickupAction({ courier: r.g.courier, shipmentIds: r.ids, addressId: r.addressId, slot });
       if (result?.error) failures.push(list.length > 1 ? `${r.g.courier}: ${result.error}` : result.error);
       else setBooked((prev) => new Set(prev).add(r.g.courier));
     }
@@ -147,17 +153,7 @@ export function BookingDialog({ groups, addresses, onClose }: { groups: BookingG
       </header>
 
       <div className="flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-4">
-        <Field label={t('Pickup from')}>
-          <Select value={addressId} onChange={(e) => setAddressId(e.target.value)} disabled={phase !== 'idle'}>
-            {addresses.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.label} – {a.line}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        {rows.map(({ g, key, result, ok, pick, bookable }) => (
+        {rows.map(({ g, addressId, key, result, ok, pick, bookable }) => (
           <section key={g.courier} aria-labelledby={`slots-${key}`} className="space-y-2.5">
             {list.length > 1 && (
               <h3 id={`slots-${key}`} className="flex items-center gap-2 text-sm font-semibold">
@@ -166,6 +162,22 @@ export function BookingDialog({ groups, addresses, onClose }: { groups: BookingG
                 <span className="font-normal text-slate-500">· {t.plural(g.shipmentIds.length, '{n} parcel', '{n} parcels')}</span>
               </h3>
             )}
+            <Field label={list.length > 1 ? t('{courier} collects from', { courier: g.courier }) : t('Pickup from')}>
+              <Select
+                value={addressId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setAddressChoice((prev) => ({ ...prev, [g.courier]: value }));
+                }}
+                disabled={phase !== 'idle' || booked.has(g.courier)}
+              >
+                {addresses.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.label} – {a.line}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             {list.length === 1 && (
               <h3 id={`slots-${key}`} className="text-xs font-medium text-slate-600">
                 {t('When should the courier come?')}

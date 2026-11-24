@@ -1,0 +1,1 @@
+ALTER TABLE `pickup_addresses` ADD `couriers` text;

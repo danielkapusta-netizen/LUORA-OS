@@ -73,4 +73,7 @@ export const pickup: Record<string, string> = {
   "This carrier has no handover protocol": "Ten przewoźnik nie ma protokołu przekazania",
   "This pickup has no parcels": "Ten odbiór nie ma paczek",
   "The carrier did not confirm the pickup in time. Check it in the carrier’s panel before booking again.": "Przewoźnik nie potwierdził odbioru na czas. Sprawdź go w panelu przewoźnika, zanim zamówisz ponownie.",
+  "Couriers collecting from here": "Kurierzy odbierający stąd",
+  "Preselected for these couriers instead of the default address. A courier ticked here is taken off any other address.": "Wybierany dla tych kurierów zamiast adresu domyślnego. Zaznaczony tu kurier zostaje odpięty od innych adresów.",
+  "{courier} collects from": "{courier} odbiera z",
 };

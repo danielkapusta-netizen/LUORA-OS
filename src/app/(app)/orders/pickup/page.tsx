@@ -62,7 +62,7 @@ export default async function CourierPickupPage() {
         <PickupBoard
           columns={board}
           otherCouriers={otherCouriers}
-          addresses={addresses.map((a) => ({ id: a.id, label: a.label, line: `${a.street}, ${a.postalCode} ${a.city}`, isDefault: a.isDefault }))}
+          addresses={addresses.map((a) => ({ id: a.id, label: a.label, line: `${a.street}, ${a.postalCode} ${a.city}`, isDefault: a.isDefault, couriers: a.couriers ?? [] }))}
           today={today()}
         />
       )}

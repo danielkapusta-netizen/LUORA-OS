@@ -96,3 +96,13 @@ export function commonSlots(perParcel: Slot[][]): Slot[] {
   const unique = [...new Map(shared.map((s) => [slotKey(s), s])).values()];
   return unique.sort((a, b) => slotKey(a).localeCompare(slotKey(b)));
 }
+
+/** The address a courier collects from: the one set for that courier, else the default one, else the first. */
+export function preselectedAddress<A extends { isDefault: boolean; couriers?: readonly string[] | null }>(addresses: readonly A[], courier: PickupCourier): A | undefined {
+  return addresses.find((a) => a.couriers?.includes(courier)) ?? addresses.find((a) => a.isDefault) ?? addresses[0];
+}
+
+/** Only couriers that get a pickup column, each once. */
+export function pickupCouriersIn(values: readonly unknown[]): PickupCourier[] {
+  return PICKUP_COURIERS.filter((c) => values.includes(c));
+}

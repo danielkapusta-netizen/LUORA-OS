@@ -109,6 +109,29 @@ describe('courier pickups (D1)', { timeout: 60_000 }, () => {
     expect(saved[0].countryCode).toBe('PL');
   });
 
+  it('gives a courier its own pickup address, one address per courier', async () => {
+    const byLabel = async () => Object.fromEntries((await m.pickups.listPickupAddresses()).map((a) => [a.label, a]));
+    const { Magazyn, Biuro } = await byLabel();
+    const { id: _b, createdAt: _bc, ...biuro } = Biuro;
+    await m.pickups.savePickupAddress({ ...biuro, couriers: ['InPost', 'Nope'] }, Biuro.id);
+    expect((await byLabel()).Biuro.couriers).toEqual(['InPost']);
+    // Ticking InPost on another address takes it off the first; the other courier stays.
+    const { id: _m, createdAt: _mc, ...magazyn } = Magazyn;
+    await m.pickups.savePickupAddress({ ...biuro, couriers: ['InPost', 'DPD'] }, Biuro.id);
+    await m.pickups.savePickupAddress({ ...magazyn, couriers: ['InPost'] }, Magazyn.id);
+    let now = await byLabel();
+    expect(now.Magazyn.couriers).toEqual(['InPost']);
+    expect(now.Biuro.couriers).toEqual(['DPD']);
+    expect(now.Magazyn.isDefault).toBe(true);
+    // A save that does not mention couriers leaves them as they are; an empty list clears them.
+    await m.pickups.savePickupAddress({ ...biuro, couriers: undefined, phone: '600700800' }, Biuro.id);
+    expect((await byLabel()).Biuro.couriers).toEqual(['DPD']);
+    await m.pickups.savePickupAddress({ ...biuro, couriers: [] }, Biuro.id);
+    await m.pickups.savePickupAddress({ ...magazyn, couriers: [] }, Magazyn.id);
+    now = await byLabel();
+    expect([now.Magazyn.couriers, now.Biuro.couriers]).toEqual([null, null]);
+  });
+
   it('offers windows for a courier, and date-only days for InPost', async () => {
     const [home] = await m.pickups.listPickupAddresses();
     const list = (await parcels()).filter((p) => p.packed);
