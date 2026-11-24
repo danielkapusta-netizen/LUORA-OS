@@ -241,7 +241,7 @@ export class DpdAdapter implements CarrierAdapter {
           pickupDate: slot.date,
           pickupTimeFrom: slot.minTime ?? '10:00',
           pickupTimeTo: slot.maxTime ?? '16:00',
-          updateMode: 'CREATE_NEW_IF_CLOSED',
+          // No updateMode: the WSDL lists it, but DPD's validator refuses it on a new order (it is for changing one).
           waybillsReady: true,
         },
       },
