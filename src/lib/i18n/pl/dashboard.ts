@@ -56,4 +56,5 @@ export const dashboard: Record<string, string> = {
   "No sales yet today.": "Dziś jeszcze nic nie sprzedano.",
   "Sold today": "Sprzedane dziś",
   "Performance": "Wyniki",
+  "vs yesterday by {time}": "vs wczoraj do {time}",
 };

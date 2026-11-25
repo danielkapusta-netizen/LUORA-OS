@@ -320,3 +320,13 @@ export function comparisonText(period: { key: PeriodKey; days: number }, t: T): 
       return t.plural(period.days, 'vs previous {n} day', 'vs previous {n} days')
   }
 }
+
+/**
+ * Today so far compared with the day before up to the same time of day: at 11:00, yesterday until 11:00. A whole
+ * yesterday would make every morning look like a fall.
+ */
+export function sameTimeYesterday(period: ResolvedPeriod, now: Date = new Date()): ResolvedPeriod {
+  if (!period.previous) return period
+  const elapsed = Math.min(Math.max(now.getTime() - period.from.getTime(), 0), DAY_MS - 1)
+  return { ...period, previous: { from: period.previous.from, to: new Date(period.previous.from.getTime() + elapsed) } }
+}

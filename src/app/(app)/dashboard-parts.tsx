@@ -3,7 +3,6 @@ import { CalendarDays, CircleDashed, Inbox, Package, PackageOpen, SquareCheckBig
 import { Delta } from '@/components/analytics/blocks';
 import { formatValue } from '@/components/analytics/format';
 import { Card, CardBody, CardHeader, DatePill, Eyebrow, ListRow, PanelLink, StatTile } from '@/components/ui';
-import { comparisonText } from '@/lib/analytics/period';
 import type { Snapshot } from '@/lib/analytics/snapshot';
 import type { Kpi } from '@/lib/analytics/types';
 import { dayLabel } from '@/lib/tasks/dates';
@@ -29,12 +28,18 @@ export async function Greeting({ name, actions }: { name: string; actions?: Reac
   );
 }
 
-/** New orders waiting to be picked, with what has to come off the shelves for them right beside. */
-export async function PickRow({ newOrders, lines }: { newOrders: number; lines: PickLine[] }) {
+/**
+ * New orders waiting to be picked, with what has to come off the shelves for them right beside. Anything in `aside`
+ * (the tasks on the Dashboard) sits under the New tile, in the room the long pick list leaves there.
+ */
+export async function PickRow({ newOrders, lines, aside }: { newOrders: number; lines: PickLine[]; aside?: React.ReactNode }) {
   const t = await getT();
   return (
     <section aria-label={t('To pick')} className="grid grid-cols-1 items-start gap-4 md:gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <StatTile href="/orders?status=new" tone="sky" icon={Inbox} label={t('New')} value={newOrders} caption={t('Waiting to be picked up')} />
+      <div className="flex min-w-0 flex-col gap-4 md:gap-5">
+        <StatTile href="/orders?status=new" tone="sky" icon={Inbox} label={t('New')} value={newOrders} caption={t('Waiting to be picked up')} />
+        {aside}
+      </div>
       <PickListCard lines={lines} />
     </section>
   );
@@ -108,7 +113,7 @@ export async function PickListCard({ lines }: { lines: PickLine[] }) {
 
 /**
  * Today so far (Warsaw day): revenue, profit (when the viewer may see it), margin, orders and units, against the
- * day before, with the products sold today underneath.
+ * day before up to the same time, with the products sold today underneath.
  */
 export async function TodayCard({ snapshot, showProfit }: { snapshot: Snapshot; showProfit: boolean }) {
   const t = await getT();
@@ -117,14 +122,16 @@ export async function TodayCard({ snapshot, showProfit }: { snapshot: Snapshot; 
   const units = snapshot.totals.units;
   const unitsBefore = snapshot.previousTotals?.units ?? null;
   const sold = [...snapshot.products].sort((a, b) => b.units - a.units || b.revenuePLN - a.revenuePLN).slice(0, 8);
-  const comparison = comparisonText(snapshot.period, t);
+  // The snapshot compares with yesterday up to this time of day (see sameTimeYesterday).
+  const time = new Intl.DateTimeFormat(intlTag(t.locale), { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Europe/Warsaw' }).format(new Date());
+  const comparison = t('vs yesterday by {time}', { time });
   // A day before without sales gives nothing to compare with (a margin "+40 pp" against no sales says nothing).
   const compared = (snapshot.previousTotals?.orders ?? 0) > 0;
   return (
     <Card>
       <CardHeader icon={CalendarDays} title={t('Today')} description={t('Sales so far today, from every marketplace.')} />
       <CardBody className="space-y-4 pt-2 pb-5">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           {figures.map((k) => (
             <TodayFigure
               key={k.key}

@@ -1111,6 +1111,10 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     expect(marketing.kpis.some((k) => k.key === 'profit')).toBe(false);
     expect(marketing.totals.marginPLN).toBe(0);
     expect(marketing.totals.revenuePLN).toBeCloseTo(all.totals.revenuePLN, 2);
+    // Compared with yesterday up to the same time of day, not the whole of yesterday.
+    const previous = all.period.previous!;
+    expect(previous.to.getTime() - previous.from.getTime()).toBe(now.getTime() - all.period.from.getTime());
+    expect(all.previousOrders.every((o) => o.date !== null && o.date >= previous.from && o.date <= previous.to)).toBe(true);
   });
 
   it('lists what to pick for new orders, summed per product, the most wanted first', async () => {
