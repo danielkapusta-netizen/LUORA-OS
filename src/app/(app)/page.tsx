@@ -28,7 +28,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 /**
- * Today first (new orders, what to pick, today's sales, my tasks), then the chosen period: its summary, pulse,
+ * Today first (new orders with my tasks under them, what to pick, today's sales), then the chosen period: its summary, pulse,
  * channels, top products, customers and insights.
  */
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<ViewParams> }) {
@@ -83,13 +83,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <div className="space-y-6 md:space-y-8">
       <Greeting name={firstName} />
 
-      <PickRow newOrders={counts.new ?? 0} lines={pick} />
+      {/* My tasks fill the space under the New tile, beside the pick list; today's sales follow at full width. */}
+      <PickRow newOrders={counts.new ?? 0} lines={pick} aside={<TasksPanel tasks={tasks} today={todayKey} limit={TASK_LIMIT} />} />
 
-      {/* Today's sales next to the tasks, above the fold. */}
-      <div className="grid grid-cols-1 items-start gap-4 md:gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <TodayCard snapshot={today} showProfit={showProfit} />
-        <TasksPanel tasks={tasks} today={todayKey} limit={TASK_LIMIT} />
-      </div>
+      <TodayCard snapshot={today} showProfit={showProfit} />
 
       <section className="space-y-4 border-t border-black/[0.06] pt-6 md:space-y-5 md:pt-8">
         <SectionTitle

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCustomRange, resolvePeriod } from '@/lib/analytics/period';
+import { parseCustomRange, resolvePeriod, sameTimeYesterday } from '@/lib/analytics/period';
 
 // Wednesday 14 October 2026; the week runs Monday 12th to Sunday 18th.
 const NOW = new Date('2026-10-14T12:00:00Z');
@@ -91,3 +91,20 @@ describe('typing the dates', () => {
     }
   });
 });
+
+describe('today against yesterday by the same time', () => {
+  it('cuts yesterday at the hour reached today', () => {
+    const now = new Date('2026-11-25T10:00:00Z')
+    const period = sameTimeYesterday(resolvePeriod('today', now, new Date('2026-01-01T00:00:00Z'), undefined, now), now)
+    expect(period.from.toISOString()).toBe('2026-11-25T00:00:00.000Z')
+    expect(period.previous?.from.toISOString()).toBe('2026-11-24T00:00:00.000Z')
+    expect(period.previous?.to.toISOString()).toBe('2026-11-24T10:00:00.000Z')
+    expect(period.previous!.to.getTime() - period.previous!.from.getTime()).toBe(now.getTime() - period.from.getTime())
+  })
+
+  it('leaves a period without a comparison alone', () => {
+    const now = new Date('2026-11-25T10:00:00Z')
+    const all = resolvePeriod('all', now, new Date('2026-01-01T00:00:00Z'), undefined, now)
+    expect(sameTimeYesterday(all, now)).toBe(all)
+  })
+})
