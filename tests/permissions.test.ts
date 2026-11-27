@@ -19,6 +19,10 @@ describe('permissions', () => {
     expect(canSeePath('marketing', '/analytics/pricing')).toBe(true);
   });
 
+  it('shows the Daily overview to those who may see analytics', () => {
+    expect(['admin', 'marketing', 'logistics'].map((r) => canSeePath(r, '/daily'))).toEqual([true, true, false]);
+  });
+
   it('gives an unknown or missing role nothing', () => {
     expect(can('staff', 'analytics')).toBe(false);
     expect(can(null, 'margin')).toBe(false);

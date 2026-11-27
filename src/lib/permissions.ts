@@ -32,6 +32,7 @@ export function can(role: string | null | undefined, capability: Capability): bo
 
 export function canSeePath(role: string | null | undefined, href: string): boolean {
   if (href === '/analytics' || href.startsWith('/analytics/')) return can(role, 'analytics');
+  if (href === '/daily' || href.startsWith('/daily/')) return can(role, 'analytics');
   if (href === '/settings' || href.startsWith('/settings/')) return can(role, 'settings');
   if (href === '/pricing' || href.startsWith('/pricing/')) return can(role, 'pricing');
   return isRole(role);
