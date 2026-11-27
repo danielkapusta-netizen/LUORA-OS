@@ -2,6 +2,7 @@ import { PL_PLURALS_ALL, type PluralForms } from './plurals';
 import { accounting } from './accounting';
 import { analytics } from './analytics';
 import { customers } from './customers';
+import { daily } from './daily';
 import { dashboard } from './dashboard';
 import { inventory } from './inventory';
 import { pickup } from './pickup';
@@ -23,6 +24,7 @@ export const PL: Record<string, string> = {
   ...accounting,
   ...analytics,
   ...customers,
+  ...daily,
   ...dashboard,
   ...inventory,
   ...pickup,

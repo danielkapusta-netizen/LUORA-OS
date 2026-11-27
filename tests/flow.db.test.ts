@@ -1115,6 +1115,58 @@ describe('order flow (D1)', { timeout: 60_000 }, () => {
     const previous = all.period.previous!;
     expect(previous.to.getTime() - previous.from.getTime()).toBe(now.getTime() - all.period.from.getTime());
     expect(all.previousOrders.every((o) => o.date !== null && o.date >= previous.from && o.date <= previous.to)).toBe(true);
+    // The shop's day starts at midnight in Warsaw, like the Daily overview's.
+    const win = await import('@/lib/analytics/window');
+    expect(all.period.from.getTime()).toBe(win.dayStart(win.today(now)).getTime());
+  });
+
+  it('gives the Daily overview of a Warsaw day, narrowed by marketplace, without profit for roles that may not see it', async () => {
+    const { dailyOverview } = await import('@/server/services/daily');
+    const win = await import('@/lib/analytics/window');
+    const db = m.db.getDb();
+    const { schema: s, orm } = m;
+    const now = new Date();
+    const day = win.today(now);
+    const o = await dailyOverview({ showProfit: true, now });
+    expect(o).toMatchObject({ day, isToday: true, marketplace: null, showProfit: true, breakdownUnit: 'pln' });
+    expect(o.cutoffMinute).toBe(win.shopClock(now.getTime()).minuteOfDay);
+    // Totals are that day's sales lines, nothing more.
+    const lines = await db.select().from(s.salesLines).where(orm.eq(s.salesLines.day, day));
+    expect(o.totals.revenue).toBeCloseTo(lines.reduce((sum, l) => sum + l.gross, 0), 2);
+    expect(o.totals.orders).toBe(new Set(lines.map((l) => l.orderId)).size);
+    expect(o.orders).toHaveLength(o.totals.orders);
+    expect(o.hours.reduce((sum, h) => sum + h.revenue, 0)).toBeCloseTo(o.totals.revenue, 2);
+    const b = o.breakdown;
+    expect(b.revenue - b.vat - b.fees - b.cost - b.shipping - b.refunds).toBeCloseTo(o.totals.profit, 2);
+    expect(o.customers.new + o.customers.returning).toBeGreaterThanOrEqual(o.totals.orders > 0 ? 1 : 0);
+    // Comparisons stop at the same time of day.
+    expect(o.yesterday.orders).toBeLessThanOrEqual(new Set((await db.select().from(s.salesLines).where(orm.eq(s.salesLines.day, win.plusDays(day, -1)))).map((l) => l.orderId)).size);
+
+    // One marketplace: everything narrows to it, the split still shows them all.
+    const top = o.marketplaceSplit[0];
+    if (top) {
+      const one = await dailyOverview({ marketplace: top.marketplace, showProfit: true, now });
+      expect(one.marketplace).toBe(top.marketplace);
+      expect(one.totals.revenue).toBeCloseTo(top.revenue, 2);
+      expect(one.orders.every((x) => x.marketplace === top.marketplace)).toBe(true);
+      expect(one.marketplaceSplit).toEqual(o.marketplaceSplit);
+    }
+    expect((await dailyOverview({ marketplace: 'nope', showProfit: true, now })).marketplace).toBeNull();
+
+    // A role without profit gets margins but no profit amounts, and the breakdown in % of revenue.
+    const marketing = await dailyOverview({ showProfit: false, now });
+    expect(marketing.showProfit).toBe(false);
+    expect(marketing.totals.profit).toBe(0);
+    expect(marketing.totals.marginPct).toBe(o.totals.marginPct);
+    expect(marketing.orders.every((x) => x.profit === 0) && marketing.products.every((x) => x.profit === 0) && marketing.hours.every((h) => h.profit === 0)).toBe(true);
+    expect(marketing.breakdownUnit).toBe('pct');
+    if (o.totals.revenue > 0) expect(marketing.breakdown.revenue).toBe(100);
+
+    // A past day compares whole days; a future or broken day falls back to today.
+    const past = await dailyOverview({ day: win.plusDays(day, -1), showProfit: true, now });
+    expect(past).toMatchObject({ isToday: false, cutoffMinute: null });
+    expect((await dailyOverview({ day: win.plusDays(day, 3), showProfit: true, now })).day).toBe(day);
+    expect((await dailyOverview({ day: '2026-02-31', showProfit: true, now })).day).toBe(day);
   });
 
   it('lists what to pick for new orders, summed per product, the most wanted first', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, Boxes, ChevronRight, Ellipsis, LayoutDashboard, LogOut, Menu, PackageCheck, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Tag, Truck, Users, X } from 'lucide-react';
+import { Activity, BarChart3, Boxes, ChevronRight, Ellipsis, LayoutDashboard, LogOut, Menu, PackageCheck, ReceiptText, Settings, ShoppingBag, SquareCheckBig, Tag, Truck, Users, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -13,6 +13,7 @@ import { Sheet } from './sheet';
 
 const ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; /** Shown indented under this item. */ parent?: string }[] = [
   { href: '/', label: msg('Dashboard'), icon: LayoutDashboard },
+  { href: '/daily', label: msg('Daily overview'), icon: Activity },
   { href: '/orders', label: msg('Orders'), icon: ShoppingBag },
   { href: '/orders/pickup', label: msg('Courier pickup'), icon: PackageCheck, parent: '/orders' },
   { href: '/shipments', label: msg('Shipments'), icon: Truck },

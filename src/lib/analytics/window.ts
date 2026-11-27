@@ -20,7 +20,8 @@ export interface DayWindow {
 }
 
 const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
-const plusDays = (day: string, days: number) => ymd(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS);
+/** The calendar day `days` after (or before, when negative) `day`, both `YYYY-MM-DD`. */
+export const plusDays = (day: string, days: number) => ymd(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS);
 
 /** Milliseconds the zone is ahead of UTC at a moment (1 or 2 hours in Warsaw). */
 function offsetMs(at: number, timeZone: string): number {
@@ -48,6 +49,17 @@ export function dayEnd(day: string, timeZone = SHOP_TIME_ZONE): Date {
 /** Today's calendar day in the zone, `YYYY-MM-DD`. */
 export function today(now = new Date(), timeZone = SHOP_TIME_ZONE): string {
   return ymd(now.getTime() + offsetMs(now.getTime(), timeZone));
+}
+
+/** The shop's wall clock at a moment: its day, hour (0–23) and minute of the day (0–1439), in the zone. */
+export function shopClock(at: number, timeZone = SHOP_TIME_ZONE): { day: string; hour: number; minuteOfDay: number } {
+  const local = new Date(at + offsetMs(at, timeZone));
+  return { day: local.toISOString().slice(0, 10), hour: local.getUTCHours(), minuteOfDay: local.getUTCHours() * 60 + local.getUTCMinutes() };
+}
+
+/** Whether `day` is a real `YYYY-MM-DD` calendar day. */
+export function isCalendarDay(day: string | undefined): day is string {
+  return Boolean(day && /^\d{4}-\d{2}-\d{2}$/.test(day) && ymd(Date.parse(`${day}T00:00:00Z`)) === day);
 }
 
 /** The Monday of the week a day falls in. */

@@ -1,6 +1,7 @@
 // What every analytics page starts from: the business data, the chosen period and its snapshot.
 import { scrubDeep, zeroProfit } from '@/lib/analytics/redact';
 import { parseCustomRange, sameTimeYesterday, type PeriodKey, type ResolvedPeriod } from '@/lib/analytics/period';
+import { dayEnd, dayStart, plusDays, today as shopToday } from '@/lib/analytics/window';
 import type { Snapshot } from '@/lib/analytics/snapshot';
 import type { Channel } from '@/lib/analytics/types';
 import { can } from '@/lib/permissions';
@@ -85,6 +86,10 @@ export function forViewer(full: Snapshot, showProfit: boolean): Snapshot {
  */
 export async function todaySnapshot(view: AnalyticsView, now = new Date()): Promise<Snapshot> {
   const data = view.marketplace ? await loadBusinessData({}) : view.data;
-  // Compared with yesterday up to the same time of day, so the morning's figures are not set against a whole day.
-  return forViewer(snapshotFor(data, sameTimeYesterday(periodFor(data, 'today', undefined, now), now)), view.showProfit);
+  // The shop's day runs from midnight in Warsaw (analytics periods otherwise use UTC days), and it is compared with
+  // yesterday up to the same time of day, so the morning's figures are not set against a whole day.
+  const day = shopToday(now);
+  const start = dayStart(day);
+  const period = { ...periodFor(data, 'today', undefined, now), from: start, to: dayEnd(day), previous: { from: dayStart(plusDays(day, -1)), to: new Date(start.getTime() - 1) } };
+  return forViewer(snapshotFor(data, sameTimeYesterday(period, now)), view.showProfit);
 }
