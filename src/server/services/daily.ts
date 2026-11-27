@@ -125,6 +125,7 @@ async function linesFor(days: string[]): Promise<DailyLine[]> {
       customerId: r.customerId,
       productKey: r.productId ? `p:${r.productId}` : r.sku ? `s:${r.sku.toLowerCase()}` : `n:${r.itemName.toLowerCase()}`,
       productId: r.productId,
+      analyticsKey: r.productId ?? `item:${(r.sku || r.itemName).toLowerCase()}`,
       name: r.productName ? cleanShopifyTitle(r.productName) : r.itemName,
       brand: r.brand,
       imageUrl: r.productImage ?? r.itemImage,
@@ -234,7 +235,7 @@ function withoutProfit(o: DailyOverview): DailyOverview {
     breakdown: { revenue: 100, vat: share(b.vat), fees: share(b.fees), cost: share(b.cost), shipping: share(b.shipping), refunds: share(b.refunds), profit: share(b.profit) },
     breakdownUnit: 'pct',
     marketplaceSplit: o.marketplaceSplit.map(noProfit),
-    products: o.products.map(noProfit),
+    products: o.products.map((p) => ({ ...p, profit: 0, profitPerUnit: null })),
     orders: o.orders.map(noProfit),
     attention: o.attention.map((a) => (a.kind === 'loss' ? { ...a, amount: null } : a)),
   };

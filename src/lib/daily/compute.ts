@@ -20,6 +20,8 @@ export interface DailyLine {
   customerId: string | null;
   productKey: string;
   productId: string | null;
+  /** The product's key in Analytics → Products: its id, else `item:<sku or name>`. */
+  analyticsKey: string;
   name: string;
   brand: string | null;
   imageUrl: string | null;
@@ -78,6 +80,7 @@ export interface MarketplaceDay {
 export interface ProductDay {
   key: string;
   productId: string | null;
+  analyticsKey: string;
   name: string;
   brand: string | null;
   imageUrl: string | null;
@@ -86,6 +89,8 @@ export interface ProductDay {
   revenue: number;
   profit: number;
   marginPct: number | null;
+  /** Profit on one unit sold. */
+  profitPerUnit: number | null;
   costMissing: boolean;
 }
 
@@ -169,6 +174,7 @@ export function byProduct(lines: DailyLine[]): ProductDay[] {
     const p = map.get(l.productKey) ?? {
       key: l.productKey,
       productId: l.productId,
+      analyticsKey: l.analyticsKey,
       name: l.name,
       brand: l.brand,
       imageUrl: l.imageUrl,
@@ -177,6 +183,7 @@ export function byProduct(lines: DailyLine[]): ProductDay[] {
       revenue: 0,
       profit: 0,
       marginPct: null,
+      profitPerUnit: null,
       costMissing: false,
       orderIds: new Set<string>(),
     };
@@ -189,7 +196,7 @@ export function byProduct(lines: DailyLine[]): ProductDay[] {
     map.set(l.productKey, p);
   }
   return [...map.values()]
-    .map(({ orderIds, ...p }) => ({ ...p, orders: orderIds.size, marginPct: pct(p.profit, p.revenue) }))
+    .map(({ orderIds, ...p }) => ({ ...p, orders: orderIds.size, marginPct: pct(p.profit, p.revenue), profitPerUnit: p.units ? p.profit / p.units : null }))
     .sort((a, b) => b.revenue - a.revenue || b.units - a.units || a.name.localeCompare(b.name));
 }
 

@@ -11,6 +11,7 @@ export const PL_PLURALS_ALL: Record<string, PluralForms> = {
   "in {n} order": { one: "w {n} zamówieniu", few: "w {n} zamówieniach", many: "w {n} zamówieniach", other: "w {n} zamówienia" },
   "{n} order": { one: "{n} zamówienie", few: "{n} zamówienia", many: "{n} zamówień", other: "{n} zamówienia" },
   "order": { one: "zamówienie", few: "zamówienia", many: "zamówień", other: "zamówienia" },
+  "Add costs for {n} product": { one: "Dodaj koszt {n} produktu", few: "Dodaj koszty {n} produktów", many: "Dodaj koszty {n} produktów", other: "Dodaj koszty {n} produktu" },
   "{n} without cost": { one: "{n} bez kosztu", few: "{n} bez kosztu", many: "{n} bez kosztu", other: "{n} bez kosztu" },
   "{n} order sold at a loss": { one: "{n} zamówienie sprzedane ze stratą", few: "{n} zamówienia sprzedane ze stratą", many: "{n} zamówień sprzedanych ze stratą", other: "{n} zamówienia sprzedanego ze stratą" },
   "{n} product without a cost": { one: "{n} produkt bez kosztu", few: "{n} produkty bez kosztu", many: "{n} produktów bez kosztu", other: "{n} produktu bez kosztu" },

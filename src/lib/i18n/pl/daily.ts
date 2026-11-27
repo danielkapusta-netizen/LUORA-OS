@@ -41,4 +41,7 @@ export const daily: Record<string, string> = {
   "All clear": "Wszystko w porządku",
   "Every order has its cost and profit.": "Każde zamówienie ma swój koszt i zysk.",
   "Open the day's orders": "Otwórz zamówienia z tego dnia",
+  "Sales": "Sprzedaże",
+  "Per item": "Na sztukę",
+  "Product": "Produkt",
 };
