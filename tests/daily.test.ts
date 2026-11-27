@@ -21,6 +21,7 @@ function line(over: Partial<DailyLine> = {}): DailyLine {
     customerId: null,
     productKey: 'p:a',
     productId: 'a',
+    analyticsKey: 'a',
     name: 'Serum',
     brand: null,
     imageUrl: null,
@@ -101,6 +102,8 @@ describe('daily figures', () => {
       ['p:a', 2, 2, false],
       ['p:b', 1, 1, true],
     ]);
+    expect(products[0].profitPerUnit).toBeCloseTo(43);
+    expect(products[1].analyticsKey).toBe('a');
     const orders = byOrder(lines);
     expect(orders.map((o) => o.orderId)).toEqual(['b', 'a']);
     expect(orders[0]).toMatchObject({ units: 2, feesEstimated: true, costMissing: true });

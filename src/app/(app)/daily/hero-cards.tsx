@@ -1,5 +1,6 @@
 // The three gradient cards at the top: revenue against a typical day, the day hour by hour, and where the money went.
-import { ArrowDownRight, ArrowUpRight, Minus, ReceiptText } from 'lucide-react';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Minus, ReceiptText } from 'lucide-react';
+import Link from 'next/link';
 import { formatValue } from '@/components/analytics/format';
 import { changePct, marginWord, type MoneyBreakdown } from '@/lib/daily/compute';
 import type { T } from '@/lib/i18n/translate';
@@ -202,6 +203,7 @@ export function ProfitHero({ o, t }: { o: DailyOverview; t: T }) {
   const pct = o.breakdownUnit === 'pct';
   const show = (v: number) => (pct ? `${v < 0 ? '−' : ''}${Math.abs(v).toFixed(0)}%` : `${v < 0 ? '−' : ''}${formatValue(Math.abs(v), 'pln', Math.abs(v) >= 10_000, t.locale)}`);
   const estimated = o.orders.filter((x) => x.feesEstimated).length;
+  const missingCosts = o.products.filter((p) => p.costMissing).length;
   const marginChange = o.totals.marginPct === null || o.lastWeek.marginPct === null ? null : o.totals.marginPct - o.lastWeek.marginPct;
   return (
     <section className="daily-hero daily-iris daily-rise relative flex flex-col overflow-hidden p-5 text-white md:p-6" style={{ ['--i' as string]: 2 }}>
@@ -243,10 +245,22 @@ export function ProfitHero({ o, t }: { o: DailyOverview; t: T }) {
         ))}
       </ul>
       <div className="mt-auto pt-5">
-        <p className="inline-flex items-center gap-2 rounded-full bg-black/15 px-3 py-1.5 text-[11px] text-white/85 ring-1 ring-white/15">
-          <ReceiptText className="size-3.5" aria-hidden />
-          {estimated > 0 ? t.plural(estimated, 'Fees estimated for {n} order', 'Fees estimated for {n} orders') : t('All fees confirmed')}
-        </p>
+        {/* Missing costs are what can be fixed here; estimated fees settle with the next fee sync. Both lead to the costs list. */}
+        {missingCosts > 0 || estimated > 0 ? (
+          <Link
+            href="/settings/costs?missing=1"
+            className="press inline-flex items-center gap-2 rounded-full bg-black/15 px-3 py-1.5 text-[11px] text-white/90 ring-1 ring-white/15 transition-colors hover:bg-black/25"
+          >
+            <ReceiptText className="size-3.5" aria-hidden />
+            {missingCosts > 0 ? t.plural(missingCosts, 'Add costs for {n} product', 'Add costs for {n} products') : t.plural(estimated, 'Fees estimated for {n} order', 'Fees estimated for {n} orders')}
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        ) : (
+          <p className="inline-flex items-center gap-2 rounded-full bg-black/15 px-3 py-1.5 text-[11px] text-white/85 ring-1 ring-white/15">
+            <ReceiptText className="size-3.5" aria-hidden />
+            {t('All fees confirmed')}
+          </p>
+        )}
       </div>
     </section>
   );

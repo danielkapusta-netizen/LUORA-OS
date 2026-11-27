@@ -1,5 +1,5 @@
 // The white cards: four small figures, the day's transactions, the products sold and what needs a look.
-import { AlertTriangle, ArrowRight, CheckCircle2, ChevronRight, Package, ReceiptText, ShieldAlert, ShoppingBag, Undo2, Users } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Package, ReceiptText, ShieldAlert, ShoppingBag, Undo2, Users } from 'lucide-react';
 import Link from 'next/link';
 import { formatValue } from '@/components/analytics/format';
 import { changePct, type AttentionItem } from '@/lib/daily/compute';
@@ -131,44 +131,27 @@ export function SmallCards({ o, t }: { o: DailyOverview; t: T }) {
 
 const SHOWN = 8;
 
+/** Each order on one quiet line: who bought, what, for how much, and what it left. */
 export function TransactionsCard({ o, t }: { o: DailyOverview; t: T }) {
-  const time = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
   const row = (x: DailyOverview['orders'][number]) => (
     <li key={x.orderId}>
-      <Link href={`/orders/${x.orderId}`} className="press group flex items-center gap-3 rounded-2xl px-2 py-2.5 transition-colors hover:bg-black/[0.03]">
-        <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-sm font-semibold text-white', TILE[x.marketplace] ?? 'from-slate-500 to-slate-700')} aria-hidden>
+      <Link href={`/orders/${x.orderId}`} className="press flex items-center gap-3 rounded-2xl px-2 py-2.5 transition-colors hover:bg-black/[0.03]">
+        <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-xs font-semibold text-white', TILE[x.marketplace] ?? 'from-slate-500 to-slate-700')} title={MARKETPLACE_LABELS[x.marketplace] ?? x.marketplace}>
           {(MARKETPLACE_LABELS[x.marketplace] ?? x.marketplace).slice(0, 1)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-ink">
-            {x.buyerName || number(x.number)}
-            {x.buyerName && <span className="font-normal text-slate-500"> · {number(x.number)}</span>}
-          </span>
-          <span className="mt-0.5 block truncate text-xs text-slate-500">
-            {time.format(new Date(x.placedAt))} · {MARKETPLACE_LABELS[x.marketplace] ?? x.marketplace} · {x.items.map((i) => `${i.quantity} × ${i.name}`).join(', ')}
-          </span>
-          {(x.costMissing || x.feesEstimated || x.refunded) && (
-            <span className="mt-1 flex flex-wrap gap-1">
-              {x.costMissing && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">{t('cost missing')}</span>}
-              {x.feesEstimated && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">{t('fees estimated')}</span>}
-              {x.refunded && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">{t('refunded')}</span>}
-            </span>
-          )}
+          <span className="block truncate text-sm font-medium text-ink">{x.buyerName || number(x.number)}</span>
+          <span className="block truncate text-xs text-slate-500">{x.items.map((i) => `${i.quantity} × ${i.name}`).join(', ')}</span>
         </span>
-        <span className="hidden w-20 shrink-0 text-right font-mono text-sm text-ink tabular-nums sm:block">{pln(x.revenue, t)}</span>
-        <span className="w-20 shrink-0 text-right">
-          <span className="block font-mono text-sm text-ink tabular-nums sm:hidden">{pln(x.revenue, t)}</span>
-          {o.showProfit && <span className={cn('block font-mono text-sm tabular-nums', x.profit < 0 ? 'text-red-700' : 'text-emerald-700')}>{pln(x.profit, t)}</span>}
-          <span className={cn('block text-[11px] tabular-nums', x.marginPct !== null && x.marginPct < 0 ? 'text-red-700' : 'text-slate-500')}>{pctText(x.marginPct, t)}</span>
-        </span>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-black/[0.08] text-slate-500 transition-colors group-hover:border-black/20 group-hover:text-ink" aria-hidden>
-          <ChevronRight className="size-4" />
+        <span className="shrink-0 text-right font-mono text-sm tabular-nums">
+          <span className="block text-ink">{pln(x.revenue, t)}</span>
+          {o.showProfit && <span className={cn('block text-xs', x.profit < 0 ? 'text-red-700' : 'text-emerald-700')}>{pln(x.profit, t)}</span>}
         </span>
       </Link>
     </li>
   );
   return (
-    <section className={cn(card, 'flex flex-col p-4 md:p-5')} style={{ ['--i' as string]: 8 }} aria-labelledby="daily-transactions">
+    <section className={cn(card, 'flex h-full flex-col p-4 md:p-5')} style={{ ['--i' as string]: 9 }} aria-labelledby="daily-transactions">
       <div className="flex items-center justify-between gap-3 px-2">
         <h2 id="daily-transactions" className="text-base font-semibold text-ink">
           {t('Transactions')}
@@ -179,13 +162,7 @@ export function TransactionsCard({ o, t }: { o: DailyOverview; t: T }) {
         <p className="mt-4 rounded-2xl bg-black/[0.02] px-4 py-10 text-center text-sm text-slate-500">{t('No orders on this day yet.')}</p>
       ) : (
         <>
-          <div className="mt-2 hidden grid-cols-[minmax(0,1fr)_5rem_5rem_2rem] gap-3 px-2 pl-[3.75rem] text-[11px] text-slate-500 sm:grid" aria-hidden>
-            <span />
-            <span className="text-right">{t('Revenue')}</span>
-            <span className="text-right">{o.showProfit ? t('Profit') : t('Margin')}</span>
-            <span />
-          </div>
-          <ul className="mt-1 divide-y divide-black/[0.04]">{o.orders.slice(0, SHOWN).map(row)}</ul>
+          <ul className="mt-2 divide-y divide-black/[0.04]">{o.orders.slice(0, SHOWN).map(row)}</ul>
           {o.orders.length > SHOWN && (
             <details className="group">
               <summary className="press mt-1 cursor-pointer list-none rounded-full px-2 py-2 text-center text-sm font-medium text-slate-600 hover:text-ink group-open:hidden">
@@ -203,49 +180,86 @@ export function TransactionsCard({ o, t }: { o: DailyOverview; t: T }) {
 /** Margin bars run to 60%: beyond that a bar is simply full. */
 const MARGIN_SCALE = 60;
 
+/** Where a missing product cost is filled in: the cost list narrowed to products without one. */
+export const COSTS_MISSING_HREF = '/settings/costs?missing=1';
+
 export function ProductsCard({ o, t }: { o: DailyOverview; t: T }) {
   const missing = o.products.filter((p) => p.costMissing).length;
+  // Name, then the figures: sales, units, revenue, profit per item, profit, margin (profit ones only when allowed).
+  const cols = o.showProfit ? 'md:grid-cols-[minmax(0,1fr)_4rem_4rem_6rem_6rem_6rem_7.5rem]' : 'md:grid-cols-[minmax(0,1fr)_4rem_4rem_6rem_7.5rem]';
+  const figure = 'font-mono text-sm tabular-nums md:text-right';
+  const label = 'block text-[10px] text-slate-500 md:hidden';
   const row = (p: DailyOverview['products'][number]) => (
-    <li key={p.key} className="flex items-center gap-3 py-2.5">
-      {p.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers
-        <img src={p.imageUrl} alt="" loading="lazy" className="size-11 shrink-0 rounded-2xl border border-black/[0.04] bg-white object-contain" />
-      ) : (
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-black/[0.03] text-slate-400">
-          <Package className="size-4" aria-hidden />
+    <li key={p.key}>
+      <Link
+        href={`/analytics/products?period=month&open=${encodeURIComponent(p.analyticsKey)}`}
+        className={cn('press grid grid-cols-3 items-center gap-x-3 gap-y-2 rounded-2xl px-2 py-3 transition-colors hover:bg-black/[0.03]', cols)}
+      >
+        <span className="col-span-3 flex min-w-0 items-center gap-3 md:col-span-1">
+          {p.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- no image optimiser on Workers
+            <img src={p.imageUrl} alt="" loading="lazy" className="size-11 shrink-0 rounded-2xl border border-black/[0.04] bg-white object-contain" />
+          ) : (
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-black/[0.03] text-slate-400">
+              <Package className="size-4" aria-hidden />
+            </span>
+          )}
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium text-ink">{p.name}</span>
+            <span className="block truncate text-xs text-slate-500">{[p.brand, p.costMissing ? t('cost missing') : null].filter(Boolean).join(' · ')}</span>
+          </span>
         </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="truncate text-sm font-medium text-ink">{p.name}</span>
-          <span className={cn('shrink-0 text-xs font-semibold tabular-nums', p.marginPct !== null && p.marginPct < 0 ? 'text-red-700' : 'text-ink')}>{p.costMissing ? '—' : pctText(p.marginPct, t)}</span>
-        </div>
-        <p className="mt-0.5 truncate text-xs text-slate-500">
-          ×{p.units} · {pln(p.revenue, t)}
-          {o.showProfit && !p.costMissing && ` · ${t('{profit} profit', { profit: pln(p.profit, t) })}`}
-          {p.costMissing && ` · ${t('cost missing')}`}
-        </p>
-        <span className="mt-1.5 block h-1.5 rounded-full bg-black/[0.05]" aria-hidden>
-          <span
-            className={cn(
-              'block h-full rounded-full',
-              p.costMissing ? 'bg-amber-300' : p.marginPct !== null && p.marginPct < 0 ? 'bg-red-400' : p.marginPct !== null && p.marginPct < 15 ? 'bg-[linear-gradient(90deg,#ffb27f,#ff8f5a)]' : 'bg-[linear-gradient(90deg,#f0568c,#8b5cf6)]',
-            )}
-            style={{ width: `${p.costMissing ? 100 : Math.min(100, Math.max(4, ((p.marginPct ?? 0) / MARGIN_SCALE) * 100))}%` }}
-          />
+        <span className={figure}>
+          <span className={label}>{t('Sales')}</span>
+          {p.orders}
         </span>
-      </div>
+        <span className={figure}>
+          <span className={label}>{t('Units')}</span>
+          {p.units}
+        </span>
+        <span className={figure}>
+          <span className={label}>{t('Revenue')}</span>
+          {pln(p.revenue, t)}
+        </span>
+        {o.showProfit && (
+          <>
+            <span className={cn(figure, p.costMissing && 'text-slate-400')}>
+              <span className={label}>{t('Per item')}</span>
+              {p.costMissing || p.profitPerUnit === null ? '—' : pln(p.profitPerUnit, t)}
+            </span>
+            <span className={cn(figure, p.costMissing ? 'text-slate-400' : p.profit < 0 ? 'text-red-700' : 'text-emerald-700')}>
+              <span className={label}>{t('Profit')}</span>
+              {p.costMissing ? '—' : pln(p.profit, t)}
+            </span>
+          </>
+        )}
+        <span className="col-span-3 md:col-span-1">
+          <span className="flex items-center justify-between gap-2 md:justify-end">
+            <span className={label}>{t('Margin')}</span>
+            <span className={cn('text-sm font-semibold tabular-nums', p.marginPct !== null && p.marginPct < 0 ? 'text-red-700' : 'text-ink')}>{p.costMissing ? '—' : pctText(p.marginPct, t)}</span>
+          </span>
+          <span className="mt-1.5 block h-1.5 rounded-full bg-black/[0.05]" aria-hidden>
+            <span
+              className={cn(
+                'block h-full rounded-full',
+                p.costMissing ? 'bg-amber-300' : p.marginPct !== null && p.marginPct < 0 ? 'bg-red-400' : p.marginPct !== null && p.marginPct < 15 ? 'bg-[linear-gradient(90deg,#ffb27f,#ff8f5a)]' : 'bg-[linear-gradient(90deg,#f0568c,#8b5cf6)]',
+              )}
+              style={{ width: `${p.costMissing ? 100 : Math.min(100, Math.max(4, ((p.marginPct ?? 0) / MARGIN_SCALE) * 100))}%` }}
+            />
+          </span>
+        </span>
+      </Link>
     </li>
   );
   return (
-    <section className={cn(card, 'flex flex-col p-4 md:p-5')} style={{ ['--i' as string]: 9 }} aria-labelledby="daily-products">
-      <div className="flex items-center justify-between gap-3">
+    <section className={cn(card, 'flex h-full flex-col p-4 md:p-5')} style={{ ['--i' as string]: 8 }} aria-labelledby="daily-products">
+      <div className="flex items-center justify-between gap-3 px-2">
         <h2 id="daily-products" className="text-base font-semibold text-ink">
           {t('Products sold')}
         </h2>
         {missing > 0 ? (
-          <Link href="/settings/costs" className="press rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100">
-            {t.plural(missing, '{n} without cost', '{n} without cost')}
+          <Link href={COSTS_MISSING_HREF} className="press rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100">
+            {t.plural(missing, 'Add costs for {n} product', 'Add costs for {n} products')} →
           </Link>
         ) : (
           o.products.length > 0 && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">{t.plural(o.products.length, '{n} product', '{n} products')}</span>
@@ -255,7 +269,16 @@ export function ProductsCard({ o, t }: { o: DailyOverview; t: T }) {
         <p className="mt-4 rounded-2xl bg-black/[0.02] px-4 py-10 text-center text-sm text-slate-500">{t('Nothing sold on this day yet.')}</p>
       ) : (
         <>
-          <ul className="mt-2 divide-y divide-black/[0.04]">{o.products.slice(0, SHOWN).map(row)}</ul>
+          <div className={cn('mt-3 hidden gap-x-3 px-2 text-[11px] text-slate-500 md:grid', cols)} aria-hidden>
+            <span>{t('Product')}</span>
+            <span className="text-right">{t('Sales')}</span>
+            <span className="text-right">{t('Units')}</span>
+            <span className="text-right">{t('Revenue')}</span>
+            {o.showProfit && <span className="text-right">{t('Per item')}</span>}
+            {o.showProfit && <span className="text-right">{t('Profit')}</span>}
+            <span className="text-right">{t('Margin')}</span>
+          </div>
+          <ul className="mt-1 divide-y divide-black/[0.04]">{o.products.slice(0, SHOWN).map(row)}</ul>
           {o.products.length > SHOWN && (
             <details className="group">
               <summary className="press mt-1 cursor-pointer list-none rounded-full px-2 py-2 text-center text-sm font-medium text-slate-600 hover:text-ink group-open:hidden">
@@ -290,7 +313,7 @@ function attentionText(a: AttentionItem, t: T): { title: string; detail: string 
 
 export function AttentionCard({ o, t }: { o: DailyOverview; t: T }) {
   const hrefFor = (a: AttentionItem): string | null => {
-    if (a.kind === 'costMissing') return '/settings/costs';
+    if (a.kind === 'costMissing' || a.kind === 'feesEstimated') return COSTS_MISSING_HREF;
     if (a.kind === 'cancelled') return `/orders?status=cancelled&from=${o.day}&to=${o.day}`;
     if (a.kind === 'loss' || a.kind === 'refunded') return `/orders?from=${o.day}&to=${o.day}`;
     return null;

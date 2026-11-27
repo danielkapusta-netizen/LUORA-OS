@@ -61,16 +61,11 @@ export default async function DailyPage({ searchParams }: { searchParams: Promis
           <SmallCards o={o} t={t} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2 xl:grid-cols-12">
-          <div className="lg:col-span-2 xl:col-span-5">
-            <TransactionsCard o={o} t={t} />
-          </div>
-          <div className="xl:col-span-4">
-            <ProductsCard o={o} t={t} />
-          </div>
-          <div className="xl:col-span-3">
-            <AttentionCard o={o} t={t} />
-          </div>
+        <ProductsCard o={o} t={t} />
+
+        <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <TransactionsCard o={o} t={t} />
+          <AttentionCard o={o} t={t} />
         </div>
       </div>
     </div>
